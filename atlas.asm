@@ -2,9 +2,6 @@
 ; clear screen (for emulator)
 JSR clear
 
-SET [0xE000], proc01_start
-SET [0xD000], proc02_start
-
 ; low level routines
 ; runs best in DCPU-16 Studio (http://badsector.github.com/dcpustud/)
 
@@ -37,10 +34,26 @@ JSR text_out
 SET A, text_cmd
 JSR text_out
 
+; Load first package
+SET A, package01_start
+SET B, package01_end
+SUB B, package01_start
+; / end
+JSR proc_load
 
-:wait_loop
-;    SET PC, wait_loop
+; Load second package
+SET A, package02_start
+SET B, package02_end
+SUB B, package02_start
+; / end
+JSR proc_load
 
+; Load the first proc twice
+SET A, package01_start
+SET B, package01_end
+SUB B, package01_start
+; / end
+JSR proc_load
 
 :kernel_loop
 
@@ -199,6 +212,116 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
+; Converts a Number into a Decimal String
+; A: Number
+; B: StrBuffer (length 5)
+:int2dec
+      SET PUSH, A
+      SET PUSH, B
+
+      ADD B, 4
+
+:int2dec_loop
+      SET C, A
+      MOD C, 10
+
+      IFE C, 0           ;0
+          SET [B], 0x0030
+      IFE C, 1           ;1
+          SET [B], 0x0031
+      IFE C, 2           ;2
+          SET [B], 0x0032
+      IFE C, 3           ;3
+          SET [B], 0x0033
+      IFE C, 4           ;4
+          SET [B], 0x0034
+      IFE C, 5           ;5
+          SET [B], 0x0035
+      IFE C, 6           ;6
+          SET [B], 0x0036
+      IFE C, 7           ;7
+          SET [B], 0x0037
+      IFE C, 8           ;8
+          SET [B], 0x0038
+      IFE C, 9           ;9
+          SET [B], 0x0039
+
+      DIV A, 10
+      SUB B, 1
+      IFE A, 0
+          SET PC, int2dec_end
+      IFG A, 9
+          SET PC, int2dec_loop
+
+      SET C, A
+      SET PC, int2dec_loop
+
+:int2dec_end
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+; Converts a Number into a Hexadecimal String
+; A: Number
+; B: StrBuffer (length 4)
+:int2hex
+      SET PUSH, A
+      SET PUSH, B
+
+      ADD B, 3
+
+:int2hex_loop
+      SET C, A
+      MOD C, 16
+
+      IFE C, 0           ;0
+          SET [B], 0x0030
+      IFE C, 1           ;1
+          SET [B], 0x0031
+      IFE C, 2           ;2
+          SET [B], 0x0032
+      IFE C, 3           ;3
+          SET [B], 0x0033
+      IFE C, 4           ;4
+          SET [B], 0x0034
+      IFE C, 5           ;5
+          SET [B], 0x0035
+      IFE C, 6           ;6
+          SET [B], 0x0036
+      IFE C, 7           ;7
+          SET [B], 0x0037
+      IFE C, 8           ;8
+          SET [B], 0x0038
+      IFE C, 9           ;9
+          SET [B], 0x0039
+      IFE C, 10          ;A
+          SET [B], 0x0041
+      IFE C, 11          ;B
+          SET [B], 0x0042
+      IFE C, 12          ;C
+          SET [B], 0x0043
+      IFE C, 13          ;D
+          SET [B], 0x0044
+      IFE C, 14          ;E
+          SET [B], 0x0045
+      IFE C, 15          ;F
+          SET [B], 0x0046
+
+      DIV A, 16
+      SUB B, 1
+      IFE A, 0
+          SET PC, int2hex_end
+      IFG A, 15
+          SET PC, int2hex_loop
+
+      SET C, A
+      SET PC, int2hex_loop
+
+:int2hex_end
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
 ; Finds free memory and reserves it
 ; Return:
 ; A: Start address of the newly allocated memory
@@ -227,13 +350,13 @@ SET PC, stop
 :mem_alloc_lower
       BOR [A], 0x0003
       SUB A, mem_table
-      MUL A, 1024
+      MUL A, 2048
       SET PC, mem_alloc_end
 
 :mem_alloc_upper
       BOR [A], 0x0300
       SUB A, mem_table
-      MUL A, 1024
+      MUL A, 2048
       ADD A, 1024
       SET PC, mem_alloc_end
 
@@ -382,7 +505,7 @@ SET PC, stop
       SET X, [A]
       IFN X, 0x0000
           SET PC, proc_suspend_invoke
-      ADD A, 1
+      ADD A, 12
       SET PC, proc_suspend_loop
 
 :proc_suspend_invoke
@@ -402,6 +525,89 @@ SET PC, stop
       SET SP, [proc_buffer10]
       SET PC, POP             ; Jump into the Programm
 
+; Loads a new process into memory
+; A: Begin of the BLOB
+; B: Length of the BLOB
+:proc_load
+      SET PUSH, B
+      SET PUSH, C
+      SET PUSH, X
+      SET PUSH, Y
+
+      SET X, proc_table
+
+:proc_load_loop
+      IFE [X], 0x0000
+          SET PC, proc_load_to
+
+      ADD X, 12
+      IFN X, proc_table_end
+          SET PC, proc_load_loop
+
+:proc_load_error
+      SET A, text_proc_load_error
+      JSR text_out
+      SET A, 0
+
+:proc_load_end
+      SET Y, POP
+      SET X, POP
+      SET C, POP
+      SET B, POP
+      SET PC, POP
+
+:proc_load_to
+      ; Calculate the ProcID
+      SET [X], X
+      SUB [X], proc_table
+      DIV [X], 12
+      ADD [X], 1
+
+      ; X = ProcInfo Addr
+
+      ; Finaly load the Process
+      SET C, B
+      SET Y, A
+      JSR mem_alloc
+
+      IFE A, 0
+          SET PC, proc_load_error
+
+      SET B, A
+      SET A, Y
+      JSR mem_copy
+
+      SET A, [X]  ; A return the ProcID
+
+      ADD X, 1    ; A
+      SET [X], 0
+      ADD X, 1    ; B
+      SET [X], 0
+      ADD X, 1    ; C
+      SET [X], 0
+      ADD X, 1    ; X
+      SET [X], 0
+      ADD X, 1    ; Y
+      SET [X], 0
+      ADD X, 1    ; Z
+      SET [X], 0
+      ADD X, 1    ; I
+      SET [X], 0
+      ADD X, 1    ; J
+      SET [X], 0
+      ADD X, 1    ; PC
+      SET [X], 0
+      ADD X, 1    ; SP
+      SET [X], B
+      ADD [X], 1023
+      SET Y, [X]   ; Save stack address
+      ADD X, 1    ; Flags
+      SET [X], 0
+
+      SET [Y], B   ; "Push" the "return" address on the stack
+
+      SET PC, proc_load_end
+
 ; ##############################################################
 
 ; Halts the CPU
@@ -415,6 +621,10 @@ SET PC, stop
 :text_start dat "AtlasOS v0.1 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_cmd dat "$>", 0xA0, 0x00
+:text_proc_load_error dat "Error loading process...", 0xA0, 0x00
+
+:msg_reg dat "Nice Number: "
+:msg_dat dat "     !", 0
 
 :mem_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -450,8 +660,11 @@ SET PC, stop
        dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table10
        dat 0xFFFF, 0xFFFF ; OS-Proc
-       dat 0x0002, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xE000, 0x0000 ; First proc
-       dat 0x0003, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xD000, 0x0000 ; Second proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; First proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Second proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Third proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Fourth proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Fifth proc
 :proc_table_end
 
 :kernel_end
@@ -461,10 +674,13 @@ SET PC, stop
 
 
 
-; First Process
-:proc01
-
+; Process 1
+:package01_start
 :proc01_start
+       SET I, proc01_end    ; Calculate the length of the back-jump
+       SUB I, proc01_loop
+
+:proc01_loop
        JSR mem_alloc
        SET B, A
        SET A, proc01_msg1
@@ -475,19 +691,28 @@ SET PC, stop
        SET A, proc01_msg2
        JSR text_out
        JSR proc_suspend
-       SET PC, proc01_start
+       SUB PC, I
+:proc01_end
 
 :proc01_msg1
        dat "Memory allocated!", 0xA0, 0x00
 :proc01_msg2
        dat "Memory freed!", 0xA0, 0x00
+:package01_end
 
-:proc02
+; Process 2
+:package02_start
 :proc02_start
+       SET I, proc02_end    ; Calculate the length of the back-jump
+       SUB I, proc02_loop
+
+:proc02_loop
        SET A, proc02_msg1
        JSR text_out
        JSR proc_suspend
-       SET PC, proc02_start
+       SUB PC, I
+:proc02_end
 
 :proc02_msg1
        dat "Hello", 0xA0, 0x00
+:package02_end
