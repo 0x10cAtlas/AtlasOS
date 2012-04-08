@@ -1,6 +1,6 @@
-
 ; clear screen (for emulator)
-JSR clear
+;JSR clear
+
 
 ; low level routines
 ; runs best in DCPU-16 Studio (http://badsector.github.com/dcpustud/)
@@ -31,70 +31,43 @@ JSR mem_reserve
 SET A, text_start_ok
 JSR text_out
 
-SET A, text_cmd
-JSR text_out
-
-; Load first package
-SET A, package01_start
-SET B, package01_end
-SUB B, package01_start
-; / end
+SET A, app01
+SET B, app01_end
+SUB B, app01
 JSR proc_load
 
-; Load second package
-SET A, package02_start
-SET B, package02_end
-SUB B, package02_start
-; / end
-JSR proc_load
-
-; Load the first proc twice
-SET A, package01_start
-SET B, package01_end
-SUB B, package01_start
-; / end
-JSR proc_load
-
+; The kernel constantly polls the keyboard.
 :kernel_loop
 
-    ; The Kernel does nothing so far...
+    IFN [0x9000], 0         ; Could be done IN the driver. But is faster this way.
+        JSR driver_keyboard
 
     JSR proc_suspend
     SET PC, kernel_loop
 
+; START OF THE KEYBOARD DRIVER
+:driver_keyboard
+    SET PUSH, A
+
+    SET A, keyboard_buffers
+
+:driver_keyboard_loop
+    IFN [A], 0
+        SET [A], [0x9000]
+    ADD A, 1
+    IFN A, keyboard_buffers_end
+        SET PC, driver_keyboard_loop
+
+    SET [0x9000], 0
+
+    SET A, POP
+    SET PC, POP
+
+; END OF THE KEYBOARD DRIVER
+
+
+
 SET PC, stop
-
-; adds 32 bit integers (working)
-; A: address of first int
-; B: address of second int
-:int32_add
-      SET PUSH, C ; Save C
-      ADD [A], [B] ; Add lower parts
-      SET C, O ; Save overflow
-      ADD A, 1
-      ADD B, 1
-      ADD [A], [B] ; Add upper parts
-      ADD [A], C ; Add overflow
-      SUB A, 1
-      SUB B, 1
-      SET C, POP ; Restore C
-      SET PC, POP ; Jump back
-
-; subtracts 32 bit integers (working)
-; A: address of first int
-; B: address of second int
-:int32_sub
-      SET PUSH, C ; Save C
-      SUB [A], [B]
-      SET C, O
-      ADD A, 1
-      ADD B, 1
-      ADD [A], C
-      SUB [A], [B]
-      SUB A, 1
-      SUB B, 1
-      SET C, POP
-      SET PC, POP
 
 ; prints a text to stdout (working)
 ; A: address of the text
@@ -167,8 +140,8 @@ SET PC, stop
       SET PUSH, X
       SET PUSH, Y
 
-      SET X, 0x8000
-      SET Y, 0x8020
+      SET X, 0x8000 ; Set X to the video memory
+      SET Y, 0x8020 ; Set Y to the second line in the video memory
 
 :scroll_loop1
       SET [X], [Y]
@@ -212,6 +185,40 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
+
+:get_pos
+      SET PUSH, B
+
+      IFG A, 31
+          SET PC, get_pos_clip
+      IFG B, 15
+          SET PC, get_pos_clip
+
+      MUL B, 32
+      ADD B, 0x8000
+      ADD B, A
+
+      SET A, B
+
+:get_pos_skip
+      SET B, POP
+      SET PC, POP
+
+:get_pos_clip
+      SET A, 0x0000
+      SET PC, get_pos_skip
+
+
+:char_put
+      SET PUSH, A
+
+      JSR get_pos
+      SET [A], C
+
+      SET A, POP
+      SET PC, POP
+
+
 ; Converts a Number into a Decimal String
 ; A: Number
 ; B: StrBuffer (length 5)
@@ -225,25 +232,25 @@ SET PC, stop
       SET C, A
       MOD C, 10
 
-      IFE C, 0           ;0
+      IFE C, 0 ;0
           SET [B], 0x0030
-      IFE C, 1           ;1
+      IFE C, 1 ;1
           SET [B], 0x0031
-      IFE C, 2           ;2
+      IFE C, 2 ;2
           SET [B], 0x0032
-      IFE C, 3           ;3
+      IFE C, 3 ;3
           SET [B], 0x0033
-      IFE C, 4           ;4
+      IFE C, 4 ;4
           SET [B], 0x0034
-      IFE C, 5           ;5
+      IFE C, 5 ;5
           SET [B], 0x0035
-      IFE C, 6           ;6
+      IFE C, 6 ;6
           SET [B], 0x0036
-      IFE C, 7           ;7
+      IFE C, 7 ;7
           SET [B], 0x0037
-      IFE C, 8           ;8
+      IFE C, 8 ;8
           SET [B], 0x0038
-      IFE C, 9           ;9
+      IFE C, 9 ;9
           SET [B], 0x0039
 
       DIV A, 10
@@ -274,37 +281,37 @@ SET PC, stop
       SET C, A
       MOD C, 16
 
-      IFE C, 0           ;0
+      IFE C, 0 ;0
           SET [B], 0x0030
-      IFE C, 1           ;1
+      IFE C, 1 ;1
           SET [B], 0x0031
-      IFE C, 2           ;2
+      IFE C, 2 ;2
           SET [B], 0x0032
-      IFE C, 3           ;3
+      IFE C, 3 ;3
           SET [B], 0x0033
-      IFE C, 4           ;4
+      IFE C, 4 ;4
           SET [B], 0x0034
-      IFE C, 5           ;5
+      IFE C, 5 ;5
           SET [B], 0x0035
-      IFE C, 6           ;6
+      IFE C, 6 ;6
           SET [B], 0x0036
-      IFE C, 7           ;7
+      IFE C, 7 ;7
           SET [B], 0x0037
-      IFE C, 8           ;8
+      IFE C, 8 ;8
           SET [B], 0x0038
-      IFE C, 9           ;9
+      IFE C, 9 ;9
           SET [B], 0x0039
-      IFE C, 10          ;A
+      IFE C, 10 ;A
           SET [B], 0x0041
-      IFE C, 11          ;B
+      IFE C, 11 ;B
           SET [B], 0x0042
-      IFE C, 12          ;C
+      IFE C, 12 ;C
           SET [B], 0x0043
-      IFE C, 13          ;D
+      IFE C, 13 ;D
           SET [B], 0x0044
-      IFE C, 14          ;E
+      IFE C, 14 ;E
           SET [B], 0x0045
-      IFE C, 15          ;F
+      IFE C, 15 ;F
           SET [B], 0x0046
 
       DIV A, 16
@@ -366,7 +373,7 @@ SET PC, stop
       SET PUSH, A
       SET PUSH, B
 
-      SET B, A     ; Make the Address the start address
+      SET B, A ; Make the Address the start address
       MOD B, 1024
       SUB A, B
 
@@ -400,7 +407,7 @@ SET PC, stop
       SET PUSH, A
       SET PUSH, B
 
-      SET B, A     ; Make the Address the start address
+      SET B, A ; Make the Address the start address
       MOD B, 1024
       SUB A, B
 
@@ -468,29 +475,201 @@ SET PC, stop
 
 ; ##############################################################
 
+
+
+
+
+; Returns the version of AtlasOS
+; Takes: ---
+; Returns:
+; A: main version
+; B: subversion
+:os_version
+      SET A, [os_version_main]
+      SET B, [os_version_sub]
+
+; Returns the ID of the current process
+; Takes: ---
+; Returns:
+; A: process ID
+:proc_id
+      SET A, [proc_current]
+      SET PC, POP
+
+; Returns the start address of the current process
+; Takes: ---
+; Returns:
+; A: start address
+:proc_get_addr
+      JSR proc_id
+
+:proc_get_addr_of
+      JSR proc_get_info
+
+      ADD A, 10
+      SET A, [A]
+      SET PC, POP
+
+; Returns the flags of the current process
+; Takes: ---
+; Returns:
+; A: flags
+:proc_get_flags
+      JSR proc_id
+
+:proc_get_flags_of
+      JSR proc_get_info_of
+
+      ADD A, 11
+      SET A, [A]
+      SET PC, POP
+
+; Returns the address of the process info structure
+; Takes: ---
+; Returns:
+; A: address
+:proc_get_info
+      JSR proc_id
+
+:proc_get_info_of
+      MUL A, 12
+      ADD A, proc_buffer
+      SET PC, POP
+
+; Sets the flags of the current process
+; Takes:
+; A: flags
+; Returns: ---
+:proc_set_flags
+      SET PUSH, A
+      JSR proc_get_info
+      ADD A, 11
+      IFN A, 11
+          SET [A], PEEK
+      SET A, POP
+      SET PC, POP
+
+; Sets the flags of a process
+; Takes:
+; A: process ID
+; B: flags
+; Returns: ---
+:proc_set_flags_of
+      SET PUSH, A
+      JSR proc_get_info_of
+      ADD A, 11
+      IFN A, 11
+          SET [A], B
+      SET A, POP
+      SET PC, POP
+
+
+
+
+
+
+; Sets the active flag of the process
+; Takes:
+; A: process ID
+; Returns: ---
+:proc_set_flag_active_of
+      SET PUSH, B
+      SET PUSH, A
+
+      JSR proc_get_flags_of
+      BOR A, 0x0001
+      SET B, A
+      SET A, POP
+      JSR proc_set_flags_of
+
+      SET B, POP
+      SET PC, POP
+
+; Resets the active flag of the process
+; Takes:
+; A: process ID
+; Returns: ---
+:proc_reset_flag_active_of
+      SET PUSH, B
+      SET PUSH, A
+
+      JSR proc_get_flags_of
+      AND A, 0xFFFE
+      SET B, A
+      SET A, POP
+      JSR proc_set_flags_of
+
+      SET B, POP
+      SET PC, POP
+
+; Toggles the active flag of the process
+; Takes:
+; A: process ID
+; Returns:
+; A: 1 - active, 0 - inactive
+:proc_flag_is_active_of
+      JSR proc_get_flags_of
+      AND A, 0x0001
+      SET PC, POP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; Generates a list of all process IDs and hands it over to a callback-function
+; Takes:
+; A: address of the callback-function (Takes: A: process ID, Returns: ---)
+; Returns: ---
+:proc_callback_list
+      SET PUSH, B
+      SET PUSH, A
+
+      SET B, proc_table
+
+:proc_callback_list_loop
+      SET A, [B]
+      IFN A, 0
+          JSR PEEK
+      ADD B, 12
+      IFN B, proc_table_end
+          SET PC, proc_callback_list_loop
+
+      SET A, POP
+      SET B, POP
+      SET PC, POP
+
 ; proc_suspend
 :proc_suspend
       SET [proc_buffer], [proc_current] ; Buffer the registers of the current process
-      SET [proc_buffer1], A
-      SET [proc_buffer2], B
-      SET [proc_buffer3], C
-      SET [proc_buffer4], X
-      SET [proc_buffer5], Y
-      SET [proc_buffer6], Z
-      SET [proc_buffer7], I
-      SET [proc_buffer8], J
-;      SET [proc_buffer9], PC
-      SET [proc_buffer10], SP
+      SET [proc_buffer_a], A
+      SET [proc_buffer_b], B
+      SET [proc_buffer_c], C
+      SET [proc_buffer_x], X
+      SET [proc_buffer_y], Y
+      SET [proc_buffer_z], Z
+      SET [proc_buffer_i], I
+      SET [proc_buffer_j], J
+      SET [proc_buffer_sp], SP
 
       ; Restore the Stackpointer so we can call subroutines
       SET SP, [proc_table10]
 
       ; Copy the buffered state to the table
+      JSR proc_get_info
+      SET B, A
       SET A, proc_buffer
-
-      SET B, [proc_current]
-      MUL B, 12
-      ADD B, proc_buffer
 
       SET C, 12
 
@@ -509,21 +688,21 @@ SET PC, stop
       SET PC, proc_suspend_loop
 
 :proc_suspend_invoke
-      ; Copy the Processinformation to the buffer
+      ; Copy the process information to the registers
       SET B, proc_buffer
       JSR mem_copy
 
       SET [proc_current], [proc_buffer]
-      SET A, [proc_buffer1]
-      SET B, [proc_buffer2]
-      SET C, [proc_buffer3]
-      SET X, [proc_buffer4]
-      SET Y, [proc_buffer5]
-      SET Z, [proc_buffer6]
-      SET I, [proc_buffer7]
-      SET J, [proc_buffer8]
-      SET SP, [proc_buffer10]
-      SET PC, POP             ; Jump into the Programm
+      SET A, [proc_buffer_a]
+      SET B, [proc_buffer_b]
+      SET C, [proc_buffer_c]
+      SET X, [proc_buffer_x]
+      SET Y, [proc_buffer_y]
+      SET Z, [proc_buffer_z]
+      SET I, [proc_buffer_i]
+      SET J, [proc_buffer_j]
+      SET SP, [proc_buffer_sp]
+      SET PC, POP ; Jump into the Programm
 
 ; Loads a new process into memory
 ; A: Begin of the BLOB
@@ -577,142 +756,351 @@ SET PC, stop
       SET A, Y
       JSR mem_copy
 
-      SET A, [X]  ; A return the ProcID
+      SET A, [X] ; A return the ProcID
 
-      ADD X, 1    ; A
+      ADD X, 1 ; A
       SET [X], 0
-      ADD X, 1    ; B
+      ADD X, 1 ; B
       SET [X], 0
-      ADD X, 1    ; C
+      ADD X, 1 ; C
       SET [X], 0
-      ADD X, 1    ; X
+      ADD X, 1 ; X
       SET [X], 0
-      ADD X, 1    ; Y
+      ADD X, 1 ; Y
       SET [X], 0
-      ADD X, 1    ; Z
+      ADD X, 1 ; Z
       SET [X], 0
-      ADD X, 1    ; I
+      ADD X, 1 ; I
       SET [X], 0
-      ADD X, 1    ; J
+      ADD X, 1 ; J
       SET [X], 0
-      ADD X, 1    ; PC
-      SET [X], 0
-      ADD X, 1    ; SP
+      ADD X, 1 ; SP
       SET [X], B
       ADD [X], 1023
-      SET Y, [X]   ; Save stack address
-      ADD X, 1    ; Flags
-      SET [X], 0
+      SET Y, [X] ; Save stack address
+      ADD X, 1
+      SET [X], B
+      ADD X, 1 ; Flags
+      SET [X], 0x0001
 
-      SET [Y], B   ; "Push" the "return" address on the stack
+      SET [Y], B ; "Push" the "return" address on the stack
 
       SET PC, proc_load_end
 
 ; ##############################################################
 
+
+
+; PUSHes all registers to the stack
+:pusha
+     SET [pushpop_buffer], POP ; Save jump-back-address
+
+     SET PUSH, A
+     SET PUSH, B
+     SET PUSH, C
+     SET PUSH, X
+     SET PUSH, Y
+     SET PUSH, Z
+     SET PUSH, I
+     SET PUSH, J
+
+     SET PC, [pushpop_buffer]  ; jump back
+
+; POPs all registers from the stack
+:popa
+     SET [pushpop_buffer], POP ; Save jump-back-address
+
+     SET J, POP
+     SET I, POP
+     SET Z, POP
+     SET Y, POP
+     SET X, POP
+     SET C, POP
+     SET B, POP
+     SET A, POP
+
+     SET PC, [pushpop_buffer]  ; jump back
+
+:pushpop_buffer dat 0x0000
+
+
+
+
+; Driver functions
+
+; Registers a new keyboard buffer
+; Takes:
+; A: Address of the buffer
+:keyboard_register
+    SET PUSH, A
+
+    SET A, keyboard_buffers
+
+:keyboard_register_loop
+    IFN [A], 0
+        SET PC, keyboard_register_set
+    ADD A, 1
+    IFN A, keyboard_buffers_end
+        SET PC, keyboard_register_loop
+
+:keyboard_register_end
+    SET A, POP
+    SET PC, POP
+
+:keyboard_register_set
+    SET [A], PEEK
+    SET PC, keyboard_register_end
+
+
+
+
+
+
+
+; Copies a string from a source to a destination
+; Takes:
+; A: source address
+; B: destination address
+:strcpy
+    SET PUSH, A
+    SET PUSH, B
+
+:strcpy_loop
+    IFE A, 0
+        SET PC, strcpy_end
+    SET [B], [A]
+    ADD A, 1
+    ADD B, 1
+    SET PC, strcpy_loop
+
+:strcpy_end
+    SET B, POP
+    SET A, POP
+
+; Copies a string from a source to a destination with length limitation
+; Takes:
+; A: source
+; B: destination
+; C: length
+:strncpy
+    SET PUSH, A
+    SET PUSH, B
+    SET PUSH, C
+
+    ADD C, B
+:strncpy_loop1
+    IFE A, 0
+        SET PC, strncpy_loop2
+    SET [B], [A]
+    ADD A, 1
+    ADD B, 1
+    IFE B, C
+        SET PC, strncpy_end
+    SET PC, strncpy_loop1
+
+:strncpy_loop2
+    SET [B], 0
+    ADD B, 1
+    IFN B, C
+        SET PC, strncpy_loop2
+
+:strncpy_end
+    SET C, POP
+    SET B, POP
+    SET A, POP
+
+
+; Reads a line of chars from the keyboard
+; A: String buffer address
+; B: Length
+; C: Keybuffer
+:read_line
+     SET PUSH, A
+     SET PUSH, B
+     SET PUSH, C
+
+     JSR mem_clear ; Clear the buffer
+
+     SUB C, 1
+     ADD C, B
+
+:read_line_loop
+     IFE [C], 0
+         SET PC, read_line_skip
+
+
+:read_line_skip
+     JSR proc_suspend
+     SET PC, read_line_loop
+
+
+
 ; Halts the CPU
 :stop SET PC, stop
 
 :data
+
+; OS Variables
+:os_version_main dat 0x0000
+:os_version_sub  dat 0x0002
+
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.1 starting... ", 0x00
+:text_start dat "AtlasOS v0.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_cmd dat "$>", 0xA0, 0x00
 :text_proc_load_error dat "Error loading process...", 0xA0, 0x00
-
-:msg_reg dat "Nice Number: "
-:msg_dat dat "     !", 0
 
 :mem_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :mem_table_end
 
-:proc_current
-       dat 0x0001
-:proc_buffer
-       dat 0x0000
-:proc_buffer1
-       dat 0x0000
-:proc_buffer2
-       dat 0x0000
-:proc_buffer3
-       dat 0x0000
-:proc_buffer4
-       dat 0x0000
-:proc_buffer5
-       dat 0x0000
-:proc_buffer6
-       dat 0x0000
-:proc_buffer7
-       dat 0x0000
-:proc_buffer8
-       dat 0x0000
-:proc_buffer9
-       dat 0x0000
-:proc_buffer10
-       dat 0x0000
-:proc_buffer11
-       dat 0x0000
+:proc_current      dat 0x0001
+:proc_buffer       dat 0x0000
+:proc_buffer_a     dat 0x0000
+:proc_buffer_b     dat 0x0000
+:proc_buffer_c     dat 0x0000
+:proc_buffer_x     dat 0x0000
+:proc_buffer_y     dat 0x0000
+:proc_buffer_z     dat 0x0000
+:proc_buffer_i     dat 0x0000
+:proc_buffer_j     dat 0x0000
+:proc_buffer_sp    dat 0x0000
+:proc_buffer_mem   dat 0x0000
+:proc_buffer_flags dat 0x0000
 :proc_table
-       dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table10
-       dat 0xFFFF, 0xFFFF ; OS-Proc
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; First proc
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Second proc
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Third proc
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Fourth proc
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; Fifth proc
+       dat 0xFFFF, 0x0000, 0xFFFD ; OS-Proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 1st proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 2nd proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 3rd proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 4th proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 5th proc
 :proc_table_end
 
-:kernel_end
+:keyboard_buffers
+dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:keyboard_buffers_end
+
+
+
+:api_start                    ; API starts at 0x1000
+       SET PC, os_version     ; Returns the version of AtlasOS
+       SET PC, proc_id        ; Returns the ID of the current process
+       SET PC, proc_suspend   ; Suspends the process and starts the next
+       SET PC, proc_get_addr  ; Returns the address of the current processes memory
+       SET PC, proc_get_flags ; Returns the flags of the current process
+       SET PC, mem_alloc      ; Allocates another 1024 words
+       SET PC, mem_free       ; Frees allocated memory
+       SET PC, mem_clear      ; Clears memory
+       SET PC, pusha          ; Pushes all registers to the stack
+       SET PC, popa           ; Pops all registers from the stack
+       SET PC, strcpy         ; Copies a string
+       SET PC, strncpy        ; Copies a string with length limitation
+       SET PC, text_out       ; Displays a text on the screen
+       SET PC, newline        ; Linefeed
+       SET PC, scroll         ; Scrolls the screen one line
+       SEt PC, clear          ; Clears the screen
+       SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
+       SET PC, int2dec        ; Converts a value into the decimal representation
+       SET PC, int2hex        ; Converts a value into the hexadecimal representation
+:api_end
 
 
 
 
 
 
-; Process 1
-:package01_start
-:proc01_start
-       SET I, proc01_end    ; Calculate the length of the back-jump
-       SUB I, proc01_loop
 
-:proc01_loop
-       JSR mem_alloc
-       SET B, A
-       SET A, proc01_msg1
-       JSR text_out
-       JSR proc_suspend
-       SET A, B
-       JSR mem_free
-       SET A, proc01_msg2
-       JSR text_out
-       JSR proc_suspend
-       SUB PC, I
-:proc01_end
 
-:proc01_msg1
-       dat "Memory allocated!", 0xA0, 0x00
-:proc01_msg2
-       dat "Memory freed!", 0xA0, 0x00
-:package01_end
 
-; Process 2
-:package02_start
-:proc02_start
-       SET I, proc02_end    ; Calculate the length of the back-jump
-       SUB I, proc02_loop
 
-:proc02_loop
-       SET A, proc02_msg1
-       JSR text_out
-       JSR proc_suspend
-       SUB PC, I
-:proc02_end
 
-:proc02_msg1
-       dat "Hello", 0xA0, 0x00
-:package02_end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+:app01
+SET A, 0
+SET B, 0
+SET C, 0x704F
+JSR char_put
+
+SET X, 1
+SET Y, 1
+
+SET I, app01_end
+SUB I, app01_loop
+
+:app01_loop
+     SET C, 0x7000
+     JSR char_put
+
+     ADD A, X
+     ADD B, Y
+
+     IFE A, 31
+         SET X, 0xFFFF
+
+     IFE B, 15
+         SET Y, 0xFFFF
+
+     IFE A, 0
+         SET X, 1
+
+     IFE B, 0
+         SET Y, 1
+
+     SET C, 0x704F
+     JSR char_put
+
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+     JSR proc_suspend
+
+
+     SUB PC, I
+:app01_end
+
+
+
+
+
+
+
+
+
+
+
+
+
+  :kernel_end
+
+
+
+
+
+
+
+
+
+
+
