@@ -1,5 +1,5 @@
 ; clear screen (for emulator)
-;JSR clear
+JSR clear
 
 
 ; low level routines
@@ -39,7 +39,7 @@ JSR proc_load
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
-    IFN [0x9000], 0         ; Could be done IN the driver. But is faster this way.
+    ;IFN [0x9000], 0 ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
 
     JSR proc_suspend
@@ -48,20 +48,29 @@ JSR proc_load
 ; START OF THE KEYBOARD DRIVER
 :driver_keyboard
     SET PUSH, A
+SET PUSH, B
 
     SET A, keyboard_buffers
 
 :driver_keyboard_loop
+; Check to see if we have a buffer registered at this spot
     IFN [A], 0
-        SET [A], [0x9000]
+        JSR driver_keyboard_save_to_buffer
+; Increment to the next buffer as long as we aren't at the end
     ADD A, 1
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
 
     SET [0x9000], 0
 
+SET B, POP
     SET A, POP
     SET PC, POP
+
+:driver_keyboard_save_to_buffer
+SET B, [A]
+SET [B], [0x9000]
+SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
 
@@ -804,7 +813,7 @@ SET PC, stop
      SET PUSH, I
      SET PUSH, J
 
-     SET PC, [pushpop_buffer]  ; jump back
+     SET PC, [pushpop_buffer] ; jump back
 
 ; POPs all registers from the stack
 :popa
@@ -819,7 +828,7 @@ SET PC, stop
      SET B, POP
      SET A, POP
 
-     SET PC, [pushpop_buffer]  ; jump back
+     SET PC, [pushpop_buffer] ; jump back
 
 :pushpop_buffer dat 0x0000
 
@@ -837,7 +846,7 @@ SET PC, stop
     SET A, keyboard_buffers
 
 :keyboard_register_loop
-    IFN [A], 0
+    IFE [A], 0
         SET PC, keyboard_register_set
     ADD A, 1
     IFN A, keyboard_buffers_end
@@ -850,10 +859,6 @@ SET PC, stop
 :keyboard_register_set
     SET [A], PEEK
     SET PC, keyboard_register_end
-
-
-
-
 
 
 
@@ -909,30 +914,124 @@ SET PC, stop
     SET B, POP
     SET A, POP
 
+; Compares strings and stores the result in C
+; Takes:
+; A: source #1
+; B: source #2
+:strcmp
+SET PUSH, A
+SET PUSH, B
+;SET PUSH, C
+:strcmp_loop
+SET C, 0
+
+IFE [A], [B]
+JSR strcmp_checkend
+
+IFE C, 1
+SET PC, strcmp_end
+
+IFN [A], [B]
+SET PC, strcmp_end
+
+ADD A, 1
+ADD B, 1
+SET PC, strcmp_loop
+:strcmp_checkend
+IFE [A], 0
+SET C, 1
+SET PC, POP
+:strcmp_end
+;SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+
 
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
 ; C: Keybuffer
 :read_line
-     SET PUSH, A
-     SET PUSH, B
-     SET PUSH, C
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, X
 
-     JSR mem_clear ; Clear the buffer
+JSR mem_clear ; Clear the buffer
 
-     SUB C, 1
-     ADD C, B
+; Store the starting location
+; Maybe find a push/pop way to do this so we don't tie up a register
+SET X, A
+
+ADD B, A
 
 :read_line_loop
-     IFE [C], 0
-         SET PC, read_line_skip
+    IFE [C], 0
+SET PC, read_line_skip
+IFE A, B
+SET PC, read_line_end
+IFE [C], 0xA
+SET PC, read_line_end
+IFE [C], 0x8
+SET PC, read_line_backspace
 
+SET [A], [C]
+
+; Put the character on-screen so the user can see what is being typed
+; Maybe have this toggleable?
+SET PUSH, A
+SET PUSH, B
+SET B, [A]
+BOR B, 0x7400
+SET A, B
+SET B, [video_cur]
+SET [B], A
+ADD [video_cur], 1
+SET B, POP
+SET A, POP
+
+ADD A, 1
 
 :read_line_skip
-     JSR proc_suspend
-     SET PC, read_line_loop
+JSR proc_suspend
+SET PC, read_line_loop
 
+:read_line_backspace
+; Ensure we don't backspace past the beginning
+IFE A, X
+SET PC, read_line_skip
+
+SET PUSH, A
+SET PUSH, B
+SUB [video_cur], 1
+SET B, [video_cur]
+SET [B], 0
+SET B, POP
+SET A, POP
+SUB A, 1
+SET PC, read_line_skip
+
+
+:read_line_end
+; Add the null terminator
+SET [A], 0
+; Pop everything back out
+SET X, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+; Sleeps for some cycles
+; A: number of process cycles to wait
+:sleep
+IFE A, 0
+SET PC, POP
+SUB A, 1
+JSR proc_suspend
+SET PC, sleep
 
 
 ; Halts the CPU
@@ -942,13 +1041,13 @@ SET PC, stop
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub  dat 0x0002
+:os_version_sub dat 0x0002
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.2 starting... ", 0x00
+:text_start dat "AtlasOS v0.3 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_cmd dat "$>", 0xA0, 0x00
 :text_proc_load_error dat "Error loading process...", 0xA0, 0x00
@@ -957,18 +1056,18 @@ SET PC, stop
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :mem_table_end
 
-:proc_current      dat 0x0001
-:proc_buffer       dat 0x0000
-:proc_buffer_a     dat 0x0000
-:proc_buffer_b     dat 0x0000
-:proc_buffer_c     dat 0x0000
-:proc_buffer_x     dat 0x0000
-:proc_buffer_y     dat 0x0000
-:proc_buffer_z     dat 0x0000
-:proc_buffer_i     dat 0x0000
-:proc_buffer_j     dat 0x0000
-:proc_buffer_sp    dat 0x0000
-:proc_buffer_mem   dat 0x0000
+:proc_current dat 0x0001
+:proc_buffer dat 0x0000
+:proc_buffer_a dat 0x0000
+:proc_buffer_b dat 0x0000
+:proc_buffer_c dat 0x0000
+:proc_buffer_x dat 0x0000
+:proc_buffer_y dat 0x0000
+:proc_buffer_z dat 0x0000
+:proc_buffer_i dat 0x0000
+:proc_buffer_j dat 0x0000
+:proc_buffer_sp dat 0x0000
+:proc_buffer_mem dat 0x0000
 :proc_buffer_flags dat 0x0000
 :proc_table
        dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -987,120 +1086,170 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 
 
-:api_start                    ; API starts at 0x1000
-       SET PC, os_version     ; Returns the version of AtlasOS
-       SET PC, proc_id        ; Returns the ID of the current process
-       SET PC, proc_suspend   ; Suspends the process and starts the next
-       SET PC, proc_get_addr  ; Returns the address of the current processes memory
+:api_start ; API starts at 0x1000
+       SET PC, os_version ; Returns the version of AtlasOS
+       SET PC, proc_id ; Returns the ID of the current process
+       SET PC, proc_suspend ; Suspends the process and starts the next
+       SET PC, proc_get_addr ; Returns the address of the current processes memory
        SET PC, proc_get_flags ; Returns the flags of the current process
-       SET PC, mem_alloc      ; Allocates another 1024 words
-       SET PC, mem_free       ; Frees allocated memory
-       SET PC, mem_clear      ; Clears memory
-       SET PC, pusha          ; Pushes all registers to the stack
-       SET PC, popa           ; Pops all registers from the stack
-       SET PC, strcpy         ; Copies a string
-       SET PC, strncpy        ; Copies a string with length limitation
-       SET PC, text_out       ; Displays a text on the screen
-       SET PC, newline        ; Linefeed
-       SET PC, scroll         ; Scrolls the screen one line
-       SEt PC, clear          ; Clears the screen
+       SET PC, mem_alloc ; Allocates another 1024 words
+       SET PC, mem_free ; Frees allocated memory
+       SET PC, mem_clear ; Clears memory
+       SET PC, pusha ; Pushes all registers to the stack
+       SET PC, popa ; Pops all registers from the stack
+       SET PC, strcpy ; Copies a string
+       SET PC, strncpy ; Copies a string with length limitation
+       SET PC, text_out ; Displays a text on the screen
+       SET PC, newline ; Linefeed
+       SET PC, scroll ; Scrolls the screen one line
+       SEt PC, clear ; Clears the screen
        SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
-       SET PC, int2dec        ; Converts a value into the decimal representation
-       SET PC, int2hex        ; Converts a value into the hexadecimal representation
+       SET PC, int2dec ; Converts a value into the decimal representation
+       SET PC, int2hex ; Converts a value into the hexadecimal representation
 :api_end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+; BASH-like Process
 :app01
-SET A, 0
-SET B, 0
-SET C, 0x704F
-JSR char_put
+:app01_start
+SET I, app01_loop_end ; Calculate the length of the back-jump
+SUB I, app01_loop
 
+; Register our buffer with the driver
+SET A, input_buffer
+JSR keyboard_register
+
+:app01_loop
+; Display the prompt
+set a, text_prompt
+jsr text_out
+
+; Reset the basics
+set [ack_command], 0 ; reset command recognized
+
+; Read a line from the keyboard
+SET A, input_text_buffer
+SET B, 32
+SET C, input_buffer
+JSR read_line
+
+; Check for the 'clear' command
+set a, command_clear
+set b, input_text_buffer
+jsr strcmp
+ife c, 1
+jsr clearf
+
+; Check for the 'version' command
+set a, command_version
+set b, input_text_buffer
+jsr strcmp
+ife c, 1
+jsr versionf
+
+; Check for the 'load' command
+set a, command_load
+set b, input_text_buffer
+jsr strcmp
+ife c, 1
+jsr loadf
+
+ifn [ack_command], 1
+jsr unrecognizedf
+
+JSR proc_suspend
+    SUB PC, I
+:app01_loop_end
+; Command functions
+:unrecognizedf
+jsr newline
+set a, text_unrecognized
+jsr text_out
+set pc, pop
+
+:versionf
+set [ack_command], 1 ; acknowledge recognized command
+jsr newline
+set a, text_versionoutput
+jsr text_out
+set pc, pop
+
+:clearf
+set [ack_command], 1 ; acknowledge recognized command
+jsr clear
+set pc, pop
+
+:loadf
+set [ack_command], 1 ; acknowledge recognized command
+jsr newline
+SET A, app02
+SET B, app02_end
+SUB B, app02
+JSR proc_load
+JSR proc_suspend
+set pc, pop
+
+; Data
+:input_text_buffer dat "This is some text we can overrid", 0x00
+:input_buffer dat 0x0000
+:ack_command dat 0x00
+:command_clear dat "clear", 0
+:command_version dat "version", 0
+:command_load dat "load", 0
+:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.1", 0xA0, 0x00
+:text_prompt dat "-> ", 0x00
+
+:app01_end
+
+:app02
 SET X, 1
 SET Y, 1
 
-SET I, app01_end
-SUB I, app01_loop
+SET I, app02_loop_end
+SUB I, app02_loop
 
-:app01_loop
-     SET C, 0x7000
-     JSR char_put
+:app02_loop
+; Restore the old character
+SET C, Z
+IFN C, 0
+JSR char_put
 
-     ADD A, X
-     ADD B, Y
+ADD A, X
+ADD B, Y
 
-     IFE A, 31
-         SET X, 0xFFFF
+IFE A, 31
+SET X, 0xFFFF
 
-     IFE B, 15
-         SET Y, 0xFFFF
+IFE B, 15
+SET Y, 0xFFFF
 
-     IFE A, 0
-         SET X, 1
+IFE A, 0
+SET X, 1
 
-     IFE B, 0
-         SET Y, 1
+IFE B, 0
+SET Y, 1
 
-     SET C, 0x704F
-     JSR char_put
+; Save the character before we write so we can restore later
+SET PUSH, B
+MUL B, 32
+ADD B, A
+ADD B, [video_mem]
+SET Z, [B]
+SET B, POP
 
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
-     JSR proc_suspend
+SET C, 0x744F
+JSR char_put
 
+; Wait a bit so the 'ball' moves slower
+SET PUSH, A
+SET A, 8
+JSR sleep
+SET A, POP
 
-     SUB PC, I
-:app01_end
-
-
-
-
-
-
-
-
-
-
+JSR proc_suspend
+SUB PC, I
+:app02_loop_end
+:app02_end
 
 
-
-  :kernel_end
-
-
-
-
-
-
-
-
-
-
-
+:kernel_end
