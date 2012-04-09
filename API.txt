@@ -487,6 +487,20 @@ Side effects:
 	The value of the word will be converted into a hexadecimal string.
 
 
+mem_check [0x1032]
+-------------
+
+Description:
+	Calculates the amount of free memory on the system in words
+	
+Parameters:
+	none
+	
+Return:
+	A - the amount of free words on the system
+	
+Side effects:
+	none
 
 	
 
