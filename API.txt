@@ -1,0 +1,510 @@
+     __    _______   _           __       ______              __       _____    _
+    /  \  |___ ___| | |         /  \     |  ____|            /  \     |  __ \  | |
+   / /\ \    | |    | |        / /\ \    | |____   ____     / /\ \    | |__| | | |
+  / /__\ \   | |    | |       / /__\ \   |____  | |____|   / /__\ \   |  ___/  | |
+ / ______ \  | |    | |___   / ______ \   ____| |         / ______ \  | |      | |
+/_/      \_\ |_|    |_____| /_/      \_\ |______|        /_/      \_\ |_|      |_|
+
+                              API documentation for AtlasOS
+
+Function calls
+==============
+
+All functions with three (3) or less parameters use fastcall. This means the parameters
+are not pushed on the stack. Instead they are kept in the A, B and C registers.
+The result is stored in A if not defined in this document.
+
+Functions with more then three parameters expect them to be pushed on the stack in a
+reversed order.
+
+Less then three params
+C:
+	int add(int x, int y) {
+		return x+y;
+	}
+
+ASM:
+	ADD A, B
+	SET PC, POP
+	
+More then three params
+C:
+	int add(int a, int b, int c, int d) {
+		return a+b+c+d;
+	}
+	
+ASM:
+	SET PUSH, B
+	
+	SET A, SP
+	SUB A, 2
+	SET B, [A]	; SET d
+	SUB A, 1
+	ADD B, [A]  ; ADD c
+	SUB A, 1
+	ADD B, [A]  ; ADD b
+	SUB A, 1
+	ADD B, [A]  ; ADD a
+	
+	SET A, B    ; Return
+	SET B, POP
+	SET PC, POP
+
+
+API functions
+=============
+
+os_version [0x1000]
+-------------------
+
+Description:
+	Returns the main and sub version of AtlasOS.
+	
+Parameter:
+	none
+	
+Return:
+	A - main version
+	B - sub version
+	
+Side effects:
+	none
+	
+
+proc_id [0x1002]
+----------------
+
+Description:
+	Returns the ID of the current running process (the process calling this function).
+
+Parameter:
+	none
+	
+Return:
+	A - process ID
+	
+Side effects:
+	none
+	
+	
+proc_suspend [0x1004]
+---------------------
+
+Description:
+	Suspends the current process and starts the next one. Processes should call this
+	function regularly to keep multitasking working and to get keyboard keys.
+	
+Parameter:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	Runs other processes before returning to this one.
+
+	
+proc_get_addr [0x1006]
+----------------------
+
+Description:
+	Returns the address of the processes initial mem page.
+	
+Parameter:
+	none
+	
+Return:
+	A - address of the memory page.
+	
+Side effects:
+	none
+	
+
+proc_get_flags [0x1008]
+-----------------------
+
+Description:
+	Returns the flags of the process
+	
+Parameters:
+	none
+	
+Return:
+	A - Flags of the process
+	
+Side effects:
+	none
+	
+
+proc_kill_me [0x100A]
+---------------------
+
+Description:
+	Terminates the current process. No further code of it will be executed.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	The process will be removed from the process list and its initial mem page will be freed.
+	
+
+proc_kill [0x100C]
+------------------
+
+Description:
+	Kills a process by its ID.
+	
+Parameters:
+	A - process ID
+	
+Return:
+	none
+
+Side effects:
+	The process is removed from the process list and int initial mem page will be freed.
+	If the process doesn't exists nothing happens.
+	
+
+mem_alloc [0x100E]
+------------------
+
+Description:
+	Allocates a memory page (1024 words) and returns its address.
+	
+Parameters:
+	none
+	
+Return:
+	A - address of the newly allocated memory or 0 if no more memory is available.
+	
+Side effects:
+	Reserves the memory in the memory management table.
+	
+mem_free [0x1010]
+-----------------
+
+Description:
+	Frees allocated memory.
+	
+Parameters:
+	A - address of or in the mem page to be freed
+	
+Return:
+	none
+	
+Side effects:
+	The memory page will be marked as free in the memory management table.
+	! This does not clear the memory !
+	
+	
+mem_clear [0x1012]
+
+Description:
+	Sets all words in the specified memory to 0x0000.
+	
+Parameters:
+	A - start address of the memory to be cleared.
+	B - length of the memory to be cleared.
+	
+Return:
+	none
+	
+Side effects:
+	All words in the specified memory are set to 0x0000.
+	
+	
+pusha [0x1014]
+--------------
+
+Description:
+	Pushes all registers to the stack.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	All registers are pushed to the stack.
+	Same as:
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	SET PUSH, I
+	SET PUSH, J
+
+
+popa [0x1016]
+-------------
+
+Description:
+	Pops all registers from the stack.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	All registers are POPed from the stack.
+	Same as:
+	SET J, POP
+	SET I, POP
+	SET Z, POP
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	
+	
+strcpy [0x1018]
+-------------
+
+Description:
+	Copies a string from a source address to a destination address
+	
+Parameters:
+	A - source address
+	B - destination address
+	
+Return:
+	none
+	
+Side effects:
+	Copies the string. The string must be 0-terminated.
+	
+	
+strncpy [0x101A]
+-------------
+
+Description:
+	Same as strcpy but with length limitation. (Same as C function)
+	
+Parameters:
+	A - source address
+	B - destination address
+	C - max length for copy
+	
+Return:
+	none
+	
+Side effects:
+	Same as strcpy but when C was exceeded the destination string has no 0-termination.
+	
+	
+text_out [0x101C]
+-------------
+
+Description:
+	Prints the text on the screen. It takes 0x00A0 as line feed.
+	
+Parameters:
+	A - start address of the text
+	
+Return:
+	none
+	
+Side effects:
+	Prints the text on the screen. Sets the screen cursor to the next char of the screen.
+	If the text reaches the bottom of the screen the screen is automaticaly scrolled.
+	
+
+newline [0x101E]
+-------------
+
+Description:
+	Sets the screen cursor to the next line.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	If the cursor reaches the bottom of the screen the screen is autimaticaly scrolled.
+	
+
+scroll [0x1020]
+-------------
+
+Description:
+	Scrolls the screen one line up.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	Screen is scrolled up and the screen cursor is set one line up.
+	
+
+clear [0x1022]
+-------------
+
+Description:
+	Clears the screen.
+	
+Parameters:
+	none
+	
+Return:
+	none
+	
+Side effects:
+	Sets the entire screen buffer to 0x7000. Sets the screen cursor to the top left position.
+	
+	
+char_put [0x1024]
+-------------
+
+Description:
+	Puts the specified char to the specified position on the screen.
+	
+Parameters:
+	A - X coordinate
+	B - Y coordinate
+	C - char to put on the screen
+	
+Return:
+	none
+	
+Side effects:
+	Puts the char on the screen. Does not effect the screen cursor.
+	! Does not specify a color for the char !
+	
+
+read_line [0x1026]
+-------------
+
+Description:
+	Reads a line from the keyboard to the string buffer
+	
+Parameters:
+	A - Key buffer of the application
+	B - String buffer of the application
+	C - Length of the string buffer
+	
+Return:
+	none
+	
+Side effects:
+	Reads the values from the keyboard. Constantly calls proc_suspend to wait for the key buffer to be filled.
+	
+
+random [0x1028]
+-------------
+
+Description:
+	Returns a pseudorandom number.
+	
+Parameters:
+	none
+	
+Return:
+	A - pseudorandom number
+	
+Side effects:
+	Changes the entropy value of the OS.
+	
+
+keyboard_register [0x102A]
+-------------
+
+Description:
+	Registers a memory address as a keyboard buffer.
+	
+Parameters:
+	A - address of the new keyboard buffer
+	
+Return:
+	none
+	
+Side effects:
+	adds the memory address to the keyboard buffer list. If the list is full this
+	function silently fail.
+
+	
+keyboard_unregister [0x102C]
+-------------
+
+Description:
+	Removes a keyboard buffer from the list
+	
+Parameters:
+	A - address of the keyboard buffer
+	
+Return:
+	none
+	
+Side effects:
+	The specified buffer will no longer be filled by the keyboard driver
+	
+	
+int2dec [0x102E]
+-------------
+
+Description:
+	Converts a word into the decimal representation.
+	
+Parameters:
+	A - word to be converted
+	B - string buffer (size: 5 words)
+	
+Return:
+	none
+	
+Side effects:
+	The value of the word will be converted into a decimal string.
+	
+	
+int2hex [0x1030]
+-------------
+
+Description:
+	Converts a word into the hexadecimal representation.
+	
+Parameters:
+	A - word to be converted
+	B - string buffer (size: 4 words)
+	
+Return:
+	none
+	
+Side effects:
+	The value of the word will be converted into a hexadecimal string.
+
+
+
+	
+
+	
+	
+// Ignore me!	
+ [0x10]
+-------------
+
+Description:
+	
+	
+Parameters:
+	
+	
+Return:
+	
+	
+Side effects:
+	
+	

@@ -27,6 +27,16 @@ JSR mem_reserve
 SET A, 0xFFFF
 JSR mem_reserve
 
+; Copy the API.
+SET A, 0x1000
+JSR mem_reserve
+
+SET B, A
+SET A, api_start
+SET C, api_end
+SUB C, A
+JSR mem_copy
+
 ; OS ready message
 SET A, text_start_ok
 JSR text_out
@@ -914,6 +924,29 @@ SET PC, stop
     SET PC, keyboard_register_end
 
 
+; Unregisters a keyboard buffer
+; Takes:
+; A: Address of the buffer
+:keyboard_unregister
+    SET PUSH, A
+
+    SET A, keyboard_buffers
+
+:keyboard_unregister_loop
+    IFE [A], PEEK
+        SET PC, keyboard_unregister_unset
+    ADD A, 1
+    IFN A, keyboard_buffers_end
+        SET PC, keyboard_unregister_loop
+
+:keyboard_unregister_end
+    SET A, POP
+    SET PC, POP
+
+:keyboard_unregister_unset
+    SET [A], 0x0000
+    SET PC, keyboard_register_end
+
 
 ; Copies a string from a source to a destination
 ; Takes:
@@ -1149,6 +1182,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        SET PC, proc_suspend ; Suspends the process and starts the next
        SET PC, proc_get_addr ; Returns the address of the current processes memory
        SET PC, proc_get_flags ; Returns the flags of the current process
+       SET PC, proc_kill_me ; Kills the current process
+       SET PC, proc_kill ; Kills a process
        SET PC, mem_alloc ; Allocates another 1024 words
        SET PC, mem_free ; Frees allocated memory
        SET PC, mem_clear ; Clears memory
@@ -1159,8 +1194,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        SET PC, text_out ; Displays a text on the screen
        SET PC, newline ; Linefeed
        SET PC, scroll ; Scrolls the screen one line
-       SEt PC, clear ; Clears the screen
+       SET PC, clear ; Clears the screen
+       SET PC, char_put ; Puts a chat on the screen
+       SET PC, read_line ; Reads a line from the keyboard to a buffer
+       SET PC, random ; Gets a random number
        SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
+       SET PC, keyboard_unregister ; Unregisters a specific memory location
        SET PC, int2dec ; Converts a value into the decimal representation
        SET PC, int2hex ; Converts a value into the hexadecimal representation
 :api_end
