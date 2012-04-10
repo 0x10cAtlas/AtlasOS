@@ -1179,13 +1179,13 @@ SET PC, stop
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0003
-:os_version_fix dat 0x0002
+:os_version_fix dat 0x0003
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.3.2 starting... ", 0x00
+:text_start dat "AtlasOS v0.3.3 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_proc_load_error dat "Error loading process...", 0xA0, 0x00
 :text_logo1 DAT "       ___   __  __             "
@@ -1248,8 +1248,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        SET PC, popa ; Pops all registers from the stack
        SET PC, strcpy ; Copies a string
        SET PC, strncpy ; Copies a string with length limitation
-	   SET PC, strlen ; Returns the length of a null-terminated string
-	   SET PC, strcmp ; Compares two null-terminated strings to see if they're equal
        SET PC, text_out ; Displays a text on the screen
        SET PC, newline ; Linefeed
        SET PC, scroll ; Scrolls the screen one line
@@ -1262,6 +1260,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        SET PC, int2dec ; Converts a value into the decimal representation
        SET PC, int2hex ; Converts a value into the hexadecimal representation
 	   SET PC, atoi ; Converts a textual, decimal number into the actual integer value
+	   SET PC, strlen ; Returns the length of a null-terminated string
+	   SET PC, strcmp ; Compares two null-terminated strings to see if they're equal
 :api_end
 
 ; BASH-like Process
@@ -1399,14 +1399,48 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; Command function to load a new process
 :command_loadf
 	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR command_clear_parameter_buffer
+	
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; check if blank > load help
+	SET A, command_parameter_buffer 
+	JSR strlen
+	IFE B, 0
+		SET PC, command_loadf_help
+
+	; Check if our param was 'ball'
+	SET A, command_load_ball
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, command_loadf_ball
+		
+:command_loadf_help
+	JSR newline
+	SET A, command_load_help
+	JSR text_out
+	SET PC, command_loadf_end
+:command_loadf_ball
 	JSR newline
 	SET A, app02
 	SET B, app02_end
 	SUB B, app02
 	JSR proc_load
 	SET [last_proc], A ; Save the process id
+:command_loadf_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
 	JSR proc_suspend
-	SET pc, pop
+	SET PC, POP
 
 ; Command function to kill a running process
 :command_killf
@@ -1446,28 +1480,30 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		JSR proc_kill_me
 	SET A, POP
 	
+	; Trying to kill OS?
+	IFE C, 1
+		SET PC, command_killf_forbidden
+	
 	; Kill the corresponding process
 	JSR newline
 	SET A, C
 	JSR proc_kill
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	JSR proc_suspend
-	SET PC, POP
+	SET PC, command_killf_end
+:command_killf_forbidden
+	JSR newline
+	SET A, command_kill_forbidden
+	JSR text_out
+	SET PC, command_killf_end
 :command_killf_last
 	JSR newline
 	SET A, [last_proc]
 	JSR proc_kill
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	JSR proc_suspend
-	SET PC, POP
+	SET PC, command_killf_end
 :command_killf_help
 	JSR newline
 	SET A, command_kill_help
 	JSR text_out
+:command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
@@ -1633,7 +1669,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_version dat "version", 0
 :command_version_os dat "os", 0
 :command_load dat "load", 0
+:command_load_ball dat "ball", 0
+:command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
 :command_kill dat "kill", 0
+:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
