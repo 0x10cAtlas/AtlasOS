@@ -1076,9 +1076,9 @@ SET PC, stop
 ; B: Length
 ; C: Keybuffer
 :read_line
-     SET PUSH, A
-     SET PUSH, B
      SET PUSH, C
+     SET PUSH, B
+     SET PUSH, A
 
      JSR mem_clear ; Clear the buffer
 
@@ -1135,9 +1135,9 @@ SET PC, stop
 ; Add the null terminator
      SET [A], 0
 ; Pop everything back out
-     SET C, POP
-     SET B, POP
      SET A, POP
+     SET B, POP
+     SET C, POP
      SET PC, POP
 
 ; Sleeps for some cycles
