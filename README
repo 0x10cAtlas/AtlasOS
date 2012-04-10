@@ -1,0 +1,35 @@
+## Welcome to the AtlasOS Readme!
+
+AtlasOS is a multi-process capable DCPU-16 Operating System.
+Below is detailed our feature list and planned features.
+We hope to have more details about the API posted here to the wiki soon.
+
+## AtlasOS Features
+
+* multitasking
+* loading of new processes
+* killing of processes
+* some basic API stuff
+* paged memory allocation / freeing
+* keyboard support (kernel level driver)
+* ASCII-capable graphic routines
+* AtlasShell
+
+## Planned features
+
+* some more API stuff
+* keyboard and screen exclusivity for processes
+* GUI
+* big memory allocations (not only 1024 words)
+* (virtual-) filesystem
+* Compatibility with other assemblers
+
+## AtlasShell Commands
+
+* clear - clears the screen and shows the prompt
+* version - displays the AtlasShell version. Syntax: version [os]
+* list - displays the list of process IDs
+* load - loads a new process into memory (loads demo process right now)
+* kill - halts a running process. Syntax: kill [list|procID]
+
+If anyone has any issues please submit to the tracker. Thanks!
