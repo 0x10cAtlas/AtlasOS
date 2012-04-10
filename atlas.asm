@@ -60,7 +60,7 @@ JSR proc_load
     SET PUSH, A
     SET PUSH, B
 
-    XOR [entropy], [0x9000]     ; collect entropy for random
+    XOR [entropy], [0x9000] ; collect entropy for random
 
     SET A, keyboard_buffers
 
@@ -246,6 +246,7 @@ SET PC, stop
 :int2dec
       SET PUSH, A
       SET PUSH, B
+      SET PUSH, C
 
       ADD B, 4
 
@@ -278,13 +279,10 @@ SET PC, stop
       SUB B, 1
       IFE A, 0
           SET PC, int2dec_end
-      IFG A, 9
-          SET PC, int2dec_loop
-
-      SET C, A
       SET PC, int2dec_loop
 
 :int2dec_end
+	  SET C, POP
       SET B, POP
       SET A, POP
       SET PC, POP
@@ -295,6 +293,7 @@ SET PC, stop
 :int2hex
       SET PUSH, A
       SET PUSH, B
+	  SET PUSH, C
 
       ADD B, 3
 
@@ -339,16 +338,38 @@ SET PC, stop
       SUB B, 1
       IFE A, 0
           SET PC, int2hex_end
-      IFG A, 15
-          SET PC, int2hex_loop
-
-      SET C, A
       SET PC, int2hex_loop
 
 :int2hex_end
+	  SET C, POP
       SET B, POP
       SET A, POP
       SET PC, POP
+
+; Takes a text buffer containing an integer and converts it to an integer
+; A: Address of text buffer
+:atoi
+	SET PUSH, A
+	SET PUSH, B
+	SET C, 0
+:atoi_loop
+	IFE [A], 0
+		SET PC, atoi_end
+	; Capture the first digit and subtract 48 so our ASCII code for the digit becomes the numeric value of the digit
+	SET B, [A]
+	SUB B, 48
+	; Add the value of the digit to the accumulator
+	ADD C, B
+	; Increment our address and multiply the accumulator
+	ADD A, 1
+	IFE [A], 0
+		SET PC, atoi_end
+	MUL C, 10
+	SET PC, atoi_loop
+:atoi_end
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Finds free memory and reserves it
 ; Return:
@@ -817,21 +838,21 @@ SET PC, stop
       SET PC, proc_load_end
 
 :proc_kill_me
-      JSR proc_id       ; Save process ID
+      JSR proc_id ; Save process ID
       SET X, A
       JSR proc_get_info_of ; Save process info address
       SET Y, A
-      ADD A, 10         ; Save memory page
+      ADD A, 10 ; Save memory page
       SET Z, [A]
 
-      SET A, Y          ; Delete the process info entry
+      SET A, Y ; Delete the process info entry
       SET B, 12
       JSR mem_clear
 
-      SET A, Z          ; Free the process memory page
-      JSR mem_free      ; ! It will not be cleared !
+      SET A, Z ; Free the process memory page
+      JSR mem_free ; ! It will not be cleared !
 
-      SET A, Y          ; Restore the pointer to the info entry
+      SET A, Y ; Restore the pointer to the info entry
       SET C, 12
       SET PC, proc_kill_me_hook
 
@@ -843,15 +864,15 @@ SET PC, stop
 
       JSR proc_get_info_of ; Save process info address
       SET Y, A
-      ADD A, 10         ; Save memory page
+      ADD A, 10 ; Save memory page
       SET Z, [A]
 
-      SET A, Y          ; Delete the process info entry
+      SET A, Y ; Delete the process info entry
       SET B, 12
       JSR mem_clear
 
-      SET A, Z          ; Free the process memory page
-      JSR mem_free      ; ! It will not be cleared !
+      SET A, Z ; Free the process memory page
+      JSR mem_free ; ! It will not be cleared !
 
       SET Z, POP
       SET Y, POP
@@ -999,6 +1020,7 @@ SET PC, stop
     SET C, POP
     SET B, POP
     SET A, POP
+	SET PC, POP
 
 ; Compares strings and stores the result in C
 ; Takes:
@@ -1033,21 +1055,32 @@ SET PC, stop
     SET B, POP
     SET A, POP
     SET PC, POP
-
+	
+; Stores the length of a given string in B
+; A: Address of the string buffer
+:strlen
+	SET PUSH, A
+:strlen_loop
+	IFE [A], 0
+		SET PC, strlen_end
+	ADD A, 1
+	SET PC, strlen_loop
+:strlen_end
+	SET B, A
+	SET A, POP
+	SUB B, A
+	SET PC, POP
+	
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
 ; C: Keybuffer
 :read_line
+     SET PUSH, A
      SET PUSH, B
      SET PUSH, C
-     SET PUSH, A
 
      JSR mem_clear ; Clear the buffer
-
-     ; Store the starting location
-     ; Maybe find a push/pop way to do this so we don't tie up a register
-     SET X, A
 
      ADD B, A
 
@@ -1102,9 +1135,9 @@ SET PC, stop
 ; Add the null terminator
      SET [A], 0
 ; Pop everything back out
-     SET A, POP
      SET C, POP
      SET B, POP
+     SET A, POP
      SET PC, POP
 
 ; Sleeps for some cycles
@@ -1207,100 +1240,265 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; BASH-like Process
 :app01
 :app01_start
-SET I, app01_loop_end ; Calculate the length of the back-jump
-SUB I, app01_loop
+	SET I, app01_loop_end ; Calculate the length of the back-jump
+	SUB I, app01_loop
 
-; Register our buffer with the driver
-SET A, input_buffer
-JSR keyboard_register
+	; Register our buffer with the driver
+	SET A, input_buffer
+	JSR keyboard_register
 
 :app01_loop
-; Display the prompt
-set a, text_prompt
-jsr text_out
+	; Display the prompt
+	set a, text_prompt
+	jsr text_out
 
-; Reset the basics
-set [ack_command], 0 ; reset command recognized
+	; Reset the basics
+	set [ack_command], 0 ; reset command recognized
 
-; Read a line from the keyboard
-SET A, input_text_buffer
-SET B, 32
-SET C, input_buffer
-SET X, 0
-JSR read_line
+	; Read a line from the keyboard
+	SET A, input_text_buffer
+	SET B, 32
+	SET C, input_buffer
+	JSR read_line
 
-; Check for the 'clear' command
-set a, command_clear
-set b, input_text_buffer
-jsr strcmp
-ife c, 1
-jsr clearf
+	; Parse out the primary command
+	SET A, input_text_buffer
+	SET B, 0
+	JSR shell_getparameter
 
-; Check for the 'version' command
-set a, command_version
-set b, input_text_buffer
-jsr strcmp
-ife c, 1
-jsr versionf
+	; Check for the 'clear' command
+	set a, command_clear
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr clearf
 
-; Check for the 'load' command
-set a, command_load
-set b, input_text_buffer
-jsr strcmp
-ife c, 1
-jsr loadf
+	; Check for the 'version' command
+	set a, command_version
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr versionf
 
-; Check for the 'kill' command
-set a, command_kill
-set b, input_text_buffer
-jsr strcmp
-ife c, 1
-jsr killf
+	; Check for the 'load' command
+	set a, command_load
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr loadf
+
+	; Check for the 'kill' command
+	set a, command_kill
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr killf
+
+	; Check for the 'list' command
+	set a, command_list
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr listf
 
 
-ifn [ack_command], 1
-jsr unrecognizedf
+	ifn [ack_command], 1
+	jsr unrecognizedf
 
-JSR proc_suspend
-    SUB PC, I
+	JSR proc_suspend
+		SUB PC, I
 :app01_loop_end
 ; Command functions
 :unrecognizedf
-jsr newline
-set a, text_unrecognized
-jsr text_out
-set pc, pop
+	JSR newline
+	SET a, text_unrecognized
+	JSR text_out
+	SET pc, pop
 
 :versionf
-set [ack_command], 1 ; acknowledge recognized command
-jsr newline
-set a, text_versionoutput
-jsr text_out
-set pc, pop
+	SET [ack_command], 1 ; acknowledge recognized command
+	JSR newline
+	SET a, text_versionoutput
+	JSR text_out
+	SET pc, pop
 
 :clearf
-set [ack_command], 1 ; acknowledge recognized command
-jsr clear
-set pc, pop
+	SET [ack_command], 1 ; acknowledge recognized command
+	JSR clear
+	SET pc, pop
 
 :loadf
-set [ack_command], 1 ; acknowledge recognized command
-jsr newline
-SET A, app02
-SET B, app02_end
-SUB B, app02
-JSR proc_load
-SET [last_proc], A   ; Save the process id
-JSR proc_suspend
-set pc, pop
+	SET [ack_command], 1 ; acknowledge recognized command
+	JSR newline
+	SET A, app02
+	SET B, app02_end
+	SUB B, app02
+	JSR proc_load
+	SET [last_proc], A ; Save the process id
+	JSR proc_suspend
+	SET pc, pop
 
 :killf
-     SET [ack_command], 1 ; acknowledge recognized command
-     JSR newline
-     SET A, [last_proc]
-     JSR proc_kill
-     JSR proc_suspend
-     SET PC, POP
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, killf_help
+	
+	; Check if our param was 'last' to kill the last process
+	SET A, command_kill_last
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, killf_last
+
+	; Convert the param to an integer
+	SET A, command_parameter_buffer
+	JSR atoi	; A is source, C is result
+	
+	; Kill the corresponding process
+	JSR newline
+	SET A, C ;[last_proc]
+	JSR proc_kill
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+:killf_last
+	JSR newline
+	SET A, [last_proc]
+	JSR proc_kill
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+:killf_help
+	JSR newline
+	SET A, command_kill_help
+	JSR text_out
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+	
+	
+:listf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; Get the process ID list
+	SET C, proc_list_buffer
+	SET A, listf_helper
+	JSR proc_callback_list
+	
+	JSR newline
+	; Hide the kernel and shell proccess ID's
+	;SET A, 0
+	;JSR listf_display_procID
+	;SET A, 1
+	;JSR listf_display_procID
+	SET A, 2
+	JSR listf_display_procID
+	SET A, 3
+	JSR listf_display_procID
+	SET A, 4
+	JSR listf_display_procID
+	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+:listf_helper
+	SET [C], A
+	ADD C, 1
+	SET PC, POP
+:listf_display_procID
+	; Empty the temp buffer
+	SET PUSH, A
+	SET A, command_number_buffer
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	SET A, POP
+	
+	; Now display the list on-screen
+	SET B, proc_list_buffer
+	ADD B, A
+	SET A, [B]
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR newline
+	
+	; Wipe the contents of this location of the buffer
+	SET B, proc_list_buffer
+	ADD B, A
+	SET [B], 0
+	
+	SET PC, POP
+
+; Takes a command input and parses out a parameter
+; A: Address of source text buffer
+; B: Which param we want to parse out (starts at 0)
+:shell_getparameter
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	; C will keep track of which param we're looking at
+	SET C, 0
+:shell_getparameter_loop
+	IFE C, B
+		SET PC, shell_getparameter_save
+	IFE [A], 32
+		ADD C, 1
+	ADD A, 1
+	IFE [A], 0
+		SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_loop
+:shell_getparameter_save
+	SET B, command_parameter_buffer
+:shell_getparameter_save_loop
+	SET [B], 0
+	IFE [A], 32
+		SET PC, shell_getparameter_end
+	IFE [A], 0
+		SET PC, shell_getparameter_end
+	IFE [A], 10
+		SET PC, shell_getparameter_end
+	SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, shell_getparameter_save_loop
+:shell_getparameter_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Data
 :input_text_buffer reserve 32 dat 0x00
@@ -1310,11 +1508,17 @@ set pc, pop
 :command_version dat "version", 0
 :command_load dat "load", 0
 :command_kill dat "kill", 0
+:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_kill_last dat "last", 0
+:command_list dat "list", 0
+:command_parameter_buffer reserve 16 dat 0x00
+:command_number_buffer reserve 5 dat 0x00
 
+:proc_list_buffer dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.1", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.2", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
 :app01_end
