@@ -1055,7 +1055,7 @@ SET PC, stop
     SET B, POP
     SET A, POP
     SET PC, POP
-	
+
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
 :strlen
@@ -1070,7 +1070,7 @@ SET PC, stop
 	SET A, POP
 	SUB B, A
 	SET PC, POP
-	
+
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
@@ -1328,22 +1328,20 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET pc, pop
 
 :loadf
-	SET [ack_command], 1 ; acknowledge recognized command
-	JSR newline
-	SET A, app02
-	SET B, app02_end
-	SUB B, app02
-	JSR proc_load
-	SET [last_proc], A ; Save the process id
-	JSR proc_suspend
-	SET pc, pop
+set pc, loadf_start
 
-:killf
+; load data
+:command_load dat "load", 0
+:command_load_ball dat "ball", 0
+:command_load_last dat "last", 0
+:command_load_help dat "sytax load [application] or load last", 0xA0, 0x00
+
+:loadf_start
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	SET A, command_parameter_buffer
 	SET B, 16
 	JSR mem_clear
@@ -1352,12 +1350,72 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, 1
 	JSR shell_getparameter
 	
+	; check if blank > load help
+	SET A, command_parameter_buffer 
+	JSR strlen
+	IFE B, 0
+		SET PC, loadf_help
+
+	; Check if our param was 'ball'
+	SET A, command_load_ball
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, loadf_ball
+		
+:loadf_help
+	JSR newline
+	SET A, command_load_help
+	JSR text_out
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+	
+:loadf_ball
+	JSR newline
+	SET A, app02
+	SET B, app02_end
+	SUB B, app02
+	JSR proc_load
+	SET [last_proc], A ; Save the process id
+	JSR proc_suspend
+		SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET pc, pop
+	
+
+
+:killf
+set pc, killf_start
+
+:command_kill dat "kill", 0
+:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_kill_last dat "last", 0
+
+:killf_start
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, killf_help
-	
+
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
@@ -1368,7 +1426,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR atoi	; A is source, C is result
-	
+
 	; Kill the corresponding process
 	JSR newline
 	SET A, C ;[last_proc]
@@ -1378,6 +1436,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
+	
 :killf_last
 	JSR newline
 	SET A, [last_proc]
@@ -1396,19 +1455,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
-	
+
+
 :listf
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, listf_helper
 	JSR proc_callback_list
-	
+
 	JSR newline
 	; Hide the kernel and shell proccess ID's
 	;SET A, 0
@@ -1421,7 +1480,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR listf_display_procID
 	SET A, 4
 	JSR listf_display_procID
-	
+
 	SET C, POP
 	SET B, POP
 	SET A, POP
@@ -1435,16 +1494,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET A, command_number_buffer
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
 	SET A, POP
-	
+
 	; Now display the list on-screen
 	SET B, proc_list_buffer
 	ADD B, A
@@ -1454,12 +1513,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-	
+
 	; Wipe the contents of this location of the buffer
 	SET B, proc_list_buffer
 	ADD B, A
 	SET [B], 0
-	
+
 	SET PC, POP
 
 ; Takes a command input and parses out a parameter
@@ -1506,10 +1565,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :ack_command dat 0x00
 :command_clear dat "clear", 0
 :command_version dat "version", 0
-:command_load dat "load", 0
-:command_kill dat "kill", 0
-:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
-:command_kill_last dat "last", 0
 :command_list dat "list", 0
 :command_parameter_buffer reserve 16 dat 0x00
 :command_number_buffer reserve 5 dat 0x00
