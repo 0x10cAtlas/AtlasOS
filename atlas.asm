@@ -1055,7 +1055,7 @@ SET PC, stop
     SET B, POP
     SET A, POP
     SET PC, POP
-	
+
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
 :strlen
@@ -1070,7 +1070,7 @@ SET PC, stop
 	SET A, POP
 	SUB B, A
 	SET PC, POP
-	
+
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
@@ -1343,7 +1343,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	SET A, command_parameter_buffer
 	SET B, 16
 	JSR mem_clear
@@ -1351,13 +1351,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, killf_help
-	
+
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
@@ -1368,7 +1368,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR atoi	; A is source, C is result
-	
+
+        ; Selfkill?
+        SET PUSH, A
+        JSR proc_id
+        IFE A, C      ; Wants to kill me?
+            JSR proc_kill_me
+        SET A, POP
+
 	; Kill the corresponding process
 	JSR newline
 	SET A, C ;[last_proc]
@@ -1396,32 +1403,32 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
-	
+
+
 :listf
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, listf_helper
 	JSR proc_callback_list
-	
+
 	JSR newline
-	; Hide the kernel and shell proccess ID's
+	; Hide the kernel -and shell- proccess ID's
 	;SET A, 0
 	;JSR listf_display_procID
-	;SET A, 1
-	;JSR listf_display_procID
+	SET A, 1
+	JSR listf_display_procID
 	SET A, 2
 	JSR listf_display_procID
 	SET A, 3
 	JSR listf_display_procID
 	SET A, 4
 	JSR listf_display_procID
-	
+
 	SET C, POP
 	SET B, POP
 	SET A, POP
@@ -1435,16 +1442,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET A, command_number_buffer
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
 	SET A, POP
-	
+
 	; Now display the list on-screen
 	SET B, proc_list_buffer
 	ADD B, A
@@ -1454,12 +1461,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-	
+
 	; Wipe the contents of this location of the buffer
 	SET B, proc_list_buffer
 	ADD B, A
 	SET [B], 0
-	
+
 	SET PC, POP
 
 ; Takes a command input and parses out a parameter
