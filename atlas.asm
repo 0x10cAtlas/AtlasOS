@@ -1,9 +1,15 @@
+; AtlasOS
+; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
+
 ; clear screen (for emulator)
 JSR clear
 
-
 ; low level routines
 ; runs best in DCPU-16 Studio (http://badsector.github.com/dcpustud/)
+
+; Display the logo
+SET A, text_logo1
+JSR text_out
 
 ; Bootmessage
 SET A, text_start
@@ -41,15 +47,17 @@ JSR mem_copy
 SET A, text_start_ok
 JSR text_out
 
-SET A, app01
-SET B, app01_end
-SUB B, app01
+; Load the AtlasShell process by default
+SET A, AtlasShell
+SET B, AtlasShell_end
+SUB B, AtlasShell
 JSR proc_load
 
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
-    ;IFN [0x9000], 0 ; Could be done IN the driver. But is faster this way.
+	; Call the keyboard driver if the keyvalue has changed
+	IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
 
     JSR proc_suspend
@@ -65,24 +73,25 @@ JSR proc_load
     SET A, keyboard_buffers
 
 :driver_keyboard_loop
-; Check to see if we have a buffer registered at this spot
+	; Check to see if we have a buffer registered at this spot
     IFN [A], 0
         JSR driver_keyboard_save_to_buffer
-; Increment to the next buffer as long as we aren't at the end
+	; Increment to the next buffer as long as we aren't at the end
     ADD A, 1
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
 
-    SET [0x9000], 0
+	SET [keyboard_oldvalue], [0x9000]
+	SET [0x9000], 0
 
-SET B, POP
+	SET B, POP
     SET A, POP
     SET PC, POP
 
 :driver_keyboard_save_to_buffer
-SET B, [A]
-SET [B], [0x9000]
-SET PC, POP
+	SET B, [A]
+	SET [B], [0x9000]
+	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
 
@@ -532,9 +541,12 @@ SET PC, stop
 ; Returns:
 ; A: main version
 ; B: subversion
+; C: fixversion
 :os_version
       SET A, [os_version_main]
       SET B, [os_version_sub]
+	  SET C, [os_version_fix]
+	  SET PC, POP
 
 ; Returns the ID of the current process
 ; Takes: ---
@@ -988,6 +1000,7 @@ SET PC, stop
 :strcpy_end
     SET B, POP
     SET A, POP
+	SET PC, POP
 
 ; Copies a string from a source to a destination with length limitation
 ; Takes:
@@ -1055,7 +1068,7 @@ SET PC, stop
     SET B, POP
     SET A, POP
     SET PC, POP
-
+	
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
 :strlen
@@ -1070,21 +1083,22 @@ SET PC, stop
 	SET A, POP
 	SUB B, A
 	SET PC, POP
-
+	
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
 ; C: Keybuffer
 :read_line
-     SET PUSH, A
-     SET PUSH, B
      SET PUSH, C
+     SET PUSH, B
+     SET PUSH, A
 
      JSR mem_clear ; Clear the buffer
 
      ADD B, A
-
+	 
 :read_line_loop
+	 JSR proc_suspend
      IFE [C], 0
          SET PC, read_line_skip
      IFE [C], 0xA
@@ -1112,7 +1126,6 @@ SET PC, stop
      ADD A, 1
 
 :read_line_skip
-     JSR proc_suspend
      SET PC, read_line_loop
 
 :read_line_backspace
@@ -1135,12 +1148,13 @@ SET PC, stop
 ; Add the null terminator
      SET [A], 0
 ; Pop everything back out
-     SET C, POP
-     SET B, POP
      SET A, POP
+     SET B, POP
+     SET C, POP
      SET PC, POP
 
 ; Sleeps for some cycles
+; TODO: Change this (or add a new func.) to wait for a specific number of CPU cycles
 ; A: number of process cycles to wait
 :sleep
      IFE A, 0
@@ -1164,16 +1178,25 @@ SET PC, stop
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub dat 0x0002
+:os_version_sub dat 0x0003
+:os_version_fix dat 0x0003
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.3 starting... ", 0x00
+:text_start dat "AtlasOS v0.3.3 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_cmd dat "$>", 0xA0, 0x00
 :text_proc_load_error dat "Error loading process...", 0xA0, 0x00
+:text_logo1 DAT "      ___   __   __             "
+:text_logo2 DAT "     /   | / /  / /____ ______  "
+:text_logo3 DAT "    / /| |/ _/ / // __ `/ ___/  "
+:text_logo4 DAT "   / ___ / /_ / // /_/ (__  )   "
+:text_logo5 DAT "  /_/  |_\\_//_/ \\__,_/____/    "
+:text_logo6 DAT "         / __ \\/ ___/           "
+:text_logo7 DAT "        / / / /\\__ \\            "
+:text_logo8 DAT "       / /_/ /___/ /            "
+:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
 
 :mem_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -1206,6 +1229,7 @@ SET PC, stop
 :keyboard_buffers
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_end
+:keyboard_oldvalue dat 0x0000
 
 :entropy dat 0x0000
 
@@ -1235,19 +1259,24 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        SET PC, keyboard_unregister ; Unregisters a specific memory location
        SET PC, int2dec ; Converts a value into the decimal representation
        SET PC, int2hex ; Converts a value into the hexadecimal representation
+	   SET PC, atoi ; Converts a textual, decimal number into the actual integer value
+	   SET PC, strlen ; Returns the length of a null-terminated string
+	   SET PC, strcmp ; Compares two null-terminated strings to see if they're equal
 :api_end
 
 ; BASH-like Process
-:app01
-:app01_start
-	SET I, app01_loop_end ; Calculate the length of the back-jump
-	SUB I, app01_loop
+:AtlasShell
+	SET A, text_versionoutput
+	JSR text_out
+:AtlasShell_start
+	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
+	SUB I, AtlasShell_loop
 
 	; Register our buffer with the driver
 	SET A, input_buffer
 	JSR keyboard_register
 
-:app01_loop
+:AtlasShell_loop
 	; Display the prompt
 	set a, text_prompt
 	jsr text_out
@@ -1271,80 +1300,111 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	set b, command_parameter_buffer
 	jsr strcmp
 	ife c, 1
-	jsr clearf
+	jsr command_clearf
 
 	; Check for the 'version' command
 	set a, command_version
 	set b, command_parameter_buffer
 	jsr strcmp
 	ife c, 1
-	jsr versionf
+	jsr command_versionf
 
 	; Check for the 'load' command
 	set a, command_load
 	set b, command_parameter_buffer
 	jsr strcmp
 	ife c, 1
-	jsr loadf
+	jsr command_loadf
 
 	; Check for the 'kill' command
 	set a, command_kill
 	set b, command_parameter_buffer
 	jsr strcmp
 	ife c, 1
-	jsr killf
+	jsr command_killf
 
 	; Check for the 'list' command
 	set a, command_list
 	set b, command_parameter_buffer
 	jsr strcmp
 	ife c, 1
-	jsr listf
+	jsr command_listf
 
-
+	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
-	jsr unrecognizedf
+	jsr command_unknownf
 
+	; Pause then loop back to start of process
 	JSR proc_suspend
 		SUB PC, I
-:app01_loop_end
-; Command functions
-:unrecognizedf
+:AtlasShell_loop_end
+; ==BEGIN COMMAND FUNCTIONS==
+; Command function when we got an unknown command
+:command_unknownf
 	JSR newline
 	SET a, text_unrecognized
 	JSR text_out
 	SET pc, pop
 
-:versionf
+; Command function to display version info
+:command_versionf
 	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; Clear the param buffer
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, command_versionf_shell
+	
+	; Check if our param was 'os' to give OS version
+	SET A, command_version_os
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, command_versionf_os
+:command_versionf_shell
 	JSR newline
-	SET a, text_versionoutput
+	SET A, text_versionoutput
 	JSR text_out
-	SET pc, pop
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+:command_versionf_os
+	JSR newline
+	JSR command_os_version_display
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
-:clearf
+; Command function to clear the screen
+:command_clearf
 	SET [ack_command], 1 ; acknowledge recognized command
 	JSR clear
 	SET pc, pop
 
-:loadf
-set pc, loadf_start
-
-; load data
-:command_load dat "load", 0
-:command_load_ball dat "ball", 0
-:command_load_last dat "last", 0
-:command_load_help dat "sytax load [application] or load last", 0xA0, 0x00
-
-:loadf_start
+; Command function to load a new process
+:command_loadf
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
 
-	SET A, command_parameter_buffer
-	SET B, 16
-	JSR mem_clear
+	JSR command_clear_parameter_buffer
+	
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -1354,156 +1414,156 @@ set pc, loadf_start
 	SET A, command_parameter_buffer 
 	JSR strlen
 	IFE B, 0
-		SET PC, loadf_help
-
-	; Check if our param was 'ball'
-	SET A, command_load_ball
-	SET B, command_parameter_buffer
-	JSR strcmp
+		SET PC, command_loadf_help
+	
+	SET J, 1
+	SET A, application_table
+	
+:command_loadf_loop
+	IFN A, application_table_end ; if index doesn't equal table end, skip to next check
+	SET PC, command_loadf_loop_1
+	JSR command_unknownf
+	SET PC, command_loadf_end
+	
+:command_loadf_loop_1
+	ADD A, 1 ;shift to start of string
+	SET B, command_parameter_buffer 
+	JSR strcmp ; compare table string to parameter
 	IFE C, 1
-		SET PC, loadf_ball
-		
-:loadf_help
+	SET PC, command_loadf_loop_end ; if equal move to end
+	ADD A, 31
+	SET PC, command_loadf_loop
+	
+:command_loadf_loop_end
+	ADD A, 16
+	SET B, A
+	ADD B, 1
+	SET A, [A]
+	SET B, [B]
+	SUB B, A
+	JSR proc_load
+	SET [last_proc], A
+	SET PC, command_loadf_end
+	
+:command_loadf_help
 	JSR newline
 	SET A, command_load_help
 	JSR text_out
+	SET PC, command_loadf_end	
+	
+:command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
 	
-:loadf_ball
-	JSR newline
-	SET A, app02
-	SET B, app02_end
-	SUB B, app02
-	JSR proc_load
-	SET [last_proc], A ; Save the process id
-	JSR proc_suspend
-		SET C, POP
-	SET B, POP
-	SET A, POP
-	JSR proc_suspend
-	SET pc, pop
+
 	
-
-
-:killf
-set pc, killf_start
-
-:command_kill dat "kill", 0
-:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
-:command_kill_last dat "last", 0
-
-:killf_start
+; Command function to kill a running process
+:command_killf
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-
-	SET A, command_parameter_buffer
-	SET B, 16
-	JSR mem_clear
+	
+	JSR command_clear_parameter_buffer
+	
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-
+	
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
-		SET PC, killf_help
-
+		SET PC, command_killf_help
+	
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
 	JSR strcmp
 	IFE C, 1
-		SET PC, killf_last
+		SET PC, command_killf_last
 
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR atoi	; A is source, C is result
-
+	
+	; Selfkill?
+	SET PUSH, A
+	JSR proc_id
+	IFE A, C      ; Wants to kill me?
+		JSR proc_kill_me
+	SET A, POP
+	
+	; Trying to kill OS?
+	IFE C, 1
+		SET PC, command_killf_forbidden
+	
 	; Kill the corresponding process
 	JSR newline
-	SET A, C ;[last_proc]
+	SET A, C
 	JSR proc_kill
+	SET PC, command_killf_end
+:command_killf_forbidden
+	JSR newline
+	SET A, command_kill_forbidden
+	JSR text_out
+	SET PC, command_killf_end
+:command_killf_last
+	JSR newline
+	SET A, [last_proc]
+	JSR proc_kill
+	SET PC, command_killf_end
+:command_killf_help
+	JSR newline
+	SET A, command_kill_help
+	JSR text_out
+:command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
 	
-:killf_last
-	JSR newline
-	SET A, [last_proc]
-	JSR proc_kill
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	JSR proc_suspend
-	SET PC, POP
-:killf_help
-	JSR newline
-	SET A, command_kill_help
-	JSR text_out
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	JSR proc_suspend
-	SET PC, POP
-
-
-:listf
+; Command function to list process IDs
+:command_listf
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-
+	
 	; Get the process ID list
 	SET C, proc_list_buffer
-	SET A, listf_helper
+	SET A, command_listf_helper
 	JSR proc_callback_list
-
+	
 	JSR newline
 	; Hide the kernel and shell proccess ID's
-	;SET A, 0
-	;JSR listf_display_procID
-	;SET A, 1
-	;JSR listf_display_procID
+	;SET A, 0 ; OS process
+	;JSR command_listf_display_procID
+	SET A, 1 ; Shell process
+	JSR command_listf_display_procID
 	SET A, 2
-	JSR listf_display_procID
+	JSR command_listf_display_procID
 	SET A, 3
-	JSR listf_display_procID
+	JSR command_listf_display_procID
 	SET A, 4
-	JSR listf_display_procID
-
+	JSR command_listf_display_procID
+	
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-:listf_helper
+:command_listf_helper
 	SET [C], A
 	ADD C, 1
 	SET PC, POP
-:listf_display_procID
-	; Empty the temp buffer
-	SET PUSH, A
-	SET A, command_number_buffer
-	SET [A], 32
-	ADD A, 1
-	SET [A], 32
-	ADD A, 1
-	SET [A], 32
-	ADD A, 1
-	SET [A], 32
-	ADD A, 1
-	SET [A], 32
-	SET A, POP
-
+:command_listf_display_procID
+	JSR command_clear_number_buffer
+	
 	; Now display the list on-screen
 	SET B, proc_list_buffer
 	ADD B, A
@@ -1513,12 +1573,72 @@ set pc, killf_start
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-
+	
 	; Wipe the contents of this location of the buffer
 	SET B, proc_list_buffer
 	ADD B, A
 	SET [B], 0
+	
+	SET PC, POP
 
+; ==BEGIN HELPER FUNCTIONS==
+; Displays OS version using API call to get version numbers
+; TODO: Make the output more user-friendly
+:command_os_version_display
+	JSR command_clear_number_buffer
+	SET A, 0
+	SET B, 0
+	SET C, 0
+	; A - main version, B - sub version, C - fix version
+	JSR os_version
+	SET PUSH, C
+	SET PUSH, B
+	;SET A, 42
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR command_clear_number_buffer
+	SET B, POP
+	SET A, B
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR command_clear_number_buffer
+	SET C, POP
+	SET A, C
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR newline
+	SET PC, POP
+; Clears the parameter buffer
+:command_clear_parameter_buffer
+	SET PUSH, A
+	SET PUSH, B
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+; Clears the number buffer
+:command_clear_number_buffer
+	; Empty the temp buffer
+	SET PUSH, A
+	SET A, command_number_buffer
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	SET A, POP
 	SET PC, POP
 
 ; Takes a command input and parses out a parameter
@@ -1565,6 +1685,15 @@ set pc, killf_start
 :ack_command dat 0x00
 :command_clear dat "clear", 0
 :command_version dat "version", 0
+:command_version_os dat "os", 0
+:command_load dat "load", 0
+:command_load_ball dat "ball", 0
+:command_load_hello dat "hello", 0
+:command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
+:command_kill dat "kill", 0
+:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
+:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_kill_last dat "last", 0
 :command_list dat "list", 0
 :command_parameter_buffer reserve 16 dat 0x00
 :command_number_buffer reserve 5 dat 0x00
@@ -1576,9 +1705,10 @@ set pc, killf_start
 :text_versionoutput dat "Atlas-Shell v0.2", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
-:app01_end
+:AtlasShell_end
 
 :app02
+JSR newline ;start new line so prompt is in the right position
 SET X, 1
 SET Y, 1
 
@@ -1640,5 +1770,36 @@ SUB PC, I
 :app02_loop_end
 :app02_end
 
+:hello ; beginning of application
+
+SET I, hello_loop_end
+SUB I, hello_loop
+
+SET J, 2
+:hello_loop ; beginning of application loop
+
+SUB J, 1    ; check if application loop should end
+IFE J, 0
+    JSR proc_kill_me
+
+SET A, hello_world
+JSR text_out
+
+JSR proc_suspend
+SUB PC, I
+
+:hello_loop_end
+
+
+:hello_world dat "Hello World", 0xA0, 0
+
+:hello_end
+
+;application_table_format
+;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
+:application_table
+dat 0x001, "hello", 0 reserve 10 dat hello, hello_end reserve 13
+dat 2, "ball", 0 reserve 11 dat app02, app02_end reserve 13   
+:application_table_end
 
 :kernel_end
