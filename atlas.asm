@@ -251,107 +251,61 @@ SET PC, stop
 ; A: Number
 ; B: StrBuffer (length 5)
 :int2dec
-      SET PUSH, A
-      SET PUSH, B
-      SET PUSH, C
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-      ADD B, 4
+	ADD B, 4
 
 :int2dec_loop
-      SET C, A
-      MOD C, 10
+	SET C, A
+	MOD C, 10
 
-      IFE C, 0 ;0
-          SET [B], 0x0030
-      IFE C, 1 ;1
-          SET [B], 0x0031
-      IFE C, 2 ;2
-          SET [B], 0x0032
-      IFE C, 3 ;3
-          SET [B], 0x0033
-      IFE C, 4 ;4
-          SET [B], 0x0034
-      IFE C, 5 ;5
-          SET [B], 0x0035
-      IFE C, 6 ;6
-          SET [B], 0x0036
-      IFE C, 7 ;7
-          SET [B], 0x0037
-      IFE C, 8 ;8
-          SET [B], 0x0038
-      IFE C, 9 ;9
-          SET [B], 0x0039
+	SET [B], C
+	ADD [B], 0x0030
 
-      DIV A, 10
-      SUB B, 1
-      IFE A, 0
-          SET PC, int2dec_end
-      SET PC, int2dec_loop
+	DIV A, 10
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2dec_end
+	SET PC, int2dec_loop
 
 :int2dec_end
-SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Converts a Number into a Hexadecimal String
 ; A: Number
 ; B: StrBuffer (length 4)
 :int2hex
-      SET PUSH, A
-      SET PUSH, B
-SET PUSH, C
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-      ADD B, 3
+	ADD B, 3
 
 :int2hex_loop
-      SET C, A
-      MOD C, 16
-
-      IFE C, 0 ;0
-          SET [B], 0x0030
-      IFE C, 1 ;1
-          SET [B], 0x0031
-      IFE C, 2 ;2
-          SET [B], 0x0032
-      IFE C, 3 ;3
-          SET [B], 0x0033
-      IFE C, 4 ;4
-          SET [B], 0x0034
-      IFE C, 5 ;5
-          SET [B], 0x0035
-      IFE C, 6 ;6
-          SET [B], 0x0036
-      IFE C, 7 ;7
-          SET [B], 0x0037
-      IFE C, 8 ;8
-          SET [B], 0x0038
-      IFE C, 9 ;9
-          SET [B], 0x0039
-      IFE C, 10 ;A
-          SET [B], 0x0041
-      IFE C, 11 ;B
-          SET [B], 0x0042
-      IFE C, 12 ;C
-          SET [B], 0x0043
-      IFE C, 13 ;D
-          SET [B], 0x0044
-      IFE C, 14 ;E
-          SET [B], 0x0045
-      IFE C, 15 ;F
-          SET [B], 0x0046
-
-      DIV A, 16
-      SUB B, 1
-      IFE A, 0
-          SET PC, int2hex_end
-      SET PC, int2hex_loop
+	SET C, A
+	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
+	
+	SET [B], C
+	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
+	IFG [B], 0x0039 ; if it's 3A or more, add seven
+		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
+	
+	DIV A, 16
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2hex_end
+	SET PC, int2hex_loop
 
 :int2hex_end
-SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer
