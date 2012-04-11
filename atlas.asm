@@ -1348,15 +1348,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR strlen
 	IFE B, 0
 		SET PC, command_loadf_help
-	
+
 	SET J, 1
 	SET A, application_table
 	
 :command_loadf_loop
 	IFN A, application_table_end ; if index doesn't equal table end, skip to next check
-	SET PC, command_loadf_loop_1
-	JSR command_unknownf
-	SET PC, command_loadf_end
+
+		SET PC, command_loadf_loop_1
+	SET PC, command_loadf_unknown
 	
 :command_loadf_loop_1
 	ADD A, 1 ;shift to start of string
@@ -1368,6 +1368,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, command_loadf_loop
 	
 :command_loadf_loop_end
+	JSR newline
 	ADD A, 16
 	SET B, A
 	ADD B, 1
@@ -1377,12 +1378,17 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR proc_load
 	SET [last_proc], A
 	SET PC, command_loadf_end
-	
+
 :command_loadf_help
 	JSR newline
 	SET A, command_load_help
 	JSR text_out
-	SET PC, command_loadf_end	
+	SET PC, command_loadf_end
+	
+:command_loadf_unknown
+	JSR newline
+	SET A, command_load_unknown
+	JSR text_out
 	
 :command_loadf_end
 	SET C, POP
@@ -1390,8 +1396,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
-
 	
 ; Command function to kill a running process
 :command_killf
@@ -1620,9 +1624,8 @@ SET PC, POP
 :command_version dat "version", 0
 :command_version_os dat "os", 0
 :command_load dat "load", 0
-:command_load_ball dat "ball", 0
-:command_load_hello dat "hello", 0
 :command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
+:command_load_unknown dat "Failed to load application", 0xA0, 0x00
 :command_kill dat "kill", 0
 :command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
@@ -1638,104 +1641,94 @@ SET PC, POP
 :text_versionoutput dat "Atlas-Shell v0.2", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
+; Note: This application table will be changed / go away once we have a filesystem
+;application_table_format
+;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
+:application_table
+dat 0x001, "hello", 0 reserve 10 dat hello, hello_end reserve 13
+dat 0x002, "ball", 0 reserve 11 dat app02, app02_end reserve 13
+:application_table_end
+
 :AtlasShell_end
 
 :app02
-JSR newline ;start new line so prompt is in the right position
-SET X, 1
-SET Y, 1
+	SET X, 1
+	SET Y, 1
 
-SET I, app02_loop_end
-SUB I, app02_loop
+	SET I, app02_loop_end
+	SUB I, app02_loop
 
-SET J, 200
+	SET J, 200
 
-SET A, 0
-SET B, 0
-SET C, 0
+	SET A, 0
+	SET B, 0
+	SET C, 0
 
 :app02_loop
+	; Restore the old character
+	SET C, Z
+	IFN C, 0
+		IFN C, 0x744F
+			JSR char_put
 
-; Restore the old character
-SET C, Z
-IFN C, 0
-    IFN C, 0x744F
-        JSR char_put
+	SUB J, 1
+	IFE J, 0
+		JSR proc_kill_me
 
-SUB J, 1
-IFE J, 0
-    JSR proc_kill_me
+	ADD A, X
+	ADD B, Y
 
-ADD A, X
-ADD B, Y
+	IFE A, 31
+	SET X, 0xFFFF
 
-IFE A, 31
-SET X, 0xFFFF
+	IFE B, 15
+	SET Y, 0xFFFF
 
-IFE B, 15
-SET Y, 0xFFFF
+	IFE A, 0
+	SET X, 1
 
-IFE A, 0
-SET X, 1
+	IFE B, 0
+	SET Y, 1
 
-IFE B, 0
-SET Y, 1
+	; Save the character before we write so we can restore later
+	SET PUSH, B
+	MUL B, 32
+	ADD B, A
+	ADD B, [video_mem]
+	SET Z, [B]
+	SET B, POP
 
-; Save the character before we write so we can restore later
-SET PUSH, B
-MUL B, 32
-ADD B, A
-ADD B, [video_mem]
-SET Z, [B]
-SET B, POP
+	SET C, 0x744F
+	JSR char_put
 
-SET C, 0x744F
-JSR char_put
+	; Wait a bit so the 'ball' moves slower
+	SET PUSH, A
+	SET A, 8
+	JSR sleep
+	SET A, POP
 
-; Wait a bit so the 'ball' moves slower
-SET PUSH, A
-SET A, 8
-JSR sleep
-SET A, POP
-
-JSR proc_suspend
-SUB PC, I
+	JSR proc_suspend
+	SUB PC, I
 :app02_loop_end
 :app02_end
 
 :hello ; beginning of application
+	SET I, hello_loop_end
+	SUB I, hello_loop
 
-SET I, hello_loop_end
-SUB I, hello_loop
-
-SET J, 2
+	SET J, 2
 :hello_loop ; beginning of application loop
+	SUB J, 1    ; check if application loop should end
+	IFE J, 0
+		JSR proc_kill_me
 
-SUB J, 1    ; check if application loop should end
-IFE J, 0
-    JSR proc_kill_me
+	SET A, hello_world
+	JSR text_out
 
-SET A, hello_world
-JSR text_out
-
-JSR proc_suspend
-SUB PC, I
-
+	JSR proc_suspend
+	SUB PC, I
 :hello_loop_end
-
-
-:hello_world dat "Hello World", 0xA0, 0
-
+	:hello_world dat "Hello World", 0xA0, 0
 :hello_end
-
-;application_table_format
-;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
-:application_table
-dat 0x001, "hello", 0x0000
-reserve 10
-dat hello, hello_end
-reserve 13
-dat 2, "ball", 0 reserve 11 dat app02, app02_end reserve 13   
-:application_table_end
 
 :kernel_end
