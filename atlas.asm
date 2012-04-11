@@ -1110,13 +1110,13 @@ SET PC, POP
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0003
-:os_version_fix dat 0x0003
+:os_version_fix dat 0x0004
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.3.3 starting... ", 0x00
+:text_start dat "AtlasOS v0.3.4 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_proc_load_error dat "Error loading process...", 0xA0, 0x00
 :text_logo1 DAT "       ___   __  __", 0xA0
@@ -1617,7 +1617,7 @@ SET A, POP
 SET PC, POP
 
 ; Data
-:input_text_buffer reserve 32 dat 0x00
+:input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
 :command_clear dat "clear", 0
@@ -1631,22 +1631,22 @@ SET PC, POP
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
-:command_parameter_buffer reserve 16 dat 0x00
-:command_number_buffer reserve 5 dat 0x00
+:command_parameter_buffer dat "                ", 0x00
+:command_number_buffer dat "     ", 0x00
 
 :proc_list_buffer dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.2", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.3", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
 ; Note: This application table will be changed / go away once we have a filesystem
 ;application_table_format
 ;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
 :application_table
-dat 0x001, "hello", 0 reserve 10 dat hello, hello_end reserve 13
-dat 0x002, "ball", 0 reserve 11 dat app02, app02_end reserve 13
+dat 0x001, "hello", 0, "          ", hello, hello_end, "             "
+dat 0x002, "ball", 0, "           ", app02, app02_end, "             "
 :application_table_end
 
 :AtlasShell_end
