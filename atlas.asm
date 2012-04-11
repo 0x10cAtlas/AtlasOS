@@ -56,8 +56,8 @@ JSR proc_load
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
-; Call the keyboard driver if the keyvalue has changed
-IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
+	; Call the keyboard driver if the keyvalue has changed
+	IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
 
     JSR proc_suspend
@@ -71,16 +71,15 @@ IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster t
     SET A, keyboard_buffers
 
 :driver_keyboard_loop
-; Check to see if we have a buffer registered at this spot
+	; Check to see if we have a buffer registered at this spot
     IFN [A], 0
         JSR driver_keyboard_save_to_buffer
-; Increment to the next buffer as long as we aren't at the end
+	; Increment to the next buffer as long as we aren't at the end
     ADD A, 1
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
 
 	SET [keyboard_oldvalue], [0x9000]
-	
 	SET [0x9000], 0
 
 	SET B, POP
@@ -88,9 +87,9 @@ IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster t
     SET PC, POP
 
 :driver_keyboard_save_to_buffer
-SET B, [A]
-SET [B], [0x9000]
-SET PC, POP
+	SET B, [A]
+	SET [B], [0x9000]
+	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
 
@@ -494,8 +493,8 @@ SET PC, stop
 :os_version
       SET A, [os_version_main]
       SET B, [os_version_sub]
-SET C, [os_version_fix]
-SET PC, POP
+	  SET C, [os_version_fix]
+	  SET PC, POP
 
 ; Returns the ID of the current process
 ; Takes: ---
@@ -925,7 +924,7 @@ SET PC, POP
 :strcpy_end
     SET B, POP
     SET A, POP
-SET PC, POP
+	SET PC, POP
 
 ; Copies a string from a source to a destination with length limitation
 ; Takes:
@@ -1021,9 +1020,9 @@ SET PC, POP
      JSR mem_clear ; Clear the buffer
 
      ADD B, A
-
+	 
 :read_line_loop
-JSR proc_suspend
+	 JSR proc_suspend
      IFE [C], 0
          SET PC, read_line_skip
      IFE [C], 0xA
@@ -1125,6 +1124,7 @@ JSR proc_suspend
 :text_logo3 DAT "     / /| |/ __/ // __ `/ ___/", 0xA0
 :text_logo4 DAT "    / ___ / /_/ // /_/ (__  )", 0xA0
 :text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
+:text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
@@ -1199,362 +1199,380 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 ; BASH-like Process
 :AtlasShell
-SET A, text_versionoutput
-JSR text_out
+	SET A, text_versionoutput
+	JSR text_out
 :AtlasShell_start
-SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
-SUB I, AtlasShell_loop
+	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
+	SUB I, AtlasShell_loop
 
-; Register our buffer with the driver
-SET A, input_buffer
-JSR keyboard_register
+	; Register our buffer with the driver
+	SET A, input_buffer
+	JSR keyboard_register
 
 :AtlasShell_loop
-; Display the prompt
-set a, text_prompt
-jsr text_out
+	; Display the prompt
+	set a, text_prompt
+	jsr text_out
 
-; Reset the basics
-set [ack_command], 0 ; reset command recognized
+	; Reset the basics
+	set [ack_command], 0 ; reset command recognized
 
-; Read a line from the keyboard
-SET A, input_text_buffer
-SET B, 32
-SET C, input_buffer
-JSR read_line
+	; Read a line from the keyboard
+	SET A, input_text_buffer
+	SET B, 32
+	SET C, input_buffer
+	JSR read_line
 
-; Parse out the primary command
-SET A, input_text_buffer
-SET B, 0
-JSR shell_getparameter
+	; Parse out the primary command
+	SET A, input_text_buffer
+	SET B, 0
+	JSR shell_getparameter
 
-; Check for the 'clear' command
-set a, command_clear
-set b, command_parameter_buffer
-jsr strcmp
-ife c, 1
-jsr command_clearf
+	; Check for the 'clear' command
+	set a, command_clear
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr command_clearf
 
-; Check for the 'version' command
-set a, command_version
-set b, command_parameter_buffer
-jsr strcmp
-ife c, 1
-jsr command_versionf
+	; Check for the 'version' command
+	set a, command_version
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr command_versionf
 
-; Check for the 'load' command
-set a, command_load
-set b, command_parameter_buffer
-jsr strcmp
-ife c, 1
-jsr command_loadf
+	; Check for the 'load' command
+	set a, command_load
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr command_loadf
 
-; Check for the 'kill' command
-set a, command_kill
-set b, command_parameter_buffer
-jsr strcmp
-ife c, 1
-jsr command_killf
+	; Check for the 'kill' command
+	set a, command_kill
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr command_killf
 
-; Check for the 'list' command
-set a, command_list
-set b, command_parameter_buffer
-jsr strcmp
-ife c, 1
-jsr command_listf
+	; Check for the 'list' command
+	set a, command_list
+	set b, command_parameter_buffer
+	jsr strcmp
+	ife c, 1
+	jsr command_listf
 
-; If we don't have an acknowledged command, display the generic response
-ifn [ack_command], 1
-jsr command_unknownf
+	; If we don't have an acknowledged command, display the generic response
+	ifn [ack_command], 1
+	jsr command_unknownf
 
-; Pause then loop back to start of process
-JSR proc_suspend
-SUB PC, I
+	; Pause then loop back to start of process
+	JSR proc_suspend
+		SUB PC, I
 :AtlasShell_loop_end
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-JSR newline
-SET a, text_unrecognized
-JSR text_out
-SET pc, pop
+	JSR newline
+	SET a, text_unrecognized
+	JSR text_out
+	SET pc, pop
 
 ; Command function to display version info
 :command_versionf
-SET [ack_command], 1 ; acknowledge recognized command
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
-
-; Clear the param buffer
-SET A, command_parameter_buffer
-SET B, 16
-JSR mem_clear
-; Capture the param
-SET A, input_text_buffer
-SET B, 1
-JSR shell_getparameter
-
-; Check if our param was blank
-SET A, command_parameter_buffer
-JSR strlen
-IFE B, 0
-SET PC, command_versionf_shell
-
-; Check if our param was 'os' to give OS version
-SET A, command_version_os
-SET B, command_parameter_buffer
-JSR strcmp
-IFE C, 1
-SET PC, command_versionf_os
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; Clear the param buffer
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, command_versionf_shell
+	
+	; Check if our param was 'os' to give OS version
+	SET A, command_version_os
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, command_versionf_os
 :command_versionf_shell
-JSR newline
-SET A, text_versionoutput
-JSR text_out
-SET C, POP
-SET B, POP
-SET A, POP
-SET PC, POP
+	JSR newline
+	SET A, text_versionoutput
+	JSR text_out
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 :command_versionf_os
-JSR newline
-JSR command_os_version_display
-SET C, POP
-SET B, POP
-SET A, POP
-SET PC, POP
+	JSR newline
+	JSR command_os_version_display
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Command function to clear the screen
 :command_clearf
-SET [ack_command], 1 ; acknowledge recognized command
-JSR clear
-SET pc, pop
+	SET [ack_command], 1 ; acknowledge recognized command
+	JSR clear
+	SET pc, pop
 
 ; Command function to load a new process
 :command_loadf
-SET [ack_command], 1 ; acknowledge recognized command
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-JSR command_clear_parameter_buffer
-
-; Capture the param
-SET A, input_text_buffer
-SET B, 1
-JSR shell_getparameter
-
-; check if blank > load help
-SET A, command_parameter_buffer
-JSR strlen
-IFE B, 0
-SET PC, command_loadf_help
-
-; Check if our param was 'ball'
-SET A, command_load_ball
-SET B, command_parameter_buffer
-JSR strcmp
-IFE C, 1
-SET PC, command_loadf_ball
-
+	JSR command_clear_parameter_buffer
+	
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; check if blank > load help
+	SET A, command_parameter_buffer 
+	JSR strlen
+	IFE B, 0
+		SET PC, command_loadf_help
+	
+	SET J, 1
+	SET A, application_table
+	
+:command_loadf_loop
+	IFN A, application_table_end ; if index doesn't equal table end, skip to next check
+	SET PC, command_loadf_loop_1
+	JSR command_unknownf
+	SET PC, command_loadf_end
+	
+:command_loadf_loop_1
+	ADD A, 1 ;shift to start of string
+	SET B, command_parameter_buffer 
+	JSR strcmp ; compare table string to parameter
+	IFE C, 1
+	SET PC, command_loadf_loop_end ; if equal move to end
+	ADD A, 31
+	SET PC, command_loadf_loop
+	
+:command_loadf_loop_end
+	ADD A, 16
+	SET B, A
+	ADD B, 1
+	SET A, [A]
+	SET B, [B]
+	SUB B, A
+	JSR proc_load
+	SET [last_proc], A
+	SET PC, command_loadf_end
+	
 :command_loadf_help
-JSR newline
-SET A, command_load_help
-JSR text_out
-SET PC, command_loadf_end
-:command_loadf_ball
-JSR newline
-SET A, app02
-SET B, app02_end
-SUB B, app02
-JSR proc_load
-SET [last_proc], A ; Save the process id
+	JSR newline
+	SET A, command_load_help
+	JSR text_out
+	SET PC, command_loadf_end	
+	
 :command_loadf_end
-SET C, POP
-SET B, POP
-SET A, POP
-JSR proc_suspend
-SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+	
 
+	
 ; Command function to kill a running process
 :command_killf
-SET [ack_command], 1 ; acknowledge recognized command
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	JSR command_clear_parameter_buffer
+	
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, command_killf_help
+	
+	; Check if our param was 'last' to kill the last process
+	SET A, command_kill_last
+	SET B, command_parameter_buffer
+	JSR strcmp
+	IFE C, 1
+		SET PC, command_killf_last
 
-JSR command_clear_parameter_buffer
-
-; Capture the param
-SET A, input_text_buffer
-SET B, 1
-JSR shell_getparameter
-
-; Check if our param was blank
-SET A, command_parameter_buffer
-JSR strlen
-IFE B, 0
-SET PC, command_killf_help
-
-; Check if our param was 'last' to kill the last process
-SET A, command_kill_last
-SET B, command_parameter_buffer
-JSR strcmp
-IFE C, 1
-SET PC, command_killf_last
-
-; Convert the param to an integer
-SET A, command_parameter_buffer
-JSR atoi ; A is source, C is result
-
-; Selfkill?
-SET PUSH, A
-JSR proc_id
-IFE A, C ; Wants to kill me?
-JSR proc_kill_me
-SET A, POP
-
-; Trying to kill OS?
-IFE C, 1
-SET PC, command_killf_forbidden
-
-; Kill the corresponding process
-JSR newline
-SET A, C
-JSR proc_kill
-SET PC, command_killf_end
+	; Convert the param to an integer
+	SET A, command_parameter_buffer
+	JSR atoi	; A is source, C is result
+	
+	; Selfkill?
+	SET PUSH, A
+	JSR proc_id
+	IFE A, C      ; Wants to kill me?
+		JSR proc_kill_me
+	SET A, POP
+	
+	; Trying to kill OS?
+	IFE C, 1
+		SET PC, command_killf_forbidden
+	
+	; Kill the corresponding process
+	JSR newline
+	SET A, C
+	JSR proc_kill
+	SET PC, command_killf_end
 :command_killf_forbidden
-JSR newline
-SET A, command_kill_forbidden
-JSR text_out
-SET PC, command_killf_end
+	JSR newline
+	SET A, command_kill_forbidden
+	JSR text_out
+	SET PC, command_killf_end
 :command_killf_last
-JSR newline
-SET A, [last_proc]
-JSR proc_kill
-SET PC, command_killf_end
+	JSR newline
+	SET A, [last_proc]
+	JSR proc_kill
+	SET PC, command_killf_end
 :command_killf_help
-JSR newline
-SET A, command_kill_help
-JSR text_out
+	JSR newline
+	SET A, command_kill_help
+	JSR text_out
 :command_killf_end
-SET C, POP
-SET B, POP
-SET A, POP
-JSR proc_suspend
-SET PC, POP
-
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR proc_suspend
+	SET PC, POP
+	
 ; Command function to list process IDs
 :command_listf
-SET [ack_command], 1
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
-
-; Get the process ID list
-SET C, proc_list_buffer
-SET A, command_listf_helper
-JSR proc_callback_list
-
-JSR newline
-; Hide the kernel and shell proccess ID's
-;SET A, 0 ; OS process
-;JSR command_listf_display_procID
-SET A, 1 ; Shell process
-JSR command_listf_display_procID
-SET A, 2
-JSR command_listf_display_procID
-SET A, 3
-JSR command_listf_display_procID
-SET A, 4
-JSR command_listf_display_procID
-
-SET C, POP
-SET B, POP
-SET A, POP
-SET PC, POP
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; Get the process ID list
+	SET C, proc_list_buffer
+	SET A, command_listf_helper
+	JSR proc_callback_list
+	
+	JSR newline
+	; Hide the kernel and shell proccess ID's
+	;SET A, 0 ; OS process
+	;JSR command_listf_display_procID
+	SET A, 1 ; Shell process
+	JSR command_listf_display_procID
+	SET A, 2
+	JSR command_listf_display_procID
+	SET A, 3
+	JSR command_listf_display_procID
+	SET A, 4
+	JSR command_listf_display_procID
+	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 :command_listf_helper
-SET [C], A
-ADD C, 1
-SET PC, POP
+	SET [C], A
+	ADD C, 1
+	SET PC, POP
 :command_listf_display_procID
-JSR command_clear_number_buffer
-
-; Now display the list on-screen
-SET B, proc_list_buffer
-ADD B, A
-SET A, [B]
-SET B, command_number_buffer
-JSR int2dec
-SET A, command_number_buffer
-JSR text_out
-JSR newline
-
-; Wipe the contents of this location of the buffer
-SET B, proc_list_buffer
-ADD B, A
-SET [B], 0
-
-SET PC, POP
+	JSR command_clear_number_buffer
+	
+	; Now display the list on-screen
+	SET B, proc_list_buffer
+	ADD B, A
+	SET A, [B]
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR newline
+	
+	; Wipe the contents of this location of the buffer
+	SET B, proc_list_buffer
+	ADD B, A
+	SET [B], 0
+	
+	SET PC, POP
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
 ; TODO: Make the output more user-friendly
 :command_os_version_display
-JSR command_clear_number_buffer
-SET A, 0
-SET B, 0
-SET C, 0
-; A - main version, B - sub version, C - fix version
-JSR os_version
-SET PUSH, C
-SET PUSH, B
-;SET A, 42
-SET B, command_number_buffer
-JSR int2dec
-SET A, command_number_buffer
-JSR text_out
-JSR command_clear_number_buffer
-SET B, POP
-SET A, B
-SET B, command_number_buffer
-JSR int2dec
-SET A, command_number_buffer
-JSR text_out
-JSR command_clear_number_buffer
-SET C, POP
-SET A, C
-SET B, command_number_buffer
-JSR int2dec
-SET A, command_number_buffer
-JSR text_out
-JSR newline
-SET PC, POP
+	JSR command_clear_number_buffer
+	SET A, 0
+	SET B, 0
+	SET C, 0
+	; A - main version, B - sub version, C - fix version
+	JSR os_version
+	SET PUSH, C
+	SET PUSH, B
+	;SET A, 42
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR command_clear_number_buffer
+	SET B, POP
+	SET A, B
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR command_clear_number_buffer
+	SET C, POP
+	SET A, C
+	SET B, command_number_buffer
+	JSR int2dec
+	SET A, command_number_buffer
+	JSR text_out
+	JSR newline
+	SET PC, POP
 ; Clears the parameter buffer
 :command_clear_parameter_buffer
-SET PUSH, A
-SET PUSH, B
-SET A, command_parameter_buffer
-SET B, 16
-JSR mem_clear
-SET B, POP
-SET A, POP
-SET PC, POP
+	SET PUSH, A
+	SET PUSH, B
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR mem_clear
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 ; Clears the number buffer
 :command_clear_number_buffer
-; Empty the temp buffer
-SET PUSH, A
-SET A, command_number_buffer
-SET [A], 32
-ADD A, 1
-SET [A], 32
-ADD A, 1
-SET [A], 32
-ADD A, 1
-SET [A], 32
-ADD A, 1
-SET [A], 32
-SET A, POP
-SET PC, POP
+	; Empty the temp buffer
+	SET PUSH, A
+	SET A, command_number_buffer
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	ADD A, 1 
+	SET [A], 32
+	SET A, POP
+	SET PC, POP
 
 ; Takes a command input and parses out a parameter
 ; A: Address of source text buffer
@@ -1603,6 +1621,7 @@ SET PC, POP
 :command_version_os dat "os", 0
 :command_load dat "load", 0
 :command_load_ball dat "ball", 0
+:command_load_hello dat "hello", 0
 :command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
 :command_kill dat "kill", 0
 :command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
@@ -1622,6 +1641,7 @@ SET PC, POP
 :AtlasShell_end
 
 :app02
+JSR newline ;start new line so prompt is in the right position
 SET X, 1
 SET Y, 1
 
@@ -1683,5 +1703,39 @@ SUB PC, I
 :app02_loop_end
 :app02_end
 
+:hello ; beginning of application
+
+SET I, hello_loop_end
+SUB I, hello_loop
+
+SET J, 2
+:hello_loop ; beginning of application loop
+
+SUB J, 1    ; check if application loop should end
+IFE J, 0
+    JSR proc_kill_me
+
+SET A, hello_world
+JSR text_out
+
+JSR proc_suspend
+SUB PC, I
+
+:hello_loop_end
+
+
+:hello_world dat "Hello World", 0xA0, 0
+
+:hello_end
+
+;application_table_format
+;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
+:application_table
+dat 0x001, "hello", 0x0000
+reserve 10
+dat hello, hello_end
+reserve 13
+dat 2, "ball", 0 reserve 11 dat app02, app02_end reserve 13   
+:application_table_end
 
 :kernel_end
