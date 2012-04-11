@@ -409,6 +409,32 @@ SET PC, stop
       SET B, POP
       SET A, POP
       SET PC, POP
+	  
+; mem_check
+; returns: A - amount of free memory
+:mem_check
+	SET PUSH, B
+	SET PUSH, C
+	
+	SET B, mem_table
+	SET A, 0
+	
+:mem_check_loop
+	SET C, [B]
+	AND C, 0x00FF
+	IFE C, 0
+		ADD A, 1024
+	SET C, A
+	AND C, 0xFF00
+	IFE C, 0
+		ADD A, 1024
+	ADD B, 1
+	IFN A, mem_table_end
+		SET PC, mem_check_loop
+		
+	SET C, POP
+	SET B, POP
+	SET PC, POP
 
 ; mem_reserve
 ; A: Address of or in the memory to reserve
@@ -1186,7 +1212,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
     SET PC, clear 			; Clears the screen
     SET PC, char_put 		; Puts a chat on the screen
     SET PC, read_line 		; Reads a line from the keyboard to a buffer
-    SET PC, random 			; Gets a random number
+    SET PC, rand 			; Gets a random number
     SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
     SET PC, keyboard_unregister ; Unregisters a specific memory location
     SET PC, int2dec 		; Converts a value into the decimal representation
@@ -1195,6 +1221,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, strlen 			; Returns the length of a null-terminated string
 	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
 	SET PC, srand			; Initializes the random number generator
+	SET PC, mem_check		; Returns the amount of free memory
 :api_end
 
 ; BASH-like Process
