@@ -1376,27 +1376,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE B, 0
 		SET PC, command_loadf_help
 
-	SET J, 1
 	SET A, application_table
 	
 :command_loadf_loop
-	IFN A, application_table_end ; if index doesn't equal table end, skip to next check
-
-		SET PC, command_loadf_loop_1
-	SET PC, command_loadf_unknown
-	
-:command_loadf_loop_1
+	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
+		SET PC, command_loadf_unknown
+	IFG A, application_table_end ; Sanity check just so we don't go wandering off into other memory
+		SET PC, command_loadf_unknown
 	ADD A, 1 ;shift to start of string
 	SET B, command_parameter_buffer 
 	JSR strcmp ; compare table string to parameter
 	IFE C, 1
-	SET PC, command_loadf_loop_end ; if equal move to end
-	ADD A, 31
+		SET PC, command_loadf_loop_end ; if equal move to end
+	
+	SET PUSH, A
+	; Get the length of the app name and move our pointer forward past that
+	SET A, command_parameter_buffer
+	JSR strlen
+	SET A, POP
+	ADD A, B
+	; Skip pase the null terminator, the start address, and the end address
+	ADD A, 4
 	SET PC, command_loadf_loop
 	
 :command_loadf_loop_end
 	JSR newline
-	ADD A, 16
+	SET PUSH, A
+	SET A, command_parameter_buffer
+	JSR strlen
+	SET A, POP
+	ADD A, B
+	ADD A, 1
+	
+	; Load the start & end addresses and start the process
 	SET B, A
 	ADD B, 1
 	SET A, [A]
@@ -1505,7 +1517,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR proc_callback_list
 	
 	JSR newline
-	; Hide the kernel and shell proccess ID's
+	SET A, command_list_info
+	JSR text_out
+	; Hide the kernel proccess ID
 	;SET A, 0 ; OS process
 	;JSR command_listf_display_procID
 	SET A, 1 ; Shell process
@@ -1609,39 +1623,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; A: Address of source text buffer
 ; B: Which param we want to parse out (starts at 0)
 :shell_getparameter
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
-; C will keep track of which param we're looking at
-SET C, 0
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	; C will keep track of which param we're looking at
+	SET C, 0
 :shell_getparameter_loop
-IFE C, B
-SET PC, shell_getparameter_save
-IFE [A], 32
-ADD C, 1
-ADD A, 1
-IFE [A], 0
-SET PC, shell_getparameter_end
-SET PC, shell_getparameter_loop
+	IFE C, B
+	SET PC, shell_getparameter_save
+	IFE [A], 32
+	ADD C, 1
+	ADD A, 1
+	IFE [A], 0
+	SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_loop
 :shell_getparameter_save
-SET B, command_parameter_buffer
+	SET B, command_parameter_buffer
 :shell_getparameter_save_loop
-SET [B], 0
-IFE [A], 32
-SET PC, shell_getparameter_end
-IFE [A], 0
-SET PC, shell_getparameter_end
-IFE [A], 10
-SET PC, shell_getparameter_end
-SET [B], [A]
-ADD A, 1
-ADD B, 1
-SET PC, shell_getparameter_save_loop
+	SET [B], 0
+	IFE [A], 32
+	SET PC, shell_getparameter_end
+	IFE [A], 0
+	SET PC, shell_getparameter_end
+	IFE [A], 10
+	SET PC, shell_getparameter_end
+	SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, shell_getparameter_save_loop
 :shell_getparameter_end
-SET C, POP
-SET B, POP
-SET A, POP
-SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Data
 :input_text_buffer dat "                                ", 0x00
@@ -1658,6 +1672,7 @@ SET PC, POP
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
+:command_list_info dat "Process list:", 0xA0, 0x00
 :command_parameter_buffer dat "                ", 0x00
 :command_number_buffer dat "     ", 0x00
 
@@ -1665,15 +1680,15 @@ SET PC, POP
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.3", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.3.1", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
 ; Note: This application table will be changed / go away once we have a filesystem
 ;application_table_format
-;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
+;dat index, "name_of_app", 0, app_location, app_location_end, 0
 :application_table
-dat 0x001, "hello", 0, "          ", hello, hello_end, "             "
-dat 0x002, "ball", 0, "           ", app02, app02_end, "             "
+dat 0x001, "hello", 0, hello, hello_end
+dat 0x002, "ball", 0, app02, app02_end
 :application_table_end
 
 :AtlasShell_end
