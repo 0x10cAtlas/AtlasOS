@@ -53,6 +53,11 @@ SET B, AtlasShell_end
 SUB B, AtlasShell
 JSR proc_load
 
+; Clear out a few things
+SET [keyboard_buffers_exclusive], 0
+SET [keyboard_oldvalue], 0
+JSR keyboard_unregister_all
+
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
@@ -67,8 +72,13 @@ JSR proc_load
 :driver_keyboard
     SET PUSH, A
     SET PUSH, B
+	SET PUSH, C
 
     SET A, keyboard_buffers
+	SET C, keyboard_buffers_flags
+
+	IFN [keyboard_buffers_exclusive], 0
+		SET PC, driver_keyboard_exclusive
 
 :driver_keyboard_loop
 	; Check to see if we have a buffer registered at this spot
@@ -78,13 +88,18 @@ JSR proc_load
     ADD A, 1
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
-
+:driver_keyboard_end
 	SET [keyboard_oldvalue], [0x9000]
 	SET [0x9000], 0
-
+	SET C, POP
 	SET B, POP
     SET A, POP
     SET PC, POP
+
+:driver_keyboard_exclusive
+	SET B, [keyboard_buffers_exclusive]
+	SET [B], [0x9000]
+	SET PC, driver_keyboard_end
 
 :driver_keyboard_save_to_buffer
 	SET B, [A]
@@ -992,13 +1007,6 @@ SET PC, stop
       ADD A, 10 ; Save memory page
       SET Z, [A]
 
-	  SET PUSH, A
-	  SET B, command_number_buffer
-	  JSR int2hex
-	  SET A, command_number_buffer
-	  JSR text_out
-	  SET A, POP
-
       SET A, Y ; Delete the process info entry
       SET B, 12
       JSR mem_clear
@@ -1053,49 +1061,91 @@ SET PC, stop
 ; Registers a new keyboard buffer
 ; Takes:
 ; A: Address of the buffer
+; B: Keyboard buffer flags (right now set to 1 to make buffer exclusive)
 :keyboard_register
+	SET PUSH, C
+	SET PUSH, B
     SET PUSH, A
 
-    SET A, keyboard_buffers
+    SET C, keyboard_buffers
 
 :keyboard_register_loop
-    IFE [A], 0
+    IFE [C], 0
         SET PC, keyboard_register_set
-    ADD A, 1
-    IFN A, keyboard_buffers_end
+    ADD C, 1
+    IFN C, keyboard_buffers_end
         SET PC, keyboard_register_loop
+
+:keyboard_register_set
+    SET [C], A
+	IFE B, 1
+		SET [keyboard_buffers_exclusive], A
 
 :keyboard_register_end
     SET A, POP
+	SET B, POP
+	SET C, POP
     SET PC, POP
-
-:keyboard_register_set
-    SET [A], PEEK
-    SET PC, keyboard_register_end
 
 
 ; Unregisters a keyboard buffer
 ; Takes:
 ; A: Address of the buffer
 :keyboard_unregister
+	SET PUSH, B
     SET PUSH, A
 
-    SET A, keyboard_buffers
+    SET B, keyboard_buffers
 
 :keyboard_unregister_loop
-    IFE [A], PEEK
+    IFE [B], A
         SET PC, keyboard_unregister_unset
-    ADD A, 1
-    IFN A, keyboard_buffers_end
+    ADD B, 1
+    IFN B, keyboard_buffers_end
         SET PC, keyboard_unregister_loop
+	SET PC, keyboard_unregister_end
+:keyboard_unregister_unset
+    SET [B], 0x0000
+
+	; If this is the exclusive buffer, reset the exclusive global flag
+	IFE A, [keyboard_buffers_exclusive]
+		JSR keyboard_unregister_exclusive
 
 :keyboard_unregister_end
     SET A, POP
+	SET B, POP
     SET PC, POP
 
-:keyboard_unregister_unset
-    SET [A], 0x0000
-    SET PC, keyboard_register_end
+:keyboard_unregister_exclusive
+	; Trigger a keyboard buffer update on any other register buffers
+	SET [keyboard_oldvalue], 0xFFFF
+	; And clear the exclusive data
+	SET [keyboard_buffers_exclusive], 0
+	SET PC, POP
+
+
+
+; Returns whether there is an exclusive keyboard buffer active
+:keyboard_is_exclusive_active
+	SET A, 0
+	IFN [keyboard_buffers_exclusive], 0
+		SET A, 1
+	SET PC, POP
+
+; Wipes out all of the registered keyboard buffers
+; CAUTION! This make break other running applications
+:keyboard_unregister_all
+	SET PUSH, A
+	SET A, keyboard_buffers
+:keyboard_unregister_all_loop
+	IFE A, keyboard_buffers_end
+		SET PC, keyboard_unregister_all_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, keyboard_unregister_all_loop
+:keyboard_unregister_all_end
+	SET A, POP
+	SET PC, POP
 
 
 ; Copies a string from a source to a destination
@@ -1381,6 +1431,10 @@ SET PC, POP
 :keyboard_buffers
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_end
+:keyboard_buffers_flags
+dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:keyboard_buffers_flags_end
+:keyboard_buffers_exclusive dat 0x0000
 :keyboard_oldvalue dat 0x0000
 
 :entropy dat 0x0000
@@ -1416,7 +1470,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
 	SET PC, mem_check		; Returns the amount of free memory
 	SET PC, srand			; Initializes the random number generator
-
 :api_end
 
 ; BASH-like Process
@@ -1432,12 +1485,17 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR keyboard_register
 
 :AtlasShell_loop
+	; First check if anything is taking exclusive keyboard access
+	JSR keyboard_is_exclusive_active
+	IFN A, 0
+		SET PC, AtlasShell_loop_wait
+
 	; Display the prompt
-	set a, text_prompt
-	jsr text_out
+	SET A, text_prompt
+	JSR text_out
 
 	; Reset the basics
-	set [ack_command], 0 ; reset command recognized
+	SET [ack_command], 0 ; reset command recognized
 
 	; Read a line from the keyboard
 	SET A, input_text_buffer
@@ -1445,53 +1503,59 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET C, input_buffer
 	JSR read_line
 
+	; Skip everything if we got an empty line
+	SET A, input_text_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, AtlasShell_loop_wait
+
 	; Parse out the primary command
 	SET A, input_text_buffer
 	SET B, 0
 	JSR shell_getparameter
 
 	; Check for the 'clear' command
-	set a, command_clear
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_clearf
+	SET a, command_clear
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_clearf
 
 	; Check for the 'version' command
-	set a, command_version
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_versionf
+	SET a, command_version
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_versionf
 
 	; Check for the 'load' command
-	set a, command_load
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_loadf
+	SET a, command_load
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_loadf
 
 	; Check for the 'kill' command
-	set a, command_kill
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_killf
+	SET a, command_kill
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_killf
 
 	; Check for the 'list' command
-	set a, command_list
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_listf
+	SET a, command_list
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_listf
 
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
-	jsr command_unknownf
-
+	JSR command_unknownf
+:AtlasShell_loop_wait
 	; Pause then loop back to start of process
 	JSR proc_suspend
-		SUB PC, I
+	SUB PC, I
 :AtlasShell_loop_end
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
@@ -1903,6 +1967,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :AtlasShell_end
 
+:kernel_end
+
+; ################################
+; ################################
+
 :app02
 	SET X, 1
 	SET Y, 1
@@ -1911,6 +1980,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SUB I, app02_loop
 
 	SET J, 200
+
+	; Register our buffer with the driver
+	SET A, app02_input_buffer
+	SET B, 1
+	JSR keyboard_register
 
 	SET A, 0
 	SET B, 0
@@ -1925,7 +1999,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	SUB J, 1
 	IFE J, 0
-		JSR proc_kill_me
+		JSR app02_die
 
 	ADD A, X
 	ADD B, Y
@@ -1950,8 +2024,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET Z, [B]
 	SET B, POP
 
-	SET C, 0x744F
+	SET C, 0x7400
+	IFN [app02_input_buffer], [app02_old_input_buffer]
+		IFN [app02_input_buffer], 0
+			SET [app02_ball_char], [app02_input_buffer]
+	BOR C, [app02_ball_char]
 	JSR char_put
+
+	IFN [app02_input_buffer], 0
+		SET [app02_old_input_buffer], [app02_input_buffer]
 
 	; Wait a bit so the 'ball' moves slower
 	SET PUSH, A
@@ -1962,6 +2043,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR proc_suspend
 	SUB PC, I
 :app02_loop_end
+:app02_die
+	SET A, app02_input_buffer
+	JSR keyboard_unregister
+	JSR newline
+	JSR proc_kill_me
+	SET PC, POP
+
+	:app02_input_buffer dat 0x0000
+	:app02_old_input_buffer dat 0x0000
+	:app02_ball_char dat 0x0000
 :app02_end
 
 :hello ; beginning of application
@@ -2018,4 +2109,223 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
 
-:kernel_end
+;GUI Library Begins
+
+;Draws a horizontal line with its left corner at position A and a width of B
+:GUI_Draw_HLine
+SET PUSH, A
+SET PUSH, B
+:GUI_Draw_HLine_loop
+IFE B, 0
+    SET PC, GUI_Draw_HLine_end
+SET [A], 0x702d
+SUB B, 1
+ADD A, 1
+SET PC, GUI_Draw_HLine_loop
+:GUI_Draw_HLine_end
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;Draws a vertical line with its left corner at position A and a height of B
+:GUI_Draw_VLine
+SET PUSH, A
+SET PUSH, B
+:GUI_Draw_VLine_loop
+IFE B, 0
+    SET PC, GUI_Draw_VLine_end
+SET [A], 0x7021
+SUB B, 1
+ADD A, 32
+SET PC, GUI_Draw_VLine_loop
+:GUI_Draw_VLine_end
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;Draw a character at a specific position
+;Draws the character on B to the screen position on A
+:gfx_set_pos
+SET [A], B
+SET PC, POP
+
+;Gets a character from the screen at a specific position
+;Gets the character on A and saves it on B
+:gfx_get_pos
+SET B, [A]
+SET PC, POP
+
+;Clears an area on the screen with its top position at A
+;its width at B and its height at C
+:gfx_clear_area
+IFE C, 0
+    SET PC, gfx_clear_area_end
+SET PUSH, X
+SET PUSH, A
+SET PUSH, C
+SET PUSH, B
+SET X, [video_col]
+:gfx_clear_area_l1
+IFE B, 0
+    SET PC, gfx_clear_area_s1
+:gfx_clear_area_s2
+SET [A], X
+SUB B, 1
+ADD A, 1
+SET PC, gfx_clear_area_l1
+:gfx_clear_area_s1
+SUB C, 1
+IFE C, 0
+    SET PC, gfx_clear_area_end
+SET B, PEEK
+SUB A, B
+ADD A, 32
+SET PC, gfx_clear_area_s2
+:gfx_clear_area_end
+SET B, POP
+SET C, POP
+SET A, POP
+SET X, POP
+SET PC, POP
+
+;Draws a line between two coordinates
+;Coordinate 1 is A, coordinate 2 is B and the character is C
+:gfx_line
+SET PUSH, [video_cur]
+SET PUSH, J
+SET PUSH, I
+SET PUSH, Z
+SET PUSH, X
+SET PUSH, Y
+SET PUSH, A
+SET PUSH, B
+SET [A], C
+;push char to stack (must be returned after initial calculations)
+SET PUSH, C
+SET PUSH, A
+SET PUSH, B
+JSR gfx_coord_decons
+SET J, B
+SET I, C
+SET A, PEEK
+JSR gfx_coord_decons
+SET X, B
+SET Y, C
+;find x distance between points
+IFG J, X
+    SET PC, gfx_line_it1
+SET A, X
+SUB A, J
+SET [video_cur], 0
+SET PC, gfx_line_it2
+:gfx_line_it1
+SET A, J
+SUB A, X
+SET [video_cur], 1
+:gfx_line_it2
+IFG I, Y
+    SET PC, gfx_line_it3
+SET B, Y
+SUB B, I
+SET PC, gfx_line_it4
+:gfx_line_it3
+SET B, I
+SUB B, Y
+ADD [video_cur], 2
+:gfx_line_it4
+IFG A, B
+    SET PC, gfx_line_it5
+SET Z, B
+SET PC, gfx_line_it6
+:gfx_line_it5
+SET Z, A
+:gfx_line_it6
+SET X, A
+SET Y, B
+;multiply the values of x and y to make the lines cleaner
+MUL X, 8
+MUL Y, 8
+;find steps of x
+ADD X, 1
+SET A, Y
+DIV A, X
+;find steps of y
+ADD Y, 1
+SET B, X
+DIV B, Y
+SET X, A
+SET Y, B
+SET J, POP
+SET I, POP
+SET C, POP
+:gfx_line_l
+SET A, Z
+MOD A, X
+IFE A, 0
+    JSR gfx_line_la1
+SET A, Z
+MOD A, Y
+IFE A, 0
+    JSR gfx_line_la2
+SET [I], C
+
+SUB Z, 1
+IFE Z, 0
+    SET PC, gfx_line_end
+SET PC, gfx_line_l
+:gfx_line_la1
+IFE [video_cur], 0
+    ADD I, 1
+IFE [video_cur], 1
+    SUB I, 1
+IFE [video_cur], 2
+    ADD I, 1
+IFE [video_cur], 3
+    SUB I, 1
+SET PC, POP
+:gfx_line_la2
+IFE [video_cur], 0
+    ADD I, 32
+IFE [video_cur], 1
+    ADD I, 32
+IFE [video_cur], 2
+    SUB I, 32
+IFE [video_cur], 3
+    SUB I, 32
+SET PC, POP
+;draw_end
+:gfx_line_end
+SET B, POP
+SET A, POP
+SET Y, POP
+SET X, POP
+SET Z, POP
+SET I, POP
+SET J, POP
+SET [video_cur], POP
+SET PC, POP
+
+;Calculates the index of the character at a specific coordinate
+;A is x and B is y, C is the output
+:gfx_coord_cons
+SET C, B
+MUL C, 32
+ADD C, A
+ADD C, [video_mem]
+SET PC, POP
+
+;Calculates the x and y indexes of the character at a specific coordinate
+;A is the coordinates, B is x and C is y
+:gfx_coord_decons
+SET PUSH, A
+SUB A, [video_mem]
+SET PUSH, A
+MOD A, 32
+SET B, A
+SET A, POP
+DIV A, 32
+SET C, A
+SET A, POP
+SET PC, POP
+
+;GUI Library Ends
