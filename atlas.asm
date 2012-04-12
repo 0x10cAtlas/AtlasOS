@@ -1305,8 +1305,8 @@ SET PC, POP
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub dat 0x0003
-:os_version_fix dat 0x0004
+:os_version_sub dat 0x0004
+:os_version_fix dat 0x0000
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
