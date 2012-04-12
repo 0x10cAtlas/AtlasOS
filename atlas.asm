@@ -288,12 +288,12 @@ SET PC, stop
 :int2hex_loop
 	SET C, A
 	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
-	
+
 	SET [B], C
 	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
 	IFG [B], 0x0039 ; if it's 3A or more, add seven
 		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
-	
+
 	DIV A, 16
 	SUB B, 1
 	IFE A, 0
@@ -409,16 +409,16 @@ SET PC, stop
       SET B, POP
       SET A, POP
       SET PC, POP
-	  
+
 ; mem_check
 ; returns: A - amount of free memory
 :mem_check
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	SET B, mem_table
 	SET A, 0
-	
+
 :mem_check_loop
 	SET C, [B]
 	AND C, 0x00FF
@@ -429,9 +429,9 @@ SET PC, stop
 	IFE C, 0
 		ADD A, 1024
 	ADD B, 1
-	IFN A, mem_table_end
+	IFN B, mem_table_end
 		SET PC, mem_check_loop
-		
+
 	SET C, POP
 	SET B, POP
 	SET PC, POP
@@ -723,6 +723,10 @@ SET PC, stop
 ; A: Begin of the BLOB
 ; B: Length of the BLOB
 :proc_load
+
+      IFE [A], 0x4714  ; Check for magic number
+          SET PC, proc_exec     ; No flat binary, call advanced loader
+
       SET PUSH, B
       SET PUSH, C
       SET PUSH, X
@@ -739,8 +743,6 @@ SET PC, stop
           SET PC, proc_load_loop
 
 :proc_load_error
-      SET A, text_proc_load_error
-      JSR text_out
       SET A, 0
 
 :proc_load_end
@@ -802,6 +804,164 @@ SET PC, stop
 
       SET PC, proc_load_end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; Loads a new process into memory
+; A: Begin of the BLOB
+; B: Length of the BLOB
+:proc_exec
+      SET PUSH, B
+      SET PUSH, C
+      SET PUSH, X
+      SET PUSH, Y
+      SET PUSH, I
+      SET PUSH, J
+
+      IFN [A], 0x4714     ; seems to be a flat binary, call legacy loader
+          SET PC, proc_load
+
+      ADD A, 1
+      SET I, [A]
+      ADD A, 1
+      SET J, [A]
+
+      IFN I, B
+          SET PC, proc_exec_error
+
+      SET X, J
+      AND X, 0x0001
+      IFE X, 0x0000
+          SET PC, proc_exec_skip_art
+
+      ADD A, 1
+      SUB B, [A]
+      ADD A, [A]
+      ADD A, 1
+      SUB B, 2
+:proc_exec_skip_art
+
+      SET X, J
+      AND X, 0x0010
+      IFE X, 0x0000
+          SET PC, proc_exec_skip_lib
+
+      ADD A, 2
+      SUB B, [A]
+      ADD A, [A]
+      SUB B, 2
+:proc_exec_skip_lib
+
+      SET X, proc_table
+
+:proc_exec_loop
+      IFE [X], 0x0000
+          SET PC, proc_exec_to
+
+      ADD X, 12
+      IFN X, proc_table_end
+          SET PC, proc_exec_loop
+
+:proc_exec_error
+      SET A, 0
+
+:proc_exec_end
+      SET J, POP
+      SET I, POP
+      SET Y, POP
+      SET X, POP
+      SET C, POP
+      SET B, POP
+      SET PC, POP
+
+:proc_exec_to
+      ; Calculate the ProcID
+      SET [X], X
+      SUB [X], proc_table
+      DIV [X], 12
+      ADD [X], 1
+
+      ; X = ProcInfo Addr
+
+      ; Finaly load the Process
+      SET C, B
+      SET Y, A
+      JSR mem_alloc
+
+      IFE A, 0
+          SET PC, proc_exec_error
+
+      SET B, A
+      SET A, Y
+      JSR mem_copy
+
+      SET A, [X] ; A return the ProcID
+
+      ADD X, 1 ; A
+      SET [X], 0
+      ADD X, 1 ; B
+      SET [X], 0
+      ADD X, 1 ; C
+      SET [X], 0
+      ADD X, 1 ; X
+      SET [X], 0
+      ADD X, 1 ; Y
+      SET [X], 0
+      ADD X, 1 ; Z
+      SET [X], 0
+      ADD X, 1 ; I
+      SET [X], 0
+      ADD X, 1 ; J
+      SET [X], 0
+      ADD X, 1 ; SP
+      SET [X], B
+      ADD [X], 1023
+      SET Y, [X] ; Save stack address
+      ADD X, 1
+      SET [X], B
+      ADD X, 1 ; Flags
+      SET [X], 0x0001
+
+      SET [Y], B ; "Push" the "return" address on the stack
+
+      SET PC, proc_exec_end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 :proc_kill_me
       JSR proc_id ; Save process ID
       SET X, A
@@ -831,7 +991,7 @@ SET PC, stop
       SET Y, A
       ADD A, 10 ; Save memory page
       SET Z, [A]
-	  
+
 	  SET PUSH, A
 	  SET B, command_number_buffer
 	  JSR int2hex
@@ -1030,7 +1190,7 @@ SET PC, POP
 ; A: Address of the string buffer
 :strlen
 	SET PUSH, A
-	
+
 	SET B, 0
 :strlen_loop
 	IFE [A], 0
@@ -1040,7 +1200,7 @@ SET PC, POP
 :strlen_end
 	SET B, A
 	SUB B, PEEK
-	
+
 	SET A, POP
 	SET PC, POP
 
@@ -1056,7 +1216,7 @@ SET PC, POP
      JSR mem_clear ; Clear the buffer
 
      ADD B, A
-	 
+
 :read_line_loop
 	 JSR proc_suspend
      IFE [C], 0
@@ -1137,7 +1297,7 @@ SET PC, POP
 	XOR A, 1273
 	SET [entropy], A
 	SET PC, POP
-	
+
 ; Halts the CPU
 :stop SET PC, stop
 
@@ -1152,14 +1312,12 @@ SET PC, POP
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.3.4 starting... ", 0x00
+:text_start dat "AtlasOS v0.4.0 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_proc_load_error dat "Error loading process...", 0xA0, 0x00
 :text_logo1 DAT "       ___   __  __", 0xA0
 :text_logo2 DAT "      /   | / /_/ /____ ______", 0xA0
 :text_logo3 DAT "     / /| |/ __/ // __ `/ ___/", 0xA0
 :text_logo4 DAT "    / ___ / /_/ // /_/ (__  )", 0xA0
-:text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
 :text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
@@ -1192,6 +1350,32 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 3rd proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 4th proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 5th proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; [...]
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table_end
 
 :keyboard_buffers
@@ -1230,8 +1414,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, atoi 			; Converts a textual, decimal number into the actual integer value
 	SET PC, strlen 			; Returns the length of a null-terminated string
 	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
-	SET PC, srand			; Initializes the random number generator
 	SET PC, mem_check		; Returns the amount of free memory
+	SET PC, srand			; Initializes the random number generator
+
 :api_end
 
 ; BASH-like Process
@@ -1322,7 +1507,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
@@ -1331,13 +1516,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_versionf_shell
-	
+
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
@@ -1374,37 +1559,37 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, C
 
 	JSR command_clear_parameter_buffer
-	
+
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; check if blank > load help
-	SET A, command_parameter_buffer 
+	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_loadf_help
 
 	SET A, application_table
-	
+
 :command_loadf_loop
 	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
-	SET B, command_parameter_buffer 
+	SET B, command_parameter_buffer
 	JSR strcmp ; compare table string to parameter
 	IFE C, 1
 		SET PC, command_loadf_loop_end ; if equal move to end
-	
+
 	; Get the length of the app name and move our pointer forward past that
 	JSR strlen
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_loop
-	
+
 :command_loadf_loop_end
 	SET PUSH, A
 	JSR newline
@@ -1413,15 +1598,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	ADD A, B
 	ADD A, 1
-	
+
 	; Load the start & end addresses and start the process
 	SET B, A
 	ADD B, 1
 	SET A, [A]
 	SET B, [B]
 	SUB B, A
-	
+
 	JSR proc_load
+
+        IFE A, 0
+            SET PC, command_loadf_unknown
+
 	SET [last_proc], A
 	SET PC, command_loadf_end
 
@@ -1430,39 +1619,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_load_help
 	JSR text_out
 	SET PC, command_loadf_end
-	
+
 :command_loadf_unknown
 	JSR newline
 	SET A, command_load_unknown
 	JSR text_out
-	
+
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
+
 ; Command function to kill a running process
 :command_killf
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	JSR command_clear_parameter_buffer
-	
+
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_killf_help
-	
+
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
@@ -1473,18 +1662,18 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR atoi	; A is source, C is result
-	
+
 	; Selfkill?
 	SET PUSH, A
 	JSR proc_id
 	IFE A, C      ; Wants to kill me?
 		JSR proc_kill_me
 	SET A, POP
-	
+
 	; Trying to kill OS?
 	IFE C, 1
 		SET PC, command_killf_forbidden
-	
+
 	; Kill the corresponding process
 	JSR newline
 	SET A, C
@@ -1510,14 +1699,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
+
 ; Command function to list process IDs
 :command_listf
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Clear the process ID buffer first
 	SET A, proc_list_buffer
 :command_listf_clear_proc_list
@@ -1532,7 +1721,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
 	JSR proc_callback_list
-	
+
 	JSR newline
 	SET A, command_list_info
 	JSR text_out
@@ -1548,7 +1737,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR command_listf_display_procID
 	SET A, 5
 	JSR command_listf_display_procID
-	
+
 	SET C, POP
 	SET B, POP
 	SET A, POP
@@ -1559,7 +1748,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, POP
 :command_listf_display_procID
 	JSR command_clear_number_buffer
-	
+
 	; Now display the list on-screen
 	SET B, proc_list_buffer
 	ADD B, A
@@ -1573,7 +1762,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-		
+
 	SET PC, POP
 
 ; ==BEGIN HELPER FUNCTIONS==
@@ -1625,13 +1814,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET A, command_number_buffer
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
 	SET A, POP
 	SET PC, POP
@@ -1709,6 +1898,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app1 dat "hello", 0, hello, hello_end
 :app2 dat "ball", 0, app02, app02_end
 :app3 dat "goodbye", 0, goodbye, goodbye_end
+:app4 dat "free", 0, free, free_end
 :application_table_end
 
 :AtlasShell_end
@@ -1811,5 +2001,21 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :goodbye_loop_end
 	:goodbye_world dat "Goodbye World", 0xA0, 0
 :goodbye_end
+
+:free
+     JSR mem_check
+     SET B, free_buffer
+     JSR int2dec
+     SET B, free_buffer2
+     SHR A, 1
+     JSR int2dec
+     SET A, free_buffer
+     JSR text_out
+     SET A, free_buffer
+     JSR proc_kill_me
+
+:free_buffer  dat "      words free ("
+:free_buffer2 dat "      bytes)", 0xA0, 0x00
+:free_end
 
 :kernel_end
