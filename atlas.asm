@@ -831,6 +831,13 @@ SET PC, stop
       SET Y, A
       ADD A, 10 ; Save memory page
       SET Z, [A]
+	  
+	  SET PUSH, A
+	  SET B, command_number_buffer
+	  JSR int2hex
+	  SET A, command_number_buffer
+	  JSR text_out
+	  SET A, POP
 
       SET A, Y ; Delete the process info entry
       SET B, 12
@@ -1022,17 +1029,20 @@ SET PC, POP
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
 :strlen
-SET PUSH, A
+	SET PUSH, A
+	
+	SET B, 0
 :strlen_loop
-IFE [A], 0
-SET PC, strlen_end
-ADD A, 1
-SET PC, strlen_loop
+	IFE [A], 0
+		SET PC, strlen_end
+	ADD A, 1
+	SET PC, strlen_loop
 :strlen_end
-SET B, A
-SET A, POP
-SUB B, A
-SET PC, POP
+	SET B, A
+	SUB B, PEEK
+	
+	SET A, POP
+	SET PC, POP
 
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
@@ -1381,27 +1391,23 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_loadf_loop
 	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
-	IFG A, application_table_end ; Sanity check just so we don't go wandering off into other memory
+	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
-	ADD A, 1 ;shift to start of string
 	SET B, command_parameter_buffer 
 	JSR strcmp ; compare table string to parameter
 	IFE C, 1
 		SET PC, command_loadf_loop_end ; if equal move to end
 	
-	SET PUSH, A
 	; Get the length of the app name and move our pointer forward past that
-	SET A, command_parameter_buffer
 	JSR strlen
-	SET A, POP
 	ADD A, B
-	; Skip pase the null terminator, the start address, and the end address
-	ADD A, 4
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
 	SET PC, command_loadf_loop
 	
 :command_loadf_loop_end
-	JSR newline
 	SET PUSH, A
+	JSR newline
 	SET A, command_parameter_buffer
 	JSR strlen
 	SET A, POP
@@ -1414,6 +1420,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, [A]
 	SET B, [B]
 	SUB B, A
+	
 	JSR proc_load
 	SET [last_proc], A
 	SET PC, command_loadf_end
@@ -1511,6 +1518,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	SET PUSH, C
 	
+	; Clear the process ID buffer first
+	SET A, proc_list_buffer
+:command_listf_clear_proc_list
+	IFE A, proc_list_buffer_end
+		SET PC, command_listf_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_listf_clear_proc_list
+
+:command_listf_end
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
@@ -1519,9 +1536,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR newline
 	SET A, command_list_info
 	JSR text_out
-	; Hide the kernel proccess ID
-	;SET A, 0 ; OS process
-	;JSR command_listf_display_procID
+	SET A, 0 ; OS process
+	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
 	JSR command_listf_display_procID
 	SET A, 2
@@ -1529,6 +1545,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, 3
 	JSR command_listf_display_procID
 	SET A, 4
+	JSR command_listf_display_procID
+	SET A, 5
 	JSR command_listf_display_procID
 	
 	SET C, POP
@@ -1546,17 +1564,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, proc_list_buffer
 	ADD B, A
 	SET A, [B]
+	; Don't display if it's 0
+	IFE A, 0
+		SET PC, POP
+	; Convert to text and display
 	SET B, command_number_buffer
 	JSR int2dec
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-	
-	; Wipe the contents of this location of the buffer
-	SET B, proc_list_buffer
-	ADD B, A
-	SET [B], 0
-	
+		
 	SET PC, POP
 
 ; ==BEGIN HELPER FUNCTIONS==
@@ -1597,7 +1614,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 	SET A, command_parameter_buffer
-	SET B, 16
+	SET B, 32
 	JSR mem_clear
 	SET B, POP
 	SET A, POP
@@ -1673,10 +1690,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
 :command_list_info dat "Process list:", 0xA0, 0x00
-:command_parameter_buffer dat "                ", 0x00
+:command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
 
-:proc_list_buffer dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:proc_list_buffer
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:proc_list_buffer_end
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
@@ -1685,10 +1704,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 ; Note: This application table will be changed / go away once we have a filesystem
 ;application_table_format
-;dat index, "name_of_app", 0, app_location, app_location_end, 0
+;dat "name_of_app", 0, app_location, app_location_end
 :application_table
-dat 0x001, "hello", 0, hello, hello_end
-dat 0x002, "ball", 0, app02, app02_end
+:app1 dat "hello", 0, hello, hello_end
+:app2 dat "ball", 0, app02, app02_end
+:app3 dat "goodbye", 0, goodbye, goodbye_end
 :application_table_end
 
 :AtlasShell_end
@@ -1772,5 +1792,24 @@ dat 0x002, "ball", 0, app02, app02_end
 :hello_loop_end
 	:hello_world dat "Hello World", 0xA0, 0
 :hello_end
+
+:goodbye ; beginning of application
+	SET I, goodbye_loop_end
+	SUB I, goodbye_loop
+
+	SET J, 3
+:goodbye_loop ; beginning of application loop
+	SUB J, 1    ; check if application loop should end
+	IFE J, 0
+		JSR proc_kill_me
+
+	SET A, goodbye_world
+	JSR text_out
+
+	JSR proc_suspend
+	SUB PC, I
+:goodbye_loop_end
+	:goodbye_world dat "Goodbye World", 0xA0, 0
+:goodbye_end
 
 :kernel_end
