@@ -2018,4 +2018,225 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
 
+;GUI Library Begins
+
+;Draws a horizontal line with its left corner at position A and a width of B
+:GUI_Draw_HLine
+SET PUSH, A
+SET PUSH, B
+:GUI_Draw_HLine_loop
+IFE B, 0
+    SET PC, GUI_Draw_HLine_end
+SET [A], 0x702d
+SUB B, 1
+ADD A, 1
+SET PC, GUI_Draw_HLine_loop
+:GUI_Draw_HLine_end
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;Draws a vertical line with its left corner at position A and a height of B
+:GUI_Draw_VLine
+SET PUSH, A
+SET PUSH, B
+:GUI_Draw_VLine_loop
+IFE B, 0
+    SET PC, GUI_Draw_VLine_end
+SET [A], 0x7021
+SUB B, 1
+ADD A, 32
+SET PC, GUI_Draw_VLine_loop
+:GUI_Draw_VLine_end
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;Draw a character at a specific position
+;Draws the character on B to the screen position on A
+:gfx_set_pos
+SET [A], B
+SET PC, POP
+
+;Gets a character from the screen at a specific position
+;Gets the character on A and saves it on B
+:gfx_get_pos
+SET B, [A]
+SET PC, POP
+
+;Clears an area on the screen with its top position at A
+;its width at B and its height at C
+:gfx_clear_area
+IFE C, 0
+    SET PC, gfx_clear_area_end
+SET PUSH, X
+SET PUSH, A
+SET PUSH, C
+SET PUSH, B
+SET X, [video_col]
+:gfx_clear_area_l1
+IFE B, 0
+    SET PC, gfx_clear_area_s1
+:gfx_clear_area_s2
+SET [A], X
+SUB B, 1
+ADD A, 1
+SET PC, gfx_clear_area_l1
+:gfx_clear_area_s1
+SUB C, 1
+IFE C, 0
+    SET PC, gfx_clear_area_end
+SET B, PEEK
+SUB A, B
+ADD A, 32
+SET PC, gfx_clear_area_s2
+:gfx_clear_area_end
+SET B, POP
+SET C, POP
+SET A, POP
+SET X, POP
+SET PC, POP
+
+;Draws a line between two coordinates
+;Coordinate 1 is A, coordinate 2 is B and the character is C
+:gfx_line
+SET PUSH, [video_cur]
+SET PUSH, J
+SET PUSH, I
+SET PUSH, Z
+SET PUSH, X
+SET PUSH, Y
+SET PUSH, A
+SET PUSH, B
+SET [A], C
+;push char to stack (must be returned after initial calculations)
+SET PUSH, C
+SET PUSH, A
+SET PUSH, B
+JSR gfx_coord_decons
+SET J, B
+SET I, C
+SET A, PEEK
+JSR gfx_coord_decons
+SET X, B
+SET Y, C
+;find x distance between points
+IFG J, X
+    SET PC, gfx_line_it1
+SET A, X
+SUB A, J
+SET [video_cur], 0
+SET PC, gfx_line_it2
+:gfx_line_it1
+SET A, J
+SUB A, X
+SET [video_cur], 1
+:gfx_line_it2
+IFG I, Y
+    SET PC, gfx_line_it3
+SET B, Y
+SUB B, I
+SET PC, gfx_line_it4
+:gfx_line_it3
+SET B, I
+SUB B, Y
+ADD [video_cur], 2
+:gfx_line_it4
+IFG A, B
+    SET PC, gfx_line_it5
+SET Z, B
+SET PC, gfx_line_it6
+:gfx_line_it5
+SET Z, A
+:gfx_line_it6
+SET X, A
+SET Y, B
+;multiply the values of x and y to make the lines cleaner
+MUL X, 8
+MUL Y, 8
+;find steps of x
+ADD X, 1
+SET A, Y
+DIV A, X
+;find steps of y
+ADD Y, 1
+SET B, X
+DIV B, Y
+SET X, A
+SET Y, B
+SET J, POP
+SET I, POP
+SET C, POP
+:gfx_line_l
+SET A, Z
+MOD A, X
+IFE A, 0
+    JSR gfx_line_la1
+SET A, Z
+MOD A, Y
+IFE A, 0
+    JSR gfx_line_la2
+SET [I], C
+
+SUB Z, 1
+IFE Z, 0
+    SET PC, gfx_line_end
+SET PC, gfx_line_l
+:gfx_line_la1
+IFE [video_cur], 0
+    ADD I, 1
+IFE [video_cur], 1
+    SUB I, 1
+IFE [video_cur], 2
+    ADD I, 1
+IFE [video_cur], 3
+    SUB I, 1
+SET PC, POP
+:gfx_line_la2
+IFE [video_cur], 0
+    ADD I, 32
+IFE [video_cur], 1
+    ADD I, 32
+IFE [video_cur], 2
+    SUB I, 32
+IFE [video_cur], 3
+    SUB I, 32
+SET PC, POP
+;draw_end
+:gfx_line_end
+SET B, POP
+SET A, POP
+SET Y, POP
+SET X, POP
+SET Z, POP
+SET I, POP
+SET J, POP
+SET [video_cur], POP
+SET PC, POP
+
+;Calculates the index of the character at a specific coordinate
+;A is x and B is y, C is the output
+:gfx_coord_cons
+SET C, B
+MUL C, 32
+ADD C, A
+ADD C, [video_mem]
+SET PC, POP
+
+;Calculates the x and y indexes of the character at a specific coordinate
+;A is the coordinates, B is x and C is y
+:gfx_coord_decons
+SET PUSH, A
+SUB A, [video_mem]
+SET PUSH, A
+MOD A, 32
+SET B, A
+SET A, POP
+DIV A, 32
+SET C, A
+SET A, POP
+SET PC, POP
+
+;GUI Library Ends
+
 :kernel_end
