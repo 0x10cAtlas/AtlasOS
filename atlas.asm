@@ -1,5 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
+;AtlasOS version 0.4.0
+;Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
 JSR clear
@@ -1635,6 +1637,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE B, 0
 		SET PC, command_loadf_help
 
+	;check if list > list applications in table
+	SET A, command_parameter_buffer
+	SET B, command_list
+	JSR strcmp
+	IfE C, 1
+		SET PC, command_loadf_list
+
 	SET A, application_table
 	
 :command_loadf_loop
@@ -1683,6 +1692,24 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_load_help
 	JSR text_out
 	SET PC, command_loadf_end
+
+:command_loadf_list
+	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
+	JSR newline
+	SET A, application_table
+:command_loadf_list_loop
+	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
+		SET PC, command_loadf_end
+	IFG A, application_table_end ; if index is past end of the table, finish listing apps
+		SET PC, command_loadf_end
+	JSR text_out ;print out app name
+	JSR newline
+	; Get the length of the app name and move our pointer forward past that
+	JSR strlen
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_loadf_list_loop ; loopback
 	
 :command_loadf_unknown
 	JSR newline
@@ -1952,7 +1979,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.3.1", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.3.2", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
 ; Note: This application table will be changed / go away once we have a filesystem
@@ -2108,3 +2135,4 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer  dat "      words free ("
 :free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
+
