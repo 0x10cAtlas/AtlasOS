@@ -739,6 +739,13 @@ SET PC, stop
 
 :page_free_found
       SET [A], 0x0000
+
+      ADD SP, 3
+      SET A, PEEK
+      SUB SP, 3
+
+      JSR page_unset_map
+
       SET PC, page_free_end
 
 ; A: page num
