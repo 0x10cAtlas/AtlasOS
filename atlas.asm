@@ -670,6 +670,77 @@ SET PC, stop
       ADD A, 1
       SET PC, page_find_free_found_loop
 
+; Allocates a page for the current application
+:page_alloc
+      SET PUSH, B
+
+      JSR page_find_free
+      IFE A, 0
+          SET PC, page_alloc_error
+
+      SET PUSH, A
+
+      JSR proc_id
+      SET B, A
+      SET A, PEEK
+
+      JSR page_combine
+      JSR page_add
+      IFE A, 0
+          SET PC, page_alloc_error2
+
+      SET A, POP
+      MUL A, 1024
+
+:page_alloc_end
+      SET B, POP
+      SET PC, POP
+
+:page_alloc_error2
+      SET A, POP
+
+:page_alloc_error
+      SET A, 0
+      SET PC, page_alloc_end
+
+; Frees the given page for the current application
+; A: memory
+:page_free
+      SET PUSH, A
+      SET PUSH, B
+
+      SET B, A
+      MOD B, 1024
+      SUB A, B
+      SET C, A
+
+      JSR proc_id
+      SET B, A
+      SET A, C
+
+      JSR page_combine
+      SET PUSH, A
+      SET A, page_table
+
+:page_free_loop
+      SET B, [A]
+      AND B, 0x3FFF
+      IFE B, PEEK
+          SET PC, page_free_found
+      ADD A, 1
+      IFN A, page_table_end
+          SET PC, page_free_loop
+
+:page_free_end
+      SET A, POP
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+:page_free_found
+      SET [A], 0x0000
+      SET PC, page_free_end
+
 ; A: page num
 :page_set_map
       SET PUSH, A
