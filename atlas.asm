@@ -2098,7 +2098,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
      SET B, free_buffer
      JSR int2dec
      SET B, free_buffer2
-     SHR A, 1
+     SHL A, 1
      JSR int2dec
      SET A, free_buffer
      JSR text_out
