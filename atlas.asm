@@ -1,6 +1,6 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-;AtlasOS version 0.5.1
+;AtlasOS version 0.5.2
 ;Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
@@ -723,8 +723,12 @@ SET PC, stop
 ; Frees the given page for the current application
 ; A: memory
 :page_free
+
+      SET PC, page_free
+
       SET PUSH, A
       SET PUSH, B
+      SET PUSH, C
 
       SET B, A
       MOD B, 1024
@@ -750,6 +754,7 @@ SET PC, stop
 
 :page_free_end
       SET A, POP
+      SET C, POP
       SET B, POP
       SET A, POP
       SET PC, POP
@@ -764,6 +769,29 @@ SET PC, stop
       JSR page_unset_map
 
       SET PC, page_free_end
+
+
+:page_free_of
+      SET PUSH, A
+      SET PUSH, B
+
+      AND A, 0x00FF
+      SET PUSH, A
+      SET B, page_table
+
+:page_free_of_loop
+      SET A, [B]
+      AND A, 0x00FF
+      IFE A, PEEK
+          SET [B], 0x0000
+      ADD B, 1
+      IFN B, page_table_end
+          SET PC, page_free_of_loop
+
+      ADD SP, 1
+
+      SET B, POP
+      SET A, POP
 
 ; A: page num
 :page_set_map
@@ -850,6 +878,45 @@ SET PC, stop
       AND [page_map2], B
       SET PC, page_unset_map_end
 
+; Returns the amount of reserved memory
+:page_check
+      SET PUSH, B
+
+      SET B, page_table
+      SET A, 0
+
+:page_check_loop
+      IFN [B], 0
+          ADD A, 1024
+      ADD B, 1
+      IFN B, page_table_end
+          SET PC, page_check_loop
+
+      SET B, POP
+      SET PC, POP
+
+
+:page_check_of
+      SET PUSH, B
+      SET PUSH, C
+      SET PUSH, A
+
+      SET B, page_table
+      SET A, 0
+
+:page_check_of_loop
+      SET C, [B]
+      AND C, 0x00FF
+      IFE C, PEEK
+          ADD A, 1024
+      ADD B, 1
+      IFN B, page_table_end
+          SET PC, page_check_of_loop
+
+      ADD SP, 1
+      SET C, POP
+      SET B, POP
+      SET PC, POP
 
 
 ; ##############################################################
@@ -1075,6 +1142,7 @@ SET PC, stop
       SET PUSH, C
       SET PUSH, X
       SET PUSH, Y
+      SET PUSH, Z
 
       SET X, proc_table
 
@@ -1090,6 +1158,7 @@ SET PC, stop
       SET A, 0
 
 :proc_load_end
+      SET Z, POP
       SET Y, POP
       SET X, POP
       SET C, POP
@@ -1108,7 +1177,13 @@ SET PC, stop
       ; Finaly load the Process
       SET C, B
       SET Y, A
+
+      SET Z, [proc_current]   ; Fake the process ID
+      SET [proc_current], [X]
+
       JSR page_alloc
+
+      SET [proc_current], z
 
       IFE A, 0
           SET PC, proc_load_error
@@ -1296,18 +1371,18 @@ SET PC, stop
       SET B, 12
       JSR mem_clear
 
-      SET A, Z ; Free the process memory page
-      JSR page_free ; ! It will not be cleared !
+      SET A, X
+      JSR page_free_of
 
       SET A, Y ; Restore the pointer to the info entry
       SET C, 12
       SET PC, proc_kill_me_hook
 
 :proc_kill
-      SET PUSH, A
       SET PUSH, B
       SET PUSH, Y
       SET PUSH, Z
+      SET PUSH, A
 
       JSR proc_get_info_of ; Save process info address
       SET Y, A
@@ -1318,13 +1393,12 @@ SET PC, stop
       SET B, 12
       JSR mem_clear
 
-      SET A, Z ; Free the process memory page
-      JSR page_free ; ! It will not be cleared !
+      SET A, POP ; Free the process memory page
+      JSR page_free_of ; ! It will not be cleared !
 
       SET Z, POP
       SET Y, POP
       SET B, POP
-      SET A, POP
       SET PC, POP
 
 ; ##############################################################
@@ -1663,13 +1737,13 @@ SET PC, POP
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0005
-:os_version_fix dat 0x0001
+:os_version_fix dat 0x0002
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.5.1 starting... ", 0x00
+:text_start dat "AtlasOS v0.5.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo1 DAT "       ___   __  __", 0xA0
 :text_logo2 DAT "      /   | / /_/ /____ ______", 0xA0
@@ -2467,7 +2541,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :goodbye_end
 
 :free
-     JSR mem_check
+     JSR page_check
+     SET X, 0xFFFF
+     SUB X, A
+     SET A, X
      SET B, free_buffer
      JSR int2dec
      SET B, free_buffer2
@@ -2479,7 +2556,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
      JSR proc_kill_me
 
 :free_buffer  dat "      words free ("
-:free_buffer2 dat "      bytes) <broken, will be fixed soon>", 0xA0, 0x00
+:free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
 
 :apps_end
