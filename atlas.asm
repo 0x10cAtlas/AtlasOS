@@ -2479,7 +2479,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
      JSR proc_kill_me
 
 :free_buffer  dat "      words free ("
-:free_buffer2 dat "      bytes)", 0xA0, 0x00
+:free_buffer2 dat "      bytes) <broken, will be fixed soon>", 0xA0, 0x00
 :free_end
 
 :apps_end
