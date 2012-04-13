@@ -606,7 +606,6 @@ SET PC, stop
 ; A <- 1 of succeeded, 0 if failed
 :page_add
       SET PUSH, B
-
       SET B, page_table
 
 :page_add_loop
@@ -625,8 +624,138 @@ SET PC, stop
 
 :page_add_set
       SET [B], A
+
+      JSR page_decombine
+      JSR page_set_map
+
       SET A, 1
       SET PC, page_add_end
+
+:page_find_free
+      SET PUSH, B
+
+      SET A, page_map
+      SET B, 0
+      IFN [A], 0xFFFF
+          SET PC, page_find_free_found
+      ADD A, 1
+      ADD B, 1
+      IFN [A], 0xFFFF
+          SET PC, page_find_free_found
+      ADD A, 1
+      ADD B, 1
+      IFN [A], 0xFFFF
+          SET PC, page_find_free_found
+      ADD A, 1
+      ADD B, 1
+      IFN [A], 0xFFFF
+          SET PC, page_find_free_found
+
+      ; Nothing found, exiting! (later: Swap)
+      SET A, 0
+
+:page_find_free_end
+      SET B, POP
+      SET PC, POP
+
+:page_find_free_found
+      SET PUSH, [A]
+      MUL B, 16
+      SET A, B
+
+:page_find_free_found_loop
+      SHR PEEK, 1
+      IFE O, 0x0000
+          SET PC, page_find_free_end
+      ADD A, 1
+      SET PC, page_find_free_found_loop
+
+; A: page num
+:page_set_map
+      SET PUSH, A
+      SET PUSH, B
+
+      SET B, 0x0001
+
+      IFG 16, A
+          SET PC, page_set_map_0
+      IFG 32, A
+          SET PC, page_set_map_1
+      IFG 48, A
+          SET PC, page_set_map_2
+
+      SUB A, 48
+      SHL B, A
+      BOR [page_map3], B
+
+:page_set_map_end
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+:page_set_map_0
+      SHL B, A
+      BOR [page_map0], B
+      SET PC, page_set_map_end
+
+:page_set_map_1
+      SUB A, 16
+      SHL B, A
+      BOR [page_map1], B
+      SET PC, page_set_map_end
+
+:page_set_map_2
+      SUB A, 32
+      SHL B, A
+      BOR [page_map2], B
+      SET PC, page_set_map_end
+
+
+; A: page num
+:page_unset_map
+      SET PUSH, A
+      SET PUSH, B
+
+      SET B, 0x0001
+
+      IFG 16, A
+          SET PC, page_unset_map_0
+      IFG 32, A
+          SET PC, page_unset_map_1
+      IFG 48, A
+          SET PC, page_unset_map_2
+
+      SUB A, 48
+      SHL B, A
+      XOR B, 0xFFFF
+      AND [page_map3], B
+
+:page_unset_map_end
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+:page_unset_map_0
+      SHL B, A
+      XOR B, 0xFFFF
+      AND [page_map0], B
+      SET PC, page_unset_map_end
+
+:page_unset_map_1
+      SUB A, 16
+      SHL B, A
+      XOR B, 0xFFFF
+      AND [page_map1], B
+      SET PC, page_unset_map_end
+
+:page_unset_map_2
+      SUB A, 32
+      SHL B, A
+      XOR B, 0xFFFF
+      AND [page_map2], B
+      SET PC, page_unset_map_end
+
+
 
 ; ##############################################################
 
@@ -1461,6 +1590,12 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :mem_table_end
+
+:page_map
+:page_map0 dat 0x0000
+:page_map1 dat 0x0000
+:page_map2 dat 0x0000
+:page_map3 dat 0x0000
 
 :page_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
