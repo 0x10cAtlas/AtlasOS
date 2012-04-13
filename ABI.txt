@@ -1,0 +1,99 @@
+     __    _______   _           __       ______              __       _____    _
+    /  \  |___ ___| | |         /  \     |  ____|            /  \     |  __ \  | |
+   / /\ \    | |    | |        / /\ \    | |____   ____     / /\ \    | |__| | | |
+  / /__\ \   | |    | |       / /__\ \   |____  | |____|   / /__\ \   |  __ <  | |
+ / ______ \  | |    | |___   / ______ \   ____| |         / ______ \  | |__| | | |
+/_/      \_\ |_|    |_____| /_/      \_\ |______|        /_/      \_\ |_____/  |_|
+
+                              ABI documentation for AtlasOS
+							         !!! [DRAFT] !!!
+Introduction
+============
+This document describes the Application Binary Interface of AtlasOS.
+
+File header
+-----------
++-----------+-------------------------------------------------+
+| Words     | Description                                     |
++-----------+-------------------------------------------------+
+| 1         | Magic number for AtlasOS to recognise this is   |
+|           | not a flat binary. (0x4714)                     |
+|           |                                                 |
+| 1         | Length of the code and data.                    |
+|           |                                                 |
+| 1         | Flags of the programm which are:                |
+|           | H              L                                |
+|           | 1111111111111111                                |
+|           | \___ ____/ ||||+- Has Assembler Relocation Table|
+|           |     V      |||+-- Realtime application*         |
+|           |     |      ||+--- Background application**      |
+|           |   unused   |+---- Driver                        |
+|           |            +----- Library                       |
+|           |                                                 |
+|           |                                                 |
+| 0 to n    | Assembler Relocation Table                      |
+|           |                                                 |
+| 0 to n    | Library Function Table                          |
+|           |                                                 |
+\___________\__________________ ______________________________/
+                               V
+                         Code and data
+
+
+*  When AtlasOS starts a realtime application all other application are swaped out the memory.
+   The application is not suspended (proc_suspend only runs driver). As soon as it calls 'proc_kill_me'
+   the appication is terminated and all other applications are restored. This may be useful for loading
+   control systems or other time critical apps.
+  
+** Background applications are called without forcing the shell to pause until it finished. This may be useful
+   for non-time-critical tasks. Background applications are supposed to stay silent (write nothing on the
+   screen) though they CAN write on the screen.
+
+The code
+--------
+
+The code must be pure DCPU-16 code.
+
+
+The Assembler Relocation Table
+------------------------------
+
+This data ensures the pointer in the code point to the right
+position by listing all the pointers the OS must modify.
+
+Header:
++-----------+-------------------------------------------------+
+| Words     | Description                                     |
++-----------+-------------------------------------------------+
+| 1         | Number of entries                               |
+.           .                                                 .
+
+Entry:
+.           .                                                 .
+| 1         | Address of the pointer                          |
++-----------+-------------------------------------------------+
+
+
+The Library Function Table
+--------------------------
+
+The LFT provides the public methods and their addresses so applications
+can make use of them without knowing their positions in memory. The function
+references are automaticaly relocated (without ART).
+
+Header:
++-----------+-------------------------------------------------+
+| Words     | Description                                     |
++-----------+-------------------------------------------------+
+| 1         | Size of the table (in words)                    |
+|           |                                                 |
+| 1         | Number of entries                               |
+.           .                                                 .
+
+Entry:
+.           .                                                 .
+| 1         | Address of the function                         |
+|           |                                                 |
+| 2 to n    | 0-terminated string with function name. At least|
+|           | one character.                                  |
++-----------+-------------------------------------------------+

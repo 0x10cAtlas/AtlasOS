@@ -404,7 +404,7 @@ Side effects:
 	Reads the values from the keyboard. Constantly calls proc_suspend to wait for the key buffer to be filled.
 	
 
-random [0x1028]
+rand [0x1028]
 -------------
 
 Description:
@@ -502,6 +502,21 @@ Return:
 Side effects:
 	none
 
+
+srand [0x10]
+-------------
+
+Description:
+	Initializes the random number generator
+	
+Parameters:
+	A - seed for the random number generator
+	
+Return:
+	none
+	
+Side effects:
+	Sets the OS's entropy value.
 	
 
 	

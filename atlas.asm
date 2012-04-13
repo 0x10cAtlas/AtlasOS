@@ -1636,14 +1636,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR strlen
 	IFE B, 0
 		SET PC, command_loadf_help
-	
+
 	;check if list > list applications in table
 	SET A, command_parameter_buffer
 	SET B, command_list
 	JSR strcmp
 	IfE C, 1
 		SET PC, command_loadf_list
-	
+
 	SET A, application_table
 	
 :command_loadf_loop
@@ -1692,7 +1692,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_load_help
 	JSR text_out
 	SET PC, command_loadf_end
-	
+
 :command_loadf_list
 	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
 	JSR newline
@@ -2135,3 +2135,4 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer  dat "      words free ("
 :free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
+
