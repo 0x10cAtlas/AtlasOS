@@ -18,31 +18,28 @@ SET A, text_start
 JSR text_out
 
 ; Reserve kernel-memory
-SET A, 0
+SET X, 0
 :kernel_mem
-IFG A, kernel_end
+IFG X, kernel_end
     SET PC, kernel_mem_end
-SET PUSH, A
-JSR mem_reserve
+SET A, X
 JSR page_reserve
-SET A, POP
-ADD A, 1024
+ADD X, 1024
 SET PC, kernel_mem
 :kernel_mem_end
 
+SET X, 0
+
 ; Reserve video-memory
 SET A, 0x8000
-JSR mem_reserve
 JSR page_reserve
 
 ; Reserve stack-memory
 SET A, 0xFFFF
-JSR mem_reserve
 JSR page_reserve
 
-; Copy the API.
+; Copy the API
 SET A, 0x1000
-JSR mem_reserve
 JSR page_reserve
 
 SET A, 0x1000
@@ -632,6 +629,9 @@ SET PC, stop
       SET PC, page_add_end
 
 :page_find_free
+
+      ;SET PC, page_find_free
+
       SET PUSH, B
 
       SET A, page_map
@@ -665,10 +665,16 @@ SET PC, stop
 
 :page_find_free_found_loop
       SHR PEEK, 1
-      IFE O, 0x0000
-          SET PC, page_find_free_end
+      IFN O, 0x0000
+          SET PC, page_find_free_skip
+
+      ADD SP, 1
+      SET PC, page_find_free_end
+
+:page_find_free_skip
       ADD A, 1
       SET PC, page_find_free_found_loop
+
 
 ; Allocates a page for the current application
 :page_alloc
@@ -1091,7 +1097,7 @@ SET PC, stop
       ; Finaly load the Process
       SET C, B
       SET Y, A
-      JSR mem_alloc
+      JSR page_alloc
 
       IFE A, 0
           SET PC, proc_load_error
@@ -1227,7 +1233,7 @@ SET PC, stop
       ; Finaly load the Process
       SET C, B
       SET Y, A
-      JSR mem_alloc
+      JSR page_alloc
 
       IFE A, 0
           SET PC, proc_exec_error
@@ -1280,7 +1286,7 @@ SET PC, stop
       JSR mem_clear
 
       SET A, Z ; Free the process memory page
-      JSR mem_free ; ! It will not be cleared !
+      JSR page_free ; ! It will not be cleared !
 
       SET A, Y ; Restore the pointer to the info entry
       SET C, 12
@@ -1302,7 +1308,7 @@ SET PC, stop
       JSR mem_clear
 
       SET A, Z ; Free the process memory page
-      JSR mem_free ; ! It will not be cleared !
+      JSR page_free ; ! It will not be cleared !
 
       SET Z, POP
       SET Y, POP
@@ -2346,9 +2352,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app02_loop
 	; Restore the old character
 	SET C, Z
-	IFN C, 0
-		IFN C, 0x744F
-			JSR char_put
+        IFE C, 0
+            ADD PC, 4
+        IFN C, 0x744F
+	    JSR char_put
 
 	SUB J, 1
 	IFE J, 0
