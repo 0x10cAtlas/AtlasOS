@@ -1,7 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
 ;AtlasOS version 0.4.0
-:Atlas-Shell version 0.3.2
+;Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
 JSR clear
