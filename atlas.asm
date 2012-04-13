@@ -22,7 +22,10 @@ SET A, 0
 :kernel_mem
 IFG A, kernel_end
     SET PC, kernel_mem_end
+SET PUSH, A
 JSR mem_reserve
+JSR page_reserve
+SET A, POP
 ADD A, 1024
 SET PC, kernel_mem
 :kernel_mem_end
@@ -30,14 +33,19 @@ SET PC, kernel_mem
 ; Reserve video-memory
 SET A, 0x8000
 JSR mem_reserve
+JSR page_reserve
 
 ; Reserve stack-memory
 SET A, 0xFFFF
 JSR mem_reserve
+JSR page_reserve
 
 ; Copy the API.
 SET A, 0x1000
 JSR mem_reserve
+JSR page_reserve
+
+SET A, 0x1000
 
 SET B, A
 SET A, api_start
@@ -78,7 +86,7 @@ JSR keyboard_unregister_all
 
     SET A, keyboard_buffers
 	SET C, keyboard_buffers_flags
-	
+
 	IFN [keyboard_buffers_exclusive], 0
 		SET PC, driver_keyboard_exclusive
 
@@ -97,7 +105,7 @@ JSR keyboard_unregister_all
 	SET B, POP
     SET A, POP
     SET PC, POP
-	
+
 :driver_keyboard_exclusive
 	SET B, [keyboard_buffers_exclusive]
 	SET [B], [0x9000]
@@ -524,6 +532,101 @@ SET PC, stop
       SET B, POP
       SET A, POP
       SET PC, POP
+
+; A: Mem addr of the page
+:page_reserve
+      SET PUSH, B
+
+      SET B, A
+      MOD B, 1024
+      SUB A, B
+      DIV A, 1024        ; Set the pagenum
+
+      JSR page_remove    ; Remove all occurences of this page
+      SET B, 0x0001      ; By the OS
+      JSR page_combine   ; Combine A (the page num) and B (the proc id) to the page entry
+      BOR A, 0x8000      ; Set the "reserved" flag
+      JSR page_add
+
+      SET B, POP
+      SET PC, POP
+
+; A: Removes all entries with the given page num
+:page_remove
+      SET PUSH, A
+      SET PUSH, B
+
+      AND A, 0x003F
+      SHL A, 8
+      SET PUSH, A
+
+      SET B, page_table
+
+:page_remove_loop
+      SET A, [B]
+      AND A, 0x3F00
+      IFE A, PEEK
+          SET [B], 0x0000     ; Remove entry
+      ADD B, 1
+      IFN B, page_table_end
+          SET PC, page_remove_loop
+
+      SET A, POP              ; Remove a from stack
+      SET B, POP              ; Restore registers
+      SET A, POP
+      SET PC, POP
+
+; A -> page num
+; B -> proc id
+; A <- combined page entry
+:page_combine
+      SET PUSH, B
+
+      AND A, 0x003F
+      SHL A, 8
+      AND B, 0x00FF
+      BOR A, B
+
+      SET B, POP
+      SET PC, POP
+
+; A -> combined page entry
+; A <- page num
+; B <- proc id
+:page_decombine
+      SET B, A
+
+      SHR A, 8
+      AND A, 0x003F
+      AND B, 0x00FF
+
+      SET PC, POP
+
+; A -> page entry
+; A <- 1 of succeeded, 0 if failed
+:page_add
+      SET PUSH, B
+
+      SET B, page_table
+
+:page_add_loop
+      IFE [B], 0
+          SET PC, page_add_set
+
+      ADD B, 1
+      IFN B, page_table_end
+          SET PC, page_add_loop
+
+      SET A, 0
+
+:page_add_end
+      SET B, POP
+      SET PC, POP
+
+:page_add_set
+      SET [B], A
+      SET A, 1
+      SET PC, page_add_end
 
 ; ##############################################################
 
@@ -957,28 +1060,6 @@ SET PC, stop
 
       SET PC, proc_exec_end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 :proc_kill_me
       JSR proc_id ; Save process ID
       SET X, A
@@ -1008,7 +1089,7 @@ SET PC, stop
       SET Y, A
       ADD A, 10 ; Save memory page
       SET Z, [A]
-	  
+
       SET A, Y ; Delete the process info entry
       SET B, 12
       JSR mem_clear
@@ -1070,7 +1151,7 @@ SET PC, stop
     SET PUSH, A
 
     SET C, keyboard_buffers
-	
+
 :keyboard_register_loop
     IFE [C], 0
         SET PC, keyboard_register_set
@@ -1098,7 +1179,7 @@ SET PC, stop
     SET PUSH, A
 
     SET B, keyboard_buffers
-	
+
 :keyboard_unregister_loop
     IFE [B], A
         SET PC, keyboard_unregister_unset
@@ -1108,25 +1189,25 @@ SET PC, stop
 	SET PC, keyboard_unregister_end
 :keyboard_unregister_unset
     SET [B], 0x0000
-	
+
 	; If this is the exclusive buffer, reset the exclusive global flag
 	IFE A, [keyboard_buffers_exclusive]
 		JSR keyboard_unregister_exclusive
-		
+
 :keyboard_unregister_end
     SET A, POP
 	SET B, POP
     SET PC, POP
-	
+
 :keyboard_unregister_exclusive
 	; Trigger a keyboard buffer update on any other register buffers
 	SET [keyboard_oldvalue], 0xFFFF
 	; And clear the exclusive data
 	SET [keyboard_buffers_exclusive], 0
 	SET PC, POP
-	
-	
-	
+
+
+
 ; Returns whether there is an exclusive keyboard buffer active
 :keyboard_is_exclusive_active
 	SET A, 0
@@ -1135,7 +1216,7 @@ SET PC, stop
 	SET PC, POP
 
 ; Wipes out all of the registered keyboard buffers
-; CAUTION! This make break other running applications	
+; CAUTION! This make break other running applications
 :keyboard_unregister_all
 	SET PUSH, A
 	SET A, keyboard_buffers
@@ -1242,7 +1323,7 @@ SET PC, POP
 ; A: Address of the string buffer
 :strlen
 	SET PUSH, A
-	
+
 	SET B, 0
 :strlen_loop
 	IFE [A], 0
@@ -1252,7 +1333,7 @@ SET PC, POP
 :strlen_end
 	SET B, A
 	SUB B, PEEK
-	
+
 	SET A, POP
 	SET PC, POP
 
@@ -1268,7 +1349,7 @@ SET PC, POP
      JSR mem_clear ; Clear the buffer
 
      ADD B, A
-	 
+
 :read_line_loop
 	 JSR proc_suspend
      IFE [C], 0
@@ -1349,7 +1430,7 @@ SET PC, POP
 	XOR A, 1273
 	SET [entropy], A
 	SET PC, POP
-	
+
 ; Halts the CPU
 :stop SET PC, stop
 
@@ -1378,7 +1459,27 @@ SET PC, POP
 
 :mem_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+
 :mem_table_end
+
+:page_table
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:page_table_end
 
 :proc_current dat 0x0001
 :proc_buffer dat 0x0000
@@ -1474,6 +1575,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, srand			; Initializes the random number generator
 :api_end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 ; BASH-like Process
 :AtlasShell
 	SET A, text_versionoutput
@@ -1504,7 +1618,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, 32
 	SET C, input_buffer
 	JSR read_line
-	
+
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
 	JSR strlen
@@ -1559,6 +1673,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR proc_suspend
 	SUB PC, I
 :AtlasShell_loop_end
+
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
@@ -1573,7 +1688,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
@@ -1582,13 +1697,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_versionf_shell
-	
+
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
@@ -1625,14 +1740,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, C
 
 	JSR command_clear_parameter_buffer
-	
+
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; check if blank > load help
-	SET A, command_parameter_buffer 
+	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_loadf_help
@@ -1645,24 +1760,24 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, command_loadf_list
 
 	SET A, application_table
-	
+
 :command_loadf_loop
 	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
-	SET B, command_parameter_buffer 
+	SET B, command_parameter_buffer
 	JSR strcmp ; compare table string to parameter
 	IFE C, 1
 		SET PC, command_loadf_loop_end ; if equal move to end
-	
+
 	; Get the length of the app name and move our pointer forward past that
 	JSR strlen
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_loop
-	
+
 :command_loadf_loop_end
 	SET PUSH, A
 	JSR newline
@@ -1671,14 +1786,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	ADD A, B
 	ADD A, 1
-	
+
 	; Load the start & end addresses and start the process
 	SET B, A
 	ADD B, 1
 	SET A, [A]
 	SET B, [B]
 	SUB B, A
-	
+
 	JSR proc_load
 
         IFE A, 0
@@ -1710,39 +1825,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_list_loop ; loopback
-	
+
 :command_loadf_unknown
 	JSR newline
 	SET A, command_load_unknown
 	JSR text_out
-	
+
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
+
 ; Command function to kill a running process
 :command_killf
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	JSR command_clear_parameter_buffer
-	
+
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	
+
 	; Check if our param was blank
 	SET A, command_parameter_buffer
 	JSR strlen
 	IFE B, 0
 		SET PC, command_killf_help
-	
+
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
@@ -1753,18 +1868,18 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR atoi	; A is source, C is result
-	
+
 	; Selfkill?
 	SET PUSH, A
 	JSR proc_id
 	IFE A, C      ; Wants to kill me?
 		JSR proc_kill_me
 	SET A, POP
-	
+
 	; Trying to kill OS?
 	IFE C, 1
 		SET PC, command_killf_forbidden
-	
+
 	; Kill the corresponding process
 	JSR newline
 	SET A, C
@@ -1790,14 +1905,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
+
 ; Command function to list process IDs
 :command_listf
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Clear the process ID buffer first
 	SET A, proc_list_buffer
 :command_listf_clear_proc_list
@@ -1812,7 +1927,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
 	JSR proc_callback_list
-	
+
 	JSR newline
 	SET A, command_list_info
 	JSR text_out
@@ -1828,7 +1943,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR command_listf_display_procID
 	SET A, 5
 	JSR command_listf_display_procID
-	
+
 	SET C, POP
 	SET B, POP
 	SET A, POP
@@ -1839,7 +1954,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, POP
 :command_listf_display_procID
 	JSR command_clear_number_buffer
-	
+
 	; Now display the list on-screen
 	SET B, proc_list_buffer
 	ADD B, A
@@ -1853,7 +1968,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-		
+
 	SET PC, POP
 
 ; ==BEGIN HELPER FUNCTIONS==
@@ -2016,7 +2131,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, 0
 	SET B, 0
 	SET C, 0
-	
+
 :app02_loop
 	; Restore the old character
 	SET C, Z
@@ -2057,7 +2172,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 			SET [app02_ball_char], [app02_input_buffer]
 	BOR C, [app02_ball_char]
 	JSR char_put
-	
+
 	IFN [app02_input_buffer], 0
 		SET [app02_old_input_buffer], [app02_input_buffer]
 
@@ -2076,7 +2191,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR newline
 	JSR proc_kill_me
 	SET PC, POP
-	
+
 	:app02_input_buffer dat 0x0000
 	:app02_old_input_buffer dat 0x0000
 	:app02_ball_char dat 0x0000
