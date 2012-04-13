@@ -1,5 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
+;AtlasOS version 0.4.0
+:Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
 JSR clear
@@ -53,6 +55,11 @@ SET B, AtlasShell_end
 SUB B, AtlasShell
 JSR proc_load
 
+; Clear out a few things
+SET [keyboard_buffers_exclusive], 0
+SET [keyboard_oldvalue], 0
+JSR keyboard_unregister_all
+
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
@@ -67,10 +74,13 @@ JSR proc_load
 :driver_keyboard
     SET PUSH, A
     SET PUSH, B
-
-    XOR [entropy], [0x9000] ; collect entropy for random
+	SET PUSH, C
 
     SET A, keyboard_buffers
+	SET C, keyboard_buffers_flags
+	
+	IFN [keyboard_buffers_exclusive], 0
+		SET PC, driver_keyboard_exclusive
 
 :driver_keyboard_loop
 	; Check to see if we have a buffer registered at this spot
@@ -80,13 +90,18 @@ JSR proc_load
     ADD A, 1
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
-
+:driver_keyboard_end
 	SET [keyboard_oldvalue], [0x9000]
 	SET [0x9000], 0
-
+	SET C, POP
 	SET B, POP
     SET A, POP
     SET PC, POP
+	
+:driver_keyboard_exclusive
+	SET B, [keyboard_buffers_exclusive]
+	SET [B], [0x9000]
+	SET PC, driver_keyboard_end
 
 :driver_keyboard_save_to_buffer
 	SET B, [A]
@@ -99,8 +114,8 @@ JSR proc_load
 
 SET PC, stop
 
-; prints a text to stdout (working)
-; A: address of the text
+; prints a text to stdout
+; A: start address of the text
 :text_out
       SET PUSH, A
       SET PUSH, B
@@ -215,7 +230,6 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-
 :get_pos
       SET PUSH, B
 
@@ -253,132 +267,91 @@ SET PC, stop
 ; A: Number
 ; B: StrBuffer (length 5)
 :int2dec
-      SET PUSH, A
-      SET PUSH, B
-      SET PUSH, C
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-      ADD B, 4
+	ADD B, 4
 
 :int2dec_loop
-      SET C, A
-      MOD C, 10
+	SET C, A
+	MOD C, 10
 
-      IFE C, 0 ;0
-          SET [B], 0x0030
-      IFE C, 1 ;1
-          SET [B], 0x0031
-      IFE C, 2 ;2
-          SET [B], 0x0032
-      IFE C, 3 ;3
-          SET [B], 0x0033
-      IFE C, 4 ;4
-          SET [B], 0x0034
-      IFE C, 5 ;5
-          SET [B], 0x0035
-      IFE C, 6 ;6
-          SET [B], 0x0036
-      IFE C, 7 ;7
-          SET [B], 0x0037
-      IFE C, 8 ;8
-          SET [B], 0x0038
-      IFE C, 9 ;9
-          SET [B], 0x0039
+	SET [B], C
+	ADD [B], 0x0030
 
-      DIV A, 10
-      SUB B, 1
-      IFE A, 0
-          SET PC, int2dec_end
-      SET PC, int2dec_loop
+	DIV A, 10
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2dec_end
+	SET PC, int2dec_loop
 
 :int2dec_end
-	  SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Converts a Number into a Hexadecimal String
 ; A: Number
 ; B: StrBuffer (length 4)
 :int2hex
-      SET PUSH, A
-      SET PUSH, B
-	  SET PUSH, C
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-      ADD B, 3
+	ADD B, 3
 
 :int2hex_loop
-      SET C, A
-      MOD C, 16
+	SET C, A
+	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
 
-      IFE C, 0 ;0
-          SET [B], 0x0030
-      IFE C, 1 ;1
-          SET [B], 0x0031
-      IFE C, 2 ;2
-          SET [B], 0x0032
-      IFE C, 3 ;3
-          SET [B], 0x0033
-      IFE C, 4 ;4
-          SET [B], 0x0034
-      IFE C, 5 ;5
-          SET [B], 0x0035
-      IFE C, 6 ;6
-          SET [B], 0x0036
-      IFE C, 7 ;7
-          SET [B], 0x0037
-      IFE C, 8 ;8
-          SET [B], 0x0038
-      IFE C, 9 ;9
-          SET [B], 0x0039
-      IFE C, 10 ;A
-          SET [B], 0x0041
-      IFE C, 11 ;B
-          SET [B], 0x0042
-      IFE C, 12 ;C
-          SET [B], 0x0043
-      IFE C, 13 ;D
-          SET [B], 0x0044
-      IFE C, 14 ;E
-          SET [B], 0x0045
-      IFE C, 15 ;F
-          SET [B], 0x0046
+	SET [B], C
+	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
+	IFG [B], 0x0039 ; if it's 3A or more, add seven
+		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
 
-      DIV A, 16
-      SUB B, 1
-      IFE A, 0
-          SET PC, int2hex_end
-      SET PC, int2hex_loop
+	DIV A, 16
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2hex_end
+	SET PC, int2hex_loop
 
 :int2hex_end
-	  SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer
 :atoi
-	SET PUSH, A
-	SET PUSH, B
-	SET C, 0
+     SET PUSH, A
+     SET PUSH, B
+     SET C, 0
+
 :atoi_loop
-	IFE [A], 0
-		SET PC, atoi_end
-	; Capture the first digit and subtract 48 so our ASCII code for the digit becomes the numeric value of the digit
-	SET B, [A]
-	SUB B, 48
-	; Add the value of the digit to the accumulator
-	ADD C, B
-	; Increment our address and multiply the accumulator
-	ADD A, 1
-	IFE [A], 0
-		SET PC, atoi_end
-	MUL C, 10
-	SET PC, atoi_loop
+     IFE [A], 0
+     SET PC, atoi_end
+
+     ; Capture the first digit and subtract 48 so our ASCII code for the digit becomes the numeric value of the digit
+     SET B, [A]
+     SUB B, 48
+
+     ; Add the value of the digit to the accumulator
+     ADD C, B
+
+     ; Increment our address and multiply the accumulator
+     ADD A, 1
+     IFE [A], 0
+     SET PC, atoi_end
+     MUL C, 10
+     SET PC, atoi_loop
+
 :atoi_end
-	SET B, POP
-	SET A, POP
-	SET PC, POP
+     SET B, POP
+     SET A, POP
+     SET PC, POP
 
 ; Finds free memory and reserves it
 ; Return:
@@ -406,7 +379,6 @@ SET PC, stop
       SET PC, POP
 
 :mem_alloc_lower
-      SHR [entropy], 1
 
       BOR [A], 0x0003
       SUB A, mem_table
@@ -414,7 +386,6 @@ SET PC, stop
       SET PC, mem_alloc_end
 
 :mem_alloc_upper
-      SHL [entropy], 1
 
       BOR [A], 0x0300
       SUB A, mem_table
@@ -455,6 +426,32 @@ SET PC, stop
       SET B, POP
       SET A, POP
       SET PC, POP
+
+; mem_check
+; returns: A - amount of free memory
+:mem_check
+	SET PUSH, B
+	SET PUSH, C
+
+	SET B, mem_table
+	SET A, 0
+
+:mem_check_loop
+	SET C, [B]
+	AND C, 0x00FF
+	IFE C, 0
+		ADD A, 1024
+	SET C, A
+	AND C, 0xFF00
+	IFE C, 0
+		ADD A, 1024
+	ADD B, 1
+	IFN B, mem_table_end
+		SET PC, mem_check_loop
+
+	SET C, POP
+	SET B, POP
+	SET PC, POP
 
 ; mem_reserve
 ; A: Address of or in the memory to reserve
@@ -513,8 +510,6 @@ SET PC, stop
       SET PUSH, B
       SET PUSH, C
 
-      XOR [entropy], C
-
       ; Calulate the last address
       ADD C, A
 
@@ -531,10 +526,6 @@ SET PC, stop
       SET PC, POP
 
 ; ##############################################################
-
-
-
-
 
 ; Returns the version of AtlasOS
 ; Takes: ---
@@ -623,11 +614,6 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-
-
-
-
-
 ; Sets the active flag of the process
 ; Takes:
 ; A: process ID
@@ -671,22 +657,6 @@ SET PC, stop
       JSR proc_get_flags_of
       AND A, 0x0001
       SET PC, POP
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ; Generates a list of all process IDs and hands it over to a callback-function
 ; Takes:
@@ -770,6 +740,10 @@ SET PC, stop
 ; A: Begin of the BLOB
 ; B: Length of the BLOB
 :proc_load
+
+      IFE [A], 0x4714  ; Check for magic number
+          SET PC, proc_exec     ; No flat binary, call advanced loader
+
       SET PUSH, B
       SET PUSH, C
       SET PUSH, X
@@ -786,8 +760,6 @@ SET PC, stop
           SET PC, proc_load_loop
 
 :proc_load_error
-      SET A, text_proc_load_error
-      JSR text_out
       SET A, 0
 
 :proc_load_end
@@ -849,6 +821,164 @@ SET PC, stop
 
       SET PC, proc_load_end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; Loads a new process into memory
+; A: Begin of the BLOB
+; B: Length of the BLOB
+:proc_exec
+      SET PUSH, B
+      SET PUSH, C
+      SET PUSH, X
+      SET PUSH, Y
+      SET PUSH, I
+      SET PUSH, J
+
+      IFN [A], 0x4714     ; seems to be a flat binary, call legacy loader
+          SET PC, proc_load
+
+      ADD A, 1
+      SET I, [A]
+      ADD A, 1
+      SET J, [A]
+
+      IFN I, B
+          SET PC, proc_exec_error
+
+      SET X, J
+      AND X, 0x0001
+      IFE X, 0x0000
+          SET PC, proc_exec_skip_art
+
+      ADD A, 1
+      SUB B, [A]
+      ADD A, [A]
+      ADD A, 1
+      SUB B, 2
+:proc_exec_skip_art
+
+      SET X, J
+      AND X, 0x0010
+      IFE X, 0x0000
+          SET PC, proc_exec_skip_lib
+
+      ADD A, 2
+      SUB B, [A]
+      ADD A, [A]
+      SUB B, 2
+:proc_exec_skip_lib
+
+      SET X, proc_table
+
+:proc_exec_loop
+      IFE [X], 0x0000
+          SET PC, proc_exec_to
+
+      ADD X, 12
+      IFN X, proc_table_end
+          SET PC, proc_exec_loop
+
+:proc_exec_error
+      SET A, 0
+
+:proc_exec_end
+      SET J, POP
+      SET I, POP
+      SET Y, POP
+      SET X, POP
+      SET C, POP
+      SET B, POP
+      SET PC, POP
+
+:proc_exec_to
+      ; Calculate the ProcID
+      SET [X], X
+      SUB [X], proc_table
+      DIV [X], 12
+      ADD [X], 1
+
+      ; X = ProcInfo Addr
+
+      ; Finaly load the Process
+      SET C, B
+      SET Y, A
+      JSR mem_alloc
+
+      IFE A, 0
+          SET PC, proc_exec_error
+
+      SET B, A
+      SET A, Y
+      JSR mem_copy
+
+      SET A, [X] ; A return the ProcID
+
+      ADD X, 1 ; A
+      SET [X], 0
+      ADD X, 1 ; B
+      SET [X], 0
+      ADD X, 1 ; C
+      SET [X], 0
+      ADD X, 1 ; X
+      SET [X], 0
+      ADD X, 1 ; Y
+      SET [X], 0
+      ADD X, 1 ; Z
+      SET [X], 0
+      ADD X, 1 ; I
+      SET [X], 0
+      ADD X, 1 ; J
+      SET [X], 0
+      ADD X, 1 ; SP
+      SET [X], B
+      ADD [X], 1023
+      SET Y, [X] ; Save stack address
+      ADD X, 1
+      SET [X], B
+      ADD X, 1 ; Flags
+      SET [X], 0x0001
+
+      SET [Y], B ; "Push" the "return" address on the stack
+
+      SET PC, proc_exec_end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 :proc_kill_me
       JSR proc_id ; Save process ID
       SET X, A
@@ -878,7 +1008,7 @@ SET PC, stop
       SET Y, A
       ADD A, 10 ; Save memory page
       SET Z, [A]
-
+	  
       SET A, Y ; Delete the process info entry
       SET B, 12
       JSR mem_clear
@@ -928,57 +1058,96 @@ SET PC, stop
 
 :pushpop_buffer dat 0x0000
 
-
-
-
 ; Driver functions
 
 ; Registers a new keyboard buffer
 ; Takes:
 ; A: Address of the buffer
+; B: Keyboard buffer flags (right now set to 1 to make buffer exclusive)
 :keyboard_register
+	SET PUSH, C
+	SET PUSH, B
     SET PUSH, A
 
-    SET A, keyboard_buffers
-
+    SET C, keyboard_buffers
+	
 :keyboard_register_loop
-    IFE [A], 0
+    IFE [C], 0
         SET PC, keyboard_register_set
-    ADD A, 1
-    IFN A, keyboard_buffers_end
+    ADD C, 1
+    IFN C, keyboard_buffers_end
         SET PC, keyboard_register_loop
+
+:keyboard_register_set
+    SET [C], A
+	IFE B, 1
+		SET [keyboard_buffers_exclusive], A
 
 :keyboard_register_end
     SET A, POP
+	SET B, POP
+	SET C, POP
     SET PC, POP
-
-:keyboard_register_set
-    SET [A], PEEK
-    SET PC, keyboard_register_end
 
 
 ; Unregisters a keyboard buffer
 ; Takes:
 ; A: Address of the buffer
 :keyboard_unregister
+	SET PUSH, B
     SET PUSH, A
 
-    SET A, keyboard_buffers
-
+    SET B, keyboard_buffers
+	
 :keyboard_unregister_loop
-    IFE [A], PEEK
+    IFE [B], A
         SET PC, keyboard_unregister_unset
-    ADD A, 1
-    IFN A, keyboard_buffers_end
+    ADD B, 1
+    IFN B, keyboard_buffers_end
         SET PC, keyboard_unregister_loop
-
+	SET PC, keyboard_unregister_end
+:keyboard_unregister_unset
+    SET [B], 0x0000
+	
+	; If this is the exclusive buffer, reset the exclusive global flag
+	IFE A, [keyboard_buffers_exclusive]
+		JSR keyboard_unregister_exclusive
+		
 :keyboard_unregister_end
     SET A, POP
+	SET B, POP
     SET PC, POP
+	
+:keyboard_unregister_exclusive
+	; Trigger a keyboard buffer update on any other register buffers
+	SET [keyboard_oldvalue], 0xFFFF
+	; And clear the exclusive data
+	SET [keyboard_buffers_exclusive], 0
+	SET PC, POP
+	
+	
+	
+; Returns whether there is an exclusive keyboard buffer active
+:keyboard_is_exclusive_active
+	SET A, 0
+	IFN [keyboard_buffers_exclusive], 0
+		SET A, 1
+	SET PC, POP
 
-:keyboard_unregister_unset
-    SET [A], 0x0000
-    SET PC, keyboard_register_end
+; Wipes out all of the registered keyboard buffers
+; CAUTION! This make break other running applications	
+:keyboard_unregister_all
+	SET PUSH, A
+	SET A, keyboard_buffers
+:keyboard_unregister_all_loop
+	IFE A, keyboard_buffers_end
+		SET PC, keyboard_unregister_all_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, keyboard_unregister_all_loop
+:keyboard_unregister_all_end
+	SET A, POP
+	SET PC, POP
 
 
 ; Copies a string from a source to a destination
@@ -1033,7 +1202,7 @@ SET PC, stop
     SET C, POP
     SET B, POP
     SET A, POP
-	SET PC, POP
+SET PC, POP
 
 ; Compares strings and stores the result in C
 ; Takes:
@@ -1068,11 +1237,13 @@ SET PC, stop
     SET B, POP
     SET A, POP
     SET PC, POP
-	
+
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
 :strlen
 	SET PUSH, A
+	
+	SET B, 0
 :strlen_loop
 	IFE [A], 0
 		SET PC, strlen_end
@@ -1080,10 +1251,11 @@ SET PC, stop
 	SET PC, strlen_loop
 :strlen_end
 	SET B, A
-	SET A, POP
-	SUB B, A
-	SET PC, POP
+	SUB B, PEEK
 	
+	SET A, POP
+	SET PC, POP
+
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
@@ -1157,20 +1329,27 @@ SET PC, stop
 ; TODO: Change this (or add a new func.) to wait for a specific number of CPU cycles
 ; A: number of process cycles to wait
 :sleep
-     IFE A, 0
-     SET PC, POP
-     SUB A, 1
-     JSR proc_suspend
-     SET PC, sleep
+    IFE A, 0
+		SET PC, POP
+    SUB A, 1
+    JSR proc_suspend
+    SET PC, sleep
 
-; Returns a randomized number
-:random
-     MUL [entropy], 0x1235
-     ADD [entropy], 1
-     MUL A, [entropy]
-     SET A, O
-     SET PC, POP
+; Returns a randomized number in A
+:rand
+    MUL [entropy], 52265
+    ADD [entropy], 135
+    SET A, [entropy]
+    SET PC, POP
 
+; Takes a seed in A
+:srand
+	MUL A, 49763
+	SHL A, 2
+	XOR A, 1273
+	SET [entropy], A
+	SET PC, POP
+	
 ; Halts the CPU
 :stop SET PC, stop
 
@@ -1178,25 +1357,24 @@ SET PC, stop
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub dat 0x0003
-:os_version_fix dat 0x0003
+:os_version_sub dat 0x0004
+:os_version_fix dat 0x0000
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.3.3 starting... ", 0x00
+:text_start dat "AtlasOS v0.4.0 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_proc_load_error dat "Error loading process...", 0xA0, 0x00
-:text_logo1 DAT "      ___   __   __             "
-:text_logo2 DAT "     /   | / /  / /____ ______  "
-:text_logo3 DAT "    / /| |/ _/ / // __ `/ ___/  "
-:text_logo4 DAT "   / ___ / /_ / // /_/ (__  )   "
-:text_logo5 DAT "  /_/  |_\\_//_/ \\__,_/____/    "
-:text_logo6 DAT "         / __ \\/ ___/           "
-:text_logo7 DAT "        / / / /\\__ \\            "
-:text_logo8 DAT "       / /_/ /___/ /            "
-:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
+:text_logo1 DAT "       ___   __  __", 0xA0
+:text_logo2 DAT "      /   | / /_/ /____ ______", 0xA0
+:text_logo3 DAT "     / /| |/ __/ // __ `/ ___/", 0xA0
+:text_logo4 DAT "    / ___ / /_/ // /_/ (__  )", 0xA0
+:text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
+:text_logo6 DAT "         / __ \\/ ___/", 0xA0
+:text_logo7 DAT "        / / / /\\__ \\", 0xA0
+:text_logo8 DAT "       / /_/ /___/ /", 0xA0
+:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
 
 :mem_table
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -1224,44 +1402,76 @@ SET PC, stop
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 3rd proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 4th proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 5th proc
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; [...]
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table_end
 
 :keyboard_buffers
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_end
+:keyboard_buffers_flags
+dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:keyboard_buffers_flags_end
+:keyboard_buffers_exclusive dat 0x0000
 :keyboard_oldvalue dat 0x0000
 
 :entropy dat 0x0000
 
 :api_start ; API starts at 0x1000
-       SET PC, os_version ; Returns the version of AtlasOS
-       SET PC, proc_id ; Returns the ID of the current process
-       SET PC, proc_suspend ; Suspends the process and starts the next
-       SET PC, proc_get_addr ; Returns the address of the current processes memory
-       SET PC, proc_get_flags ; Returns the flags of the current process
-       SET PC, proc_kill_me ; Kills the current process
-       SET PC, proc_kill ; Kills a process
-       SET PC, mem_alloc ; Allocates another 1024 words
-       SET PC, mem_free ; Frees allocated memory
-       SET PC, mem_clear ; Clears memory
-       SET PC, pusha ; Pushes all registers to the stack
-       SET PC, popa ; Pops all registers from the stack
-       SET PC, strcpy ; Copies a string
-       SET PC, strncpy ; Copies a string with length limitation
-       SET PC, text_out ; Displays a text on the screen
-       SET PC, newline ; Linefeed
-       SET PC, scroll ; Scrolls the screen one line
-       SET PC, clear ; Clears the screen
-       SET PC, char_put ; Puts a chat on the screen
-       SET PC, read_line ; Reads a line from the keyboard to a buffer
-       SET PC, random ; Gets a random number
-       SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
-       SET PC, keyboard_unregister ; Unregisters a specific memory location
-       SET PC, int2dec ; Converts a value into the decimal representation
-       SET PC, int2hex ; Converts a value into the hexadecimal representation
-	   SET PC, atoi ; Converts a textual, decimal number into the actual integer value
-	   SET PC, strlen ; Returns the length of a null-terminated string
-	   SET PC, strcmp ; Compares two null-terminated strings to see if they're equal
+    SET PC, os_version		; Returns the version of AtlasOS
+    SET PC, proc_id 		; Returns the ID of the current process
+    SET PC, proc_suspend 	; Suspends the process and starts the next
+    SET PC, proc_get_addr 	; Returns the address of the current processes memory
+    SET PC, proc_get_flags 	; Returns the flags of the current process
+    SET PC, proc_kill_me 	; Kills the current process
+    SET PC, proc_kill 		; Kills a process
+    SET PC, mem_alloc 		; Allocates another 1024 words
+    SET PC, mem_free 		; Frees allocated memory
+    SET PC, mem_clear 		; Clears memory
+    SET PC, pusha 			; Pushes all registers to the stack
+    SET PC, popa 			; Pops all registers from the stack
+    SET PC, strcpy 			; Copies a string
+    SET PC, strncpy 		; Copies a string with length limitation
+    SET PC, text_out 		; Displays a text on the screen
+    SET PC, newline 		; Linefeed
+    SET PC, scroll 			; Scrolls the screen one line
+    SET PC, clear 			; Clears the screen
+    SET PC, char_put 		; Puts a chat on the screen
+    SET PC, read_line 		; Reads a line from the keyboard to a buffer
+    SET PC, rand 			; Gets a random number
+    SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
+    SET PC, keyboard_unregister ; Unregisters a specific memory location
+    SET PC, int2dec 		; Converts a value into the decimal representation
+    SET PC, int2hex 		; Converts a value into the hexadecimal representation
+	SET PC, atoi 			; Converts a textual, decimal number into the actual integer value
+	SET PC, strlen 			; Returns the length of a null-terminated string
+	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
+	SET PC, mem_check		; Returns the amount of free memory
+	SET PC, srand			; Initializes the random number generator
 :api_end
 
 ; BASH-like Process
@@ -1277,18 +1487,29 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR keyboard_register
 
 :AtlasShell_loop
+	; First check if anything is taking exclusive keyboard access
+	JSR keyboard_is_exclusive_active
+	IFN A, 0
+		SET PC, AtlasShell_loop_wait
+
 	; Display the prompt
-	set a, text_prompt
-	jsr text_out
+	SET A, text_prompt
+	JSR text_out
 
 	; Reset the basics
-	set [ack_command], 0 ; reset command recognized
+	SET [ack_command], 0 ; reset command recognized
 
 	; Read a line from the keyboard
 	SET A, input_text_buffer
 	SET B, 32
 	SET C, input_buffer
 	JSR read_line
+	
+	; Skip everything if we got an empty line
+	SET A, input_text_buffer
+	JSR strlen
+	IFE B, 0
+		SET PC, AtlasShell_loop_wait
 
 	; Parse out the primary command
 	SET A, input_text_buffer
@@ -1296,47 +1517,47 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR shell_getparameter
 
 	; Check for the 'clear' command
-	set a, command_clear
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_clearf
+	SET a, command_clear
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_clearf
 
 	; Check for the 'version' command
-	set a, command_version
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_versionf
+	SET a, command_version
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_versionf
 
 	; Check for the 'load' command
-	set a, command_load
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_loadf
+	SET a, command_load
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_loadf
 
 	; Check for the 'kill' command
-	set a, command_kill
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_killf
+	SET a, command_kill
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_killf
 
 	; Check for the 'list' command
-	set a, command_list
-	set b, command_parameter_buffer
-	jsr strcmp
-	ife c, 1
-	jsr command_listf
+	SET a, command_list
+	SET b, command_parameter_buffer
+	JSR strcmp
+	IFE c, 1
+	JSR command_listf
 
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
-	jsr command_unknownf
-
+	JSR command_unknownf
+:AtlasShell_loop_wait
 	; Pause then loop back to start of process
 	JSR proc_suspend
-		SUB PC, I
+	SUB PC, I
 :AtlasShell_loop_end
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
@@ -1416,40 +1637,84 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE B, 0
 		SET PC, command_loadf_help
 	
-	SET J, 1
+	;check if list > list applications in table
+	SET A, command_parameter_buffer
+	SET B, command_list
+	JSR strcmp
+	IfE C, 1
+		SET PC, command_loadf_list
+	
 	SET A, application_table
 	
 :command_loadf_loop
-	IFN A, application_table_end ; if index doesn't equal table end, skip to next check
-	SET PC, command_loadf_loop_1
-	JSR command_unknownf
-	SET PC, command_loadf_end
-	
-:command_loadf_loop_1
-	ADD A, 1 ;shift to start of string
+	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
+		SET PC, command_loadf_unknown
+	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
+		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer 
 	JSR strcmp ; compare table string to parameter
 	IFE C, 1
-	SET PC, command_loadf_loop_end ; if equal move to end
-	ADD A, 31
+		SET PC, command_loadf_loop_end ; if equal move to end
+	
+	; Get the length of the app name and move our pointer forward past that
+	JSR strlen
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
 	SET PC, command_loadf_loop
 	
 :command_loadf_loop_end
-	ADD A, 16
+	SET PUSH, A
+	JSR newline
+	SET A, command_parameter_buffer
+	JSR strlen
+	SET A, POP
+	ADD A, B
+	ADD A, 1
+	
+	; Load the start & end addresses and start the process
 	SET B, A
 	ADD B, 1
 	SET A, [A]
 	SET B, [B]
 	SUB B, A
+	
 	JSR proc_load
+
+        IFE A, 0
+            SET PC, command_loadf_unknown
+
 	SET [last_proc], A
 	SET PC, command_loadf_end
-	
+
 :command_loadf_help
 	JSR newline
 	SET A, command_load_help
 	JSR text_out
-	SET PC, command_loadf_end	
+	SET PC, command_loadf_end
+	
+:command_loadf_list
+	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
+	JSR newline
+	SET A, application_table
+:command_loadf_list_loop
+	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
+		SET PC, command_loadf_end
+	IFG A, application_table_end ; if index is past end of the table, finish listing apps
+		SET PC, command_loadf_end
+	JSR text_out ;print out app name
+	JSR newline
+	; Get the length of the app name and move our pointer forward past that
+	JSR strlen
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_loadf_list_loop ; loopback
+	
+:command_loadf_unknown
+	JSR newline
+	SET A, command_load_unknown
+	JSR text_out
 	
 :command_loadf_end
 	SET C, POP
@@ -1457,8 +1722,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, POP
 	JSR proc_suspend
 	SET PC, POP
-	
-
 	
 ; Command function to kill a running process
 :command_killf
@@ -1535,15 +1798,26 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	SET PUSH, C
 	
+	; Clear the process ID buffer first
+	SET A, proc_list_buffer
+:command_listf_clear_proc_list
+	IFE A, proc_list_buffer_end
+		SET PC, command_listf_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_listf_clear_proc_list
+
+:command_listf_end
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
 	JSR proc_callback_list
 	
 	JSR newline
-	; Hide the kernel and shell proccess ID's
-	;SET A, 0 ; OS process
-	;JSR command_listf_display_procID
+	SET A, command_list_info
+	JSR text_out
+	SET A, 0 ; OS process
+	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
 	JSR command_listf_display_procID
 	SET A, 2
@@ -1551,6 +1825,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, 3
 	JSR command_listf_display_procID
 	SET A, 4
+	JSR command_listf_display_procID
+	SET A, 5
 	JSR command_listf_display_procID
 	
 	SET C, POP
@@ -1568,17 +1844,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, proc_list_buffer
 	ADD B, A
 	SET A, [B]
+	; Don't display if it's 0
+	IFE A, 0
+		SET PC, POP
+	; Convert to text and display
 	SET B, command_number_buffer
 	JSR int2dec
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
-	
-	; Wipe the contents of this location of the buffer
-	SET B, proc_list_buffer
-	ADD B, A
-	SET [B], 0
-	
+		
 	SET PC, POP
 
 ; ==BEGIN HELPER FUNCTIONS==
@@ -1619,7 +1894,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 	SET A, command_parameter_buffer
-	SET B, 16
+	SET B, 32
 	JSR mem_clear
 	SET B, POP
 	SET A, POP
@@ -1630,13 +1905,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET A, command_number_buffer
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
-	ADD A, 1 
+	ADD A, 1
 	SET [A], 32
 	SET A, POP
 	SET PC, POP
@@ -1652,23 +1927,23 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET C, 0
 :shell_getparameter_loop
 	IFE C, B
-		SET PC, shell_getparameter_save
+	SET PC, shell_getparameter_save
 	IFE [A], 32
-		ADD C, 1
+	ADD C, 1
 	ADD A, 1
 	IFE [A], 0
-		SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_end
 	SET PC, shell_getparameter_loop
 :shell_getparameter_save
 	SET B, command_parameter_buffer
 :shell_getparameter_save_loop
 	SET [B], 0
 	IFE [A], 32
-		SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_end
 	IFE [A], 0
-		SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_end
 	IFE [A], 10
-		SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_end
 	SET [B], [A]
 	ADD A, 1
 	ADD B, 1
@@ -1680,126 +1955,183 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, POP
 
 ; Data
-:input_text_buffer reserve 32 dat 0x00
+:input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
 :command_clear dat "clear", 0
 :command_version dat "version", 0
 :command_version_os dat "os", 0
 :command_load dat "load", 0
-:command_load_ball dat "ball", 0
-:command_load_hello dat "hello", 0
 :command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
+:command_load_unknown dat "Failed to load application", 0xA0, 0x00
 :command_kill dat "kill", 0
 :command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
-:command_parameter_buffer reserve 16 dat 0x00
-:command_number_buffer reserve 5 dat 0x00
+:command_list_info dat "Process list:", 0xA0, 0x00
+:command_parameter_buffer dat "                                ", 0x00
+:command_number_buffer dat "     ", 0x00
 
-:proc_list_buffer dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:proc_list_buffer
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:proc_list_buffer_end
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.2", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.3.2", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
+
+; Note: This application table will be changed / go away once we have a filesystem
+;application_table_format
+;dat "name_of_app", 0, app_location, app_location_end
+:application_table
+:app1 dat "hello", 0, hello, hello_end
+:app2 dat "ball", 0, app02, app02_end
+:app3 dat "goodbye", 0, goodbye, goodbye_end
+:app4 dat "free", 0, free, free_end
+:application_table_end
 
 :AtlasShell_end
 
+:kernel_end
+
+; ################################
+; ################################
+
 :app02
-JSR newline ;start new line so prompt is in the right position
-SET X, 1
-SET Y, 1
+	SET X, 1
+	SET Y, 1
 
-SET I, app02_loop_end
-SUB I, app02_loop
+	SET I, app02_loop_end
+	SUB I, app02_loop
 
-SET J, 200
+	SET J, 200
 
-SET A, 0
-SET B, 0
-SET C, 0
+	; Register our buffer with the driver
+	SET A, app02_input_buffer
+	SET B, 1
+	JSR keyboard_register
 
+	SET A, 0
+	SET B, 0
+	SET C, 0
+	
 :app02_loop
+	; Restore the old character
+	SET C, Z
+	IFN C, 0
+		IFN C, 0x744F
+			JSR char_put
 
-; Restore the old character
-SET C, Z
-IFN C, 0
-    IFN C, 0x744F
-        JSR char_put
+	SUB J, 1
+	IFE J, 0
+		JSR app02_die
 
-SUB J, 1
-IFE J, 0
-    JSR proc_kill_me
+	ADD A, X
+	ADD B, Y
 
-ADD A, X
-ADD B, Y
+	IFE A, 31
+	SET X, 0xFFFF
 
-IFE A, 31
-SET X, 0xFFFF
+	IFE B, 15
+	SET Y, 0xFFFF
 
-IFE B, 15
-SET Y, 0xFFFF
+	IFE A, 0
+	SET X, 1
 
-IFE A, 0
-SET X, 1
+	IFE B, 0
+	SET Y, 1
 
-IFE B, 0
-SET Y, 1
+	; Save the character before we write so we can restore later
+	SET PUSH, B
+	MUL B, 32
+	ADD B, A
+	ADD B, [video_mem]
+	SET Z, [B]
+	SET B, POP
 
-; Save the character before we write so we can restore later
-SET PUSH, B
-MUL B, 32
-ADD B, A
-ADD B, [video_mem]
-SET Z, [B]
-SET B, POP
+	SET C, 0x7400
+	IFN [app02_input_buffer], [app02_old_input_buffer]
+		IFN [app02_input_buffer], 0
+			SET [app02_ball_char], [app02_input_buffer]
+	BOR C, [app02_ball_char]
+	JSR char_put
+	
+	IFN [app02_input_buffer], 0
+		SET [app02_old_input_buffer], [app02_input_buffer]
 
-SET C, 0x744F
-JSR char_put
+	; Wait a bit so the 'ball' moves slower
+	SET PUSH, A
+	SET A, 8
+	JSR sleep
+	SET A, POP
 
-; Wait a bit so the 'ball' moves slower
-SET PUSH, A
-SET A, 8
-JSR sleep
-SET A, POP
-
-JSR proc_suspend
-SUB PC, I
+	JSR proc_suspend
+	SUB PC, I
 :app02_loop_end
+:app02_die
+	SET A, app02_input_buffer
+	JSR keyboard_unregister
+	JSR newline
+	JSR proc_kill_me
+	SET PC, POP
+	
+	:app02_input_buffer dat 0x0000
+	:app02_old_input_buffer dat 0x0000
+	:app02_ball_char dat 0x0000
 :app02_end
 
 :hello ; beginning of application
+	SET I, hello_loop_end
+	SUB I, hello_loop
 
-SET I, hello_loop_end
-SUB I, hello_loop
-
-SET J, 2
+	SET J, 2
 :hello_loop ; beginning of application loop
+	SUB J, 1    ; check if application loop should end
+	IFE J, 0
+		JSR proc_kill_me
 
-SUB J, 1    ; check if application loop should end
-IFE J, 0
-    JSR proc_kill_me
+	SET A, hello_world
+	JSR text_out
 
-SET A, hello_world
-JSR text_out
-
-JSR proc_suspend
-SUB PC, I
-
+	JSR proc_suspend
+	SUB PC, I
 :hello_loop_end
-
-
-:hello_world dat "Hello World", 0xA0, 0
-
+	:hello_world dat "Hello World", 0xA0, 0
 :hello_end
 
-;application_table_format
-;dat index, "aaaabbbbccccdddd", 0, app_location, app_location_end reserve 12
-:application_table
-dat 0x001, "hello", 0 reserve 10 dat hello, hello_end reserve 13
-dat 2, "ball", 0 reserve 11 dat app02, app02_end reserve 13   
-:application_table_end
+:goodbye ; beginning of application
+	SET I, goodbye_loop_end
+	SUB I, goodbye_loop
 
-:kernel_end
+	SET J, 3
+:goodbye_loop ; beginning of application loop
+	SUB J, 1    ; check if application loop should end
+	IFE J, 0
+		JSR proc_kill_me
+
+	SET A, goodbye_world
+	JSR text_out
+
+	JSR proc_suspend
+	SUB PC, I
+:goodbye_loop_end
+	:goodbye_world dat "Goodbye World", 0xA0, 0
+:goodbye_end
+
+:free
+     JSR mem_check
+     SET B, free_buffer
+     JSR int2dec
+     SET B, free_buffer2
+     SHR A, 1
+     JSR int2dec
+     SET A, free_buffer
+     JSR text_out
+     SET A, free_buffer
+     JSR proc_kill_me
+
+:free_buffer  dat "      words free ("
+:free_buffer2 dat "      bytes)", 0xA0, 0x00
+:free_end
