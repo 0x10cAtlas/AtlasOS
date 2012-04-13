@@ -42,6 +42,17 @@ JSR page_reserve
 SET A, 0x1000
 JSR page_reserve
 
+;Reserve application memory
+SET A, 0
+:apps_mem
+IFG A, apps_end
+    SET PC, apps_mem_end
+JSR mem_reserve
+ADD A, 1024
+SET PC, apps_mem
+:apps_mem_end
+
+; Copy the API.
 SET A, 0x1000
 
 SET B, A
@@ -2328,8 +2339,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :AtlasShell_end
 
+:kernel_end
 ; ################################
 ; ################################
+:apps
 
 :app02
 	SET X, 1
@@ -2469,4 +2482,4 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer2 dat "      bytes)", 0xA0, 0x00
 :free_end
 
-:kernel_end
+:apps_end
