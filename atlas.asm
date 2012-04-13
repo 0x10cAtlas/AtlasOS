@@ -28,8 +28,6 @@ ADD X, 1024
 SET PC, kernel_mem
 :kernel_mem_end
 
-SET X, 0
-
 ; Reserve video-memory
 SET A, 0x8000
 JSR page_reserve
@@ -47,10 +45,14 @@ SET A, 0
 :apps_mem
 IFG A, apps_end
     SET PC, apps_mem_end
+SET X, A
 JSR mem_reserve
+SET A, X
 ADD A, 1024
 SET PC, apps_mem
 :apps_mem_end
+
+SET X, 0
 
 ; Copy the API.
 SET A, 0x1000
@@ -125,6 +127,11 @@ JSR keyboard_unregister_all
 	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
+
+
+
+
+
 
 
 
@@ -1562,7 +1569,7 @@ SET PC, stop
 
     ADD C, B
 :strncpy_loop1
-    IFE A, 0
+    IFE [A], 0
         SET PC, strncpy_loop2
     SET [B], [A]
     ADD A, 1
