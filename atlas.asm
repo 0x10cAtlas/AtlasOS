@@ -2462,7 +2462,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app02_die
 	SET A, app02_input_buffer
 	JSR keyboard_unregister
-	JSR newline
+;	JSR newline
 	JSR proc_kill_me
 	SET PC, POP
 :app02_data
@@ -2518,6 +2518,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
      SET B, free_buffer
      JSR int2dec
      SET B, free_buffer2
+     DIV A, 1024
      SHL A, 1
      JSR int2dec
      SET A, free_buffer
@@ -2526,7 +2527,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
      JSR proc_kill_me
 
 :free_buffer  dat "      words free ("
-:free_buffer2 dat "      bytes)", 0xA0, 0x00
+:free_buffer2 dat "      KB)", 0xA0, 0x00
 :free_end
 
 :apps_end
