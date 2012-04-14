@@ -78,7 +78,7 @@ JSR keyboard_unregister_all
 	; Call the keyboard driver if the keyvalue has changed
 	IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
-		
+
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
@@ -89,7 +89,7 @@ JSR keyboard_unregister_all
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
-	
+
 	SET C, kernel_watchdog_proc_list_buffer
 	SET A, kernel_watchdog_helper
 	JSR proc_callback_list
@@ -97,13 +97,13 @@ JSR keyboard_unregister_all
 	ADD C, 1
 	IFE [C], 0
 		JSR kernel_watchdog_loadshell
-	
+
 	; Clear the proc buffer
 	SET C, kernel_watchdog_proc_list_buffer
 	SET [C], 0
 	ADD C, 1
 	SET [C], 0
-		
+
 	SET A, POP
 	SET B, POP
 	SET C, POP
@@ -1769,8 +1769,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
     SET PC, proc_get_flags 	; Returns the flags of the current process
     SET PC, proc_kill_me 	; Kills the current process
     SET PC, proc_kill 		; Kills a process
-    SET PC, mem_alloc 		; Allocates another 1024 words
-    SET PC, mem_free 		; Frees allocated memory
+    SET PC, page_alloc 		; Allocates another 1024 words
+    SET PC, page_free 		; Frees allocated memory
     SET PC, mem_clear 		; Clears memory
     SET PC, pusha 			; Pushes all registers to the stack
     SET PC, popa 			; Pops all registers from the stack
@@ -1790,7 +1790,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, atoi 			; Converts a textual, decimal number into the actual integer value
 	SET PC, strlen 			; Returns the length of a null-terminated string
 	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
-	SET PC, mem_check		; Returns the amount of free memory
+	SET PC, page_check		; Returns the amount of free memory
 	SET PC, srand			; Initializes the random number generator
 :api_end
 
@@ -2187,7 +2187,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR newline
 
 	SET PC, POP
-	
+
 :AtlasShell_die
 	SET A, input_buffer
 	JSR keyboard_unregister
@@ -2363,7 +2363,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; If we hit ESC kill the editor
 	IFE [AtlasText_input_buffer], 0x001B
 		SET PC, AtlasText_die
-		
+
 	; Just print the text to the screen
 	SET A, AtlasText_input_buffer
 	JSR text_out
