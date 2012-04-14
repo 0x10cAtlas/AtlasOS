@@ -46,7 +46,7 @@ SET A, 0
 IFG A, apps_end
     SET PC, apps_mem_end
 SET X, A
-JSR mem_reserve
+JSR page_reserve
 SET A, X
 ADD A, 1024
 SET PC, apps_mem
@@ -409,136 +409,6 @@ SET PC, stop
      SET B, POP
      SET A, POP
      SET PC, POP
-
-; Finds free memory and reserves it
-; Return:
-; A: Start address of the newly allocated memory
-:mem_alloc
-      SET PUSH, B
-
-      SET A, mem_table
-:mem_alloc_loop
-      SET B, [A]
-      AND B, 0x00FF
-      IFE B, 0x0000
-          SET PC, mem_alloc_lower
-      SET B, [A]
-      AND B, 0xFF00
-      IFE B, 0x0000
-          SET PC, mem_alloc_upper
-      ADD A, 1
-      IFN A, mem_table_end
-          SET PC, mem_alloc_loop
-      SET A, 0x00
-
-:mem_alloc_end
-      SET B, POP
-      SET PC, POP
-
-:mem_alloc_lower
-
-      BOR [A], 0x0003
-      SUB A, mem_table
-      MUL A, 2048
-      SET PC, mem_alloc_end
-
-:mem_alloc_upper
-
-      BOR [A], 0x0300
-      SUB A, mem_table
-      MUL A, 2048
-      ADD A, 1024
-      SET PC, mem_alloc_end
-
-; Frees the memory previously reserved
-; A: Address of or in the memory to be freed
-:mem_free
-      SET PUSH, A
-      SET PUSH, B
-
-      SET B, A ; Make the Address the start address
-      MOD B, 1024
-      SUB A, B
-
-      DIV A, 1024
-      SET B, A
-      DIV A, 2
-      AND B, 1
-      ADD A, mem_table
-      IFN B, 0
-          SET PC, mem_free_upper
-      SET B, [A]
-      AND B, 0x00FF
-      IFN B, 0x0001
-          AND [A], 0xFF00
-      SET PC, mem_free_end
-
-:mem_free_upper
-      SET B, [A]
-      AND B, 0xFF00
-      IFN B, 0x0100
-          AND [A], 0x00FF
-
-:mem_free_end
-      SET B, POP
-      SET A, POP
-      SET PC, POP
-
-; mem_check
-; returns: A - amount of free memory
-:mem_check
-	SET PUSH, B
-	SET PUSH, C
-
-	SET B, mem_table
-	SET A, 0
-
-:mem_check_loop
-	SET C, [B]
-	AND C, 0x00FF
-	IFE C, 0
-		ADD A, 1024
-	SET C, A
-	AND C, 0xFF00
-	IFE C, 0
-		ADD A, 1024
-	ADD B, 1
-	IFN B, mem_table_end
-		SET PC, mem_check_loop
-
-	SET C, POP
-	SET B, POP
-	SET PC, POP
-
-; mem_reserve
-; A: Address of or in the memory to reserve
-:mem_reserve
-      SET PUSH, A
-      SET PUSH, B
-
-      SET B, A ; Make the Address the start address
-      MOD B, 1024
-      SUB A, B
-
-      DIV A, 1024
-      SET B, A
-      DIV A, 2
-      AND B, 1
-      ADD A, mem_table
-      IFN B, 0
-          SET PC, mem_reserve_upper
-      AND [A], 0xFF00
-      BOR [A], 0x0001
-      SET PC, mem_reserve_end
-
-:mem_reserve_upper
-      AND [A], 0x00FF
-      BOR [A], 0x0100
-
-:mem_reserve_end
-      SET B, POP
-      SET A, POP
-      SET PC, POP
 
 ; mem_clear
 ; A: From Addr
