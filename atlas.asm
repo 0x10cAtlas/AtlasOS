@@ -1,6 +1,6 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-;AtlasOS version 0.5.2
+;AtlasOS version 0.5.3
 ;Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
@@ -1778,13 +1778,13 @@ SET PC, POP
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0005
-:os_version_fix dat 0x0002
+:os_version_fix dat 0x0003
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 
-:text_start dat "AtlasOS v0.5.2 starting... ", 0x00
+:text_start dat "AtlasOS v0.5.3 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo1 DAT "      ___   __   __", 0xA0
 :text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
