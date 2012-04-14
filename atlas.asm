@@ -67,12 +67,6 @@ JSR mem_copy
 SET A, text_start_ok
 JSR text_out
 
-; Load the AtlasShell process by default
-SET A, AtlasShell
-SET B, AtlasShell_end
-SUB B, AtlasShell
-JSR proc_load
-
 ; Clear out a few things
 SET [keyboard_buffers_exclusive], 0
 SET [keyboard_oldvalue], 0
@@ -84,18 +78,59 @@ JSR keyboard_unregister_all
 	; Call the keyboard driver if the keyvalue has changed
 	IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
+		
+	; Check if the kernel is the only running process, if so start the shell
+	JSR kernel_watchdog_checkalone
 
     JSR proc_suspend
     SET PC, kernel_loop
+
+:kernel_watchdog_checkalone
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	
+	SET C, kernel_watchdog_proc_list_buffer
+	SET A, kernel_watchdog_helper
+	JSR proc_callback_list
+	SET C, kernel_watchdog_proc_list_buffer
+	ADD C, 1
+	IFE [C], 0
+		JSR kernel_watchdog_loadshell
+	
+	; Clear the proc buffer
+	SET C, kernel_watchdog_proc_list_buffer
+	SET [C], 0
+	ADD C, 1
+	SET [C], 0
+		
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
+:kernel_watchdog_helper
+	IFE C, kernel_watchdog_proc_list_buffer_end
+		SET PC, POP
+	SET [C], A
+	ADD C, 1
+	SET PC, POP
+:kernel_watchdog_loadshell
+	; This is a workaround so the shell doesn't freak out
+	; when there is no data in the keyboard buffer
+	SET [keyboard_oldvalue], 0xFFFF
+	; Now start the shell
+	SET A, AtlasShell
+	SET B, AtlasShell_end
+	SUB B, AtlasShell
+	JSR proc_load
+	SET PC, POP
 
 ; START OF THE KEYBOARD DRIVER
 :driver_keyboard
     SET PUSH, A
     SET PUSH, B
-	SET PUSH, C
 
     SET A, keyboard_buffers
-	SET C, keyboard_buffers_flags
 
 	IFN [keyboard_buffers_exclusive], 0
 		SET PC, driver_keyboard_exclusive
@@ -111,7 +146,6 @@ JSR keyboard_unregister_all
 :driver_keyboard_end
 	SET [keyboard_oldvalue], [0x9000]
 	SET [0x9000], 0
-	SET C, POP
 	SET B, POP
     SET A, POP
     SET PC, POP
@@ -1752,11 +1786,11 @@ SET PC, POP
 
 :text_start dat "AtlasOS v0.5.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_logo1 DAT "       ___   __  __", 0xA0
-:text_logo2 DAT "      /   | / /_/ /____ ______", 0xA0
-:text_logo3 DAT "     / /| |/ __/ // __ `/ ___/", 0xA0
-:text_logo4 DAT "    / ___ / /_/ // /_/ (__  )", 0xA0
-:text_logo5 DAT "   /_/  |_\\__ _/ \\__,_/____/", 0xA0
+:text_logo1 DAT "      ___   __   __", 0xA0
+:text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
+:text_logo3 DAT "    / /| |/ __// // __ `/ ___/", 0xA0
+:text_logo4 DAT "   / ___ / /  / // /_/ (__  )", 0xA0
+:text_logo5 DAT "  /_/  |_\\_/ /_/ \\__,_/____/", 0xA0
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
@@ -1851,6 +1885,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_exclusive dat 0x0000
 :keyboard_oldvalue dat 0x0000
 
+:kernel_watchdog_proc_list_buffer
+	dat 0x0000, 0x0000
+:kernel_watchdog_proc_list_buffer_end
+
 :entropy dat 0x0000
 
 :api_start ; API starts at 0x1000
@@ -1885,8 +1923,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, mem_check		; Returns the amount of free memory
 	SET PC, srand			; Initializes the random number generator
 :api_end
-
-
 
 
 
@@ -2184,7 +2220,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	JSR proc_id
 	IFE A, C      ; Wants to kill me?
-		JSR proc_kill_me
+		SET PC, AtlasShell_die
 	SET A, POP
 
 	; Trying to kill OS?
@@ -2281,6 +2317,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR newline
 
 	SET PC, POP
+	
+:AtlasShell_die
+	SET A, input_buffer
+	JSR keyboard_unregister
+	JSR newline
+	JSR proc_kill_me
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -2294,23 +2336,27 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR os_version
 	SET PUSH, C
 	SET PUSH, B
-	;SET A, 42
+	MUL A, 10000
 	SET B, command_number_buffer
 	JSR int2dec
+	IFE A, 0
+		SET [B], 0x0030
 	SET A, command_number_buffer
-	JSR text_out
-	JSR command_clear_number_buffer
 	SET B, POP
 	SET A, B
+	MUL A, 100
 	SET B, command_number_buffer
 	JSR int2dec
 	SET A, command_number_buffer
-	JSR text_out
-	JSR command_clear_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
 	JSR int2dec
+	SET A, command_number_buffer
+	ADD A, 1
+	SET [A], [command_version_separator]
+	ADD A, 2
+	SET [A], [command_version_separator]
 	SET A, command_number_buffer
 	JSR text_out
 	JSR newline
@@ -2387,6 +2433,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_clear dat "clear", 0
 :command_version dat "version", 0
 :command_version_os dat "os", 0
+:command_version_separator dat ".", 0
 :command_load dat "load", 0
 :command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
 :command_load_unknown dat "Failed to load application", 0xA0, 0x00
@@ -2400,7 +2447,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_number_buffer dat "     ", 0x00
 
 :proc_list_buffer
-	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_list_buffer_end
 :last_proc dat 0x0000
 
@@ -2416,6 +2464,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app2 dat "ball", 0, app02, app02_end
 :app3 dat "goodbye", 0, goodbye, goodbye_end
 :app4 dat "free", 0, free, free_end
+:app5 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app6 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
 :application_table_end
 
 :AtlasShell_end
@@ -2424,6 +2474,41 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; ################################
 ; ################################
 :apps
+
+
+
+; AtlasText - A simple, dummy text editor
+:AtlasText
+	JSR clear
+
+	SET I, AtlasText_loop_end ; Calculate the length of the back-jump
+	SUB I, AtlasText_loop
+
+	; Register our buffer with the driver
+	SET A, AtlasText_input_buffer
+	; And ask for exclusive keyboard access
+	SET B, 1
+	JSR keyboard_register
+:AtlasText_loop
+	; If we hit ESC kill the editor
+	IFE [AtlasText_input_buffer], 0x001B
+		SET PC, AtlasText_die
+		
+	; Just print the text to the screen
+	SET A, AtlasText_input_buffer
+	JSR text_out
+
+	JSR proc_suspend
+	SUB PC, I
+:AtlasText_loop_end
+:AtlasText_die
+	SET A, AtlasText_input_buffer
+	JSR keyboard_unregister
+	JSR clear
+	JSR proc_kill_me
+:AtlasText_data
+	:AtlasText_input_buffer dat 0x0000, 0x0000
+:AtlasText_end
 
 :app02
 	SET X, 1
@@ -2436,7 +2521,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Register our buffer with the driver
 	SET A, app02_input_buffer
-	SET B, 1
+	;SET B, 1
 	JSR keyboard_register
 
 	SET A, 0
@@ -2451,10 +2536,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
         IFN C, 0x744F
 	    JSR char_put
 
+	; If we reached the end of the iterations, quit
 	SUB J, 1
 	IFE J, 0
 		JSR app02_die
 
+	; Update the coordinates of the ball
 	ADD A, X
 	ADD B, Y
 
@@ -2478,6 +2565,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET Z, [B]
 	SET B, POP
 
+	SET [app02_wait_counter], 8
+:app02_wait_loop
+	SET PUSH, [app02_wait_counter]
+	JSR app02_update_ball
+	SET [app02_wait_counter], POP
+	SUB [app02_wait_counter], 1
+	IFN [app02_wait_counter], 0
+		SET PC, app02_wait_loop
+
+	JSR proc_suspend
+	SUB PC, I
+:app02_loop_end
+:app02_update_ball
 	SET C, 0x7400
 	IFN [app02_input_buffer], [app02_old_input_buffer]
 		IFN [app02_input_buffer], 0
@@ -2487,26 +2587,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	IFN [app02_input_buffer], 0
 		SET [app02_old_input_buffer], [app02_input_buffer]
-
-	; Wait a bit so the 'ball' moves slower
-	SET PUSH, A
-	SET A, 8
-	JSR sleep
-	SET A, POP
-
 	JSR proc_suspend
-	SUB PC, I
-:app02_loop_end
+	SET PC, POP
 :app02_die
 	SET A, app02_input_buffer
 	JSR keyboard_unregister
 	JSR newline
 	JSR proc_kill_me
 	SET PC, POP
-
+:app02_data
 	:app02_input_buffer dat 0x0000
 	:app02_old_input_buffer dat 0x0000
 	:app02_ball_char dat 0x0000
+	:app02_wait_counter dat 0x0000
 :app02_end
 
 :hello ; beginning of application
