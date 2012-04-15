@@ -19,6 +19,10 @@ File header
 | 1         | Magic number for AtlasOS to recognise this is   |
 |           | not a flat binary. (0x4714)                     |
 |           |                                                 |
+| 1         | Version of the header/ABI. (0x0001)             |
+|           |                                                 |
+| 1         | Length of the header.                           |
+|           |                                                 |
 | 1         | Length of the code and data.                    |
 |           |                                                 |
 | 1         | Flags of the programm which are:                |

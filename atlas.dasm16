@@ -1,7 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-;AtlasOS version 0.5.3
-;Atlas-Shell version 0.3.2
+; AtlasOS version 0.5.3
+; Atlas-Shell version 0.3.2
 
 ; clear screen (for emulator)
 JSR clear
@@ -162,13 +162,6 @@ JSR keyboard_unregister_all
 
 ; END OF THE KEYBOARD DRIVER
 
-
-
-
-
-
-
-
 SET PC, stop
 
 ; prints a text to stdout
@@ -219,7 +212,7 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-; Linefeed (working)
+; Linefeed
 :newline
       SET PUSH, A
       SET PUSH, B
@@ -237,7 +230,7 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-; Scrolls the screen one line (working)
+; Scrolls the screen one line
 :scroll
       SET PUSH, X
       SET PUSH, Y
@@ -1780,7 +1773,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
     SET PC, newline 		; Linefeed
     SET PC, scroll 			; Scrolls the screen one line
     SET PC, clear 			; Clears the screen
-    SET PC, char_put 		; Puts a chat on the screen
+    SET PC, char_put 		; Puts a char on the screen
     SET PC, read_line 		; Reads a line from the keyboard to a buffer
     SET PC, rand 			; Gets a random number
     SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
@@ -2529,5 +2522,25 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :free_buffer  dat "      words free ("
 :free_buffer2 dat "      KB)", 0xA0, 0x00
 :free_end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 :apps_end
