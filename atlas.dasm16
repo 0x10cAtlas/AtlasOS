@@ -2309,9 +2309,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
 :AtlasShell_proc_id dat 0x1002 ; 1st index in API * 2 words long = 0x02, proc_id
 :AtlasShell_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+:AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
 :AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
 :AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
-:AtlasShell_proc_kill_me dat 0x1014 ; 10th index in API * 2 words long = 0x14, proc_kill_me
 :AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
 :AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
 :AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
