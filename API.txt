@@ -169,7 +169,7 @@ Side effects:
 	If the process doesn't exists nothing happens.
 	
 
-mem_alloc [0x100E]
+page_alloc [0x100E]
 ------------------
 
 Description:
@@ -184,7 +184,7 @@ Return:
 Side effects:
 	Reserves the memory in the memory management table.
 	
-mem_free [0x1010]
+page_free [0x1010]
 -----------------
 
 Description:
