@@ -6,7 +6,7 @@ We hope to have more details about the API posted here to the wiki soon.
 
 ## AtlasOS Features
 
-* multitasking
+* cooperative multitasking
 * loading of new processes
 * killing of processes
 * some basic API stuff
