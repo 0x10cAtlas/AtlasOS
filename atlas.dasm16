@@ -74,9 +74,13 @@ JSR keyboard_unregister_all
 :kernel_loop
 
 	; Call the keyboard driver if the keyvalue has changed
-	IFN [0x9000], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
+	SET PUSH, C
+	SET C, [keypointer] ; set c to location in ring buffer 0-15
+	ADD C, 0x9000 ; add 0x9000 to point to ring buffer location
+	IFN [C], [keyboard_oldvalue] ; Could be done IN the driver. But is faster this way.
         JSR driver_keyboard
 
+	SET C, POP
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
@@ -115,7 +119,7 @@ JSR keyboard_unregister_all
 :kernel_watchdog_loadshell
 	; This is a workaround so the shell doesn't freak out
 	; when there is no data in the keyboard buffer
-	SET [keyboard_oldvalue], 0xFFFF
+	;SET [keyboard_oldvalue], 0xFFFF
 	; Now start the shell
 	SET A, AtlasShell
 	SET B, AtlasShell_end
@@ -142,20 +146,22 @@ JSR keyboard_unregister_all
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
 :driver_keyboard_end
-	SET [keyboard_oldvalue], [0x9000]
-	SET [0x9000], 0
+	SET [keyboard_oldvalue], [C]
+	SET [C], 0
+	ADD [keypointer], 1
+	AND [keypointer], 15
 	SET B, POP
     SET A, POP
     SET PC, POP
 
 :driver_keyboard_exclusive
 	SET B, [keyboard_buffers_exclusive]
-	SET [B], [0x9000]
+	SET [B], [C]
 	SET PC, driver_keyboard_end
 
 :driver_keyboard_save_to_buffer
 	SET B, [A]
-	SET [B], [0x9000]
+	SET [B], [C]
 	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
@@ -1741,6 +1747,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_flags_end
 :keyboard_buffers_exclusive dat 0x0000
 :keyboard_oldvalue dat 0x0000
+:keypointer dat 0x0000
 
 :kernel_watchdog_proc_list_buffer
 	dat 0x0000, 0x0000
