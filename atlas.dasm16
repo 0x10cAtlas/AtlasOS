@@ -1442,7 +1442,7 @@ SET PC, stop
     SET PUSH, B
 
 :strcpy_loop
-    IFE A, 0
+    IFE [A], 0
         SET PC, strcpy_end
     SET [B], [A]
     ADD A, 1
