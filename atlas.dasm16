@@ -187,7 +187,7 @@ SET PC, stop
       SET [I], C
       ADD A, 1
       ADD I, 1
-      IFE I, 0x8200
+      IFE I, 0x8180
           SET PC, text_out_scroll
       SET PC, text_out_loop
 
@@ -223,7 +223,7 @@ SET PC, stop
       MOD B, A
       SUB A, B
       ADD [video_cur], A
-      IFE [video_cur], 0x8200
+      IFE [video_cur], 0x8180
           JSR scroll
 
       SET B, POP
@@ -242,14 +242,14 @@ SET PC, stop
       SET [X], [Y]
       ADD X, 1
       ADD Y, 1
-      IFE Y, 0x8200
+      IFE Y, 0x8180
           SET PC, scroll_loop2
       SET PC, scroll_loop1
 
 :scroll_loop2
       SET [X], [video_col]
       ADD X, 1
-      IFE X, 0x8200
+      IFE X, 0x8180
           SET PC, scroll_end
       SET PC, scroll_loop2
 
@@ -270,7 +270,7 @@ SET PC, stop
 :clear_loop
       SET [A], B
       ADD A, 1
-      IFE A, 0x8200
+      IFE A, 0x8180
           SET PC, clear_end
       SET PC, clear_loop
 
