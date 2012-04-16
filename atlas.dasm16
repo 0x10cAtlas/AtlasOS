@@ -36,7 +36,7 @@ JSR page_reserve
 SET A, 0xFFFF
 JSR page_reserve
 
-; Copy the API
+; Reserve the API space
 SET A, 0x1000
 JSR page_reserve
 
@@ -55,9 +55,7 @@ SET PC, apps_mem
 SET X, 0
 
 ; Copy the API.
-SET A, 0x1000
-
-SET B, A
+SET B, 0x1000
 SET A, api_start
 SET C, api_end
 SUB C, A
@@ -1487,39 +1485,35 @@ SET PC, stop
     SET A, POP
 SET PC, POP
 
-; Compares strings and stores the result in C
+; Compares strings and stores the result in C and O
+; A=B => C=0, O=0
+; A>B => C>0, O=0
+; A<B => C>0, O>0
 ; Takes:
 ; A: source #1
 ; B: source #2
 :strcmp
     SET PUSH, A
     SET PUSH, B
-
-:strcmp_loop
+    SET O, 0
     SET C, 0
-
-    IFE [A], [B]
-    JSR strcmp_checkend
-
-    IFE C, 1
+:strcmp_loop
+    IFE [A], 0
         SET PC, strcmp_end
-
+    IFE [B], 0
+        SET PC, strcmp_end
     IFN [A], [B]
         SET PC, strcmp_end
-
     ADD A, 1
     ADD B, 1
     SET PC, strcmp_loop
 
-:strcmp_checkend
-    IFE [A], 0
-        SET C, 1
-    SET PC, POP
-
 :strcmp_end
+    SET C, [A]
+    SUB C, [B]
     SET B, POP
     SET A, POP
-    SET PC, POP
+    SET PC, POP 
 
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
@@ -1785,30 +1779,32 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
 	SET PC, page_check		; Returns the amount of free memory
 	SET PC, srand			; Initializes the random number generator
+	SET PC, proc_load		; Loads a new process
+	SET PC, proc_callback_list ; Dumps a list of running processes
 :api_end
 
+; ALERT! Any changes to the kernel that alter the size must change this
+; This forces all app space to start after 0x1400 (end of API space)
+:api_padding reserve 2873
 
-
-
-
-
-
-
-
+:kernel_end
+; ################################
+; ################################
+:apps
 
 
 
 ; BASH-like Process
 :AtlasShell
 	SET A, text_versionoutput
-	JSR text_out
+	JSR [AtlasShell_text_out]
 :AtlasShell_start
 	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
 	SUB I, AtlasShell_loop
 
 	; Register our buffer with the driver
 	SET A, input_buffer
-	JSR keyboard_register
+	JSR [AtlasShell_keyboard_register]
 
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
@@ -1818,7 +1814,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Display the prompt
 	SET A, text_prompt
-	JSR text_out
+	JSR [AtlasShell_text_out]
 
 	; Reset the basics
 	SET [ack_command], 0 ; reset command recognized
@@ -1827,11 +1823,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, input_text_buffer
 	SET B, 32
 	SET C, input_buffer
-	JSR read_line
+	JSR [AtlasShell_read_line]
 
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	IFE B, 0
 		SET PC, AtlasShell_loop_wait
 
@@ -1841,38 +1837,38 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR shell_getparameter
 
 	; Check for the 'clear' command
-	SET a, command_clear
-	SET b, command_parameter_buffer
-	JSR strcmp
-	IFE c, 1
-	JSR command_clearf
+	SET A, command_clear
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_clearf
 
 	; Check for the 'version' command
 	SET a, command_version
 	SET b, command_parameter_buffer
-	JSR strcmp
-	IFE c, 1
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
 	JSR command_versionf
 
 	; Check for the 'load' command
 	SET a, command_load
 	SET b, command_parameter_buffer
-	JSR strcmp
-	IFE c, 1
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
 	JSR command_loadf
 
 	; Check for the 'kill' command
 	SET a, command_kill
 	SET b, command_parameter_buffer
-	JSR strcmp
-	IFE c, 1
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
 	JSR command_killf
 
 	; Check for the 'list' command
 	SET a, command_list
 	SET b, command_parameter_buffer
-	JSR strcmp
-	IFE c, 1
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
 	JSR command_listf
 
 	; If we don't have an acknowledged command, display the generic response
@@ -1880,16 +1876,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR command_unknownf
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
-	JSR proc_suspend
+	JSR [AtlasShell_proc_suspend]
 	SUB PC, I
 :AtlasShell_loop_end
 
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET a, text_unrecognized
-	JSR text_out
+	JSR [AtlasShell_text_out]
 	SET pc, pop
 
 ; Command function to display version info
@@ -1902,7 +1898,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
-	JSR mem_clear
+	JSR [AtlasShell_mem_clear]
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -1910,26 +1906,26 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	IFE B, 0
 		SET PC, command_versionf_shell
 
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
-	JSR strcmp
-	IFE C, 1
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
 		SET PC, command_versionf_os
 :command_versionf_shell
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, text_versionoutput
-	JSR text_out
+	JSR [AtlasShell_text_out]
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
 :command_versionf_os
-	JSR newline
+	JSR [AtlasShell_newline]
 	JSR command_os_version_display
 	SET C, POP
 	SET B, POP
@@ -1939,7 +1935,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; Command function to clear the screen
 :command_clearf
 	SET [ack_command], 1 ; acknowledge recognized command
-	JSR clear
+	JSR [AtlasShell_clear]
 	SET pc, pop
 
 ; Command function to load a new process
@@ -1958,15 +1954,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	IFE B, 0
 		SET PC, command_loadf_help
 
 	;check if list > list applications in table
 	SET A, command_parameter_buffer
 	SET B, command_list
-	JSR strcmp
-	IfE C, 1
+	JSR [AtlasShell_strcmp]
+	IfE C, 0
 		SET PC, command_loadf_list
 
 	SET A, application_table
@@ -1977,12 +1973,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer
-	JSR strcmp ; compare table string to parameter
-	IFE C, 1
+	JSR [AtlasShell_strcmp] ; compare table string to parameter
+	IFE C, 0
 		SET PC, command_loadf_loop_end ; if equal move to end
 
 	; Get the length of the app name and move our pointer forward past that
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
@@ -1990,9 +1986,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :command_loadf_loop_end
 	SET PUSH, A
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_parameter_buffer
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	SET A, POP
 	ADD A, B
 	ADD A, 1
@@ -2004,7 +2000,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, [B]
 	SUB B, A
 
-	JSR proc_load
+	JSR [AtlasShell_proc_load]
 
         IFE A, 0
             SET PC, command_loadf_unknown
@@ -2013,39 +2009,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, command_loadf_end
 
 :command_loadf_help
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_load_help
-	JSR text_out
+	JSR [AtlasShell_text_out]
 	SET PC, command_loadf_end
 
 :command_loadf_list
 	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, application_table
 :command_loadf_list_loop
 	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
 		SET PC, command_loadf_end
 	IFG A, application_table_end ; if index is past end of the table, finish listing apps
 		SET PC, command_loadf_end
-	JSR text_out ;print out app name
-	JSR newline
+	JSR [AtlasShell_text_out] ;print out app name
+	JSR [AtlasShell_newline]
 	; Get the length of the app name and move our pointer forward past that
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_list_loop ; loopback
 
 :command_loadf_unknown
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_load_unknown
-	JSR text_out
+	JSR [AtlasShell_text_out]
 
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR proc_suspend
+	JSR [AtlasShell_proc_suspend]
 	SET PC, POP
 
 ; Command function to kill a running process
@@ -2064,24 +2060,24 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR strlen
+	JSR [AtlasShell_strlen]
 	IFE B, 0
 		SET PC, command_killf_help
 
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
-	JSR strcmp
-	IFE C, 1
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
 		SET PC, command_killf_last
 
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
-	JSR atoi	; A is source, C is result
+	JSR [AtlasShell_atoi]	; A is source, C is result
 
 	; Selfkill?
 	SET PUSH, A
-	JSR proc_id
+	JSR [AtlasShell_proc_id]
 	IFE A, C      ; Wants to kill me?
 		SET PC, AtlasShell_die
 	SET A, POP
@@ -2091,29 +2087,29 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, command_killf_forbidden
 
 	; Kill the corresponding process
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, C
-	JSR proc_kill
+	JSR [AtlasShell_proc_kill]
 	SET PC, command_killf_end
 :command_killf_forbidden
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_kill_forbidden
-	JSR text_out
+	JSR [AtlasShell_text_out]
 	SET PC, command_killf_end
 :command_killf_last
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, [last_proc]
-	JSR proc_kill
+	JSR [AtlasShell_proc_kill]
 	SET PC, command_killf_end
 :command_killf_help
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_kill_help
-	JSR text_out
+	JSR [AtlasShell_text_out]
 :command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR proc_suspend
+	JSR [AtlasShell_proc_suspend]
 	SET PC, POP
 
 ; Command function to list process IDs
@@ -2136,11 +2132,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
-	JSR proc_callback_list
+	JSR [AtlasShell_proc_callback_list]
 
-	JSR newline
+	JSR [AtlasShell_newline]
 	SET A, command_list_info
-	JSR text_out
+	JSR [AtlasShell_text_out]
 	SET A, 0 ; OS process
 	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
@@ -2174,18 +2170,18 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, POP
 	; Convert to text and display
 	SET B, command_number_buffer
-	JSR int2dec
+	JSR [AtlasShell_int2dec]
 	SET A, command_number_buffer
-	JSR text_out
-	JSR newline
+	JSR [AtlasShell_text_out]
+	JSR [AtlasShell_newline]
 
 	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
-	JSR keyboard_unregister
-	JSR newline
-	JSR proc_kill_me
+	JSR [AtlasShell_keyboard_unregister]
+	JSR [AtlasShell_newline]
+	JSR [AtlasShell_proc_kill_me]
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -2196,12 +2192,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, 0
 	SET C, 0
 	; A - main version, B - sub version, C - fix version
-	JSR os_version
+	JSR [AtlasShell_os_version]
 	SET PUSH, C
 	SET PUSH, B
 	MUL A, 10000
 	SET B, command_number_buffer
-	JSR int2dec
+	JSR [AtlasShell_int2dec]
 	IFE A, 0
 		SET [B], 0x0030
 	SET A, command_number_buffer
@@ -2209,20 +2205,20 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, B
 	MUL A, 100
 	SET B, command_number_buffer
-	JSR int2dec
+	JSR [AtlasShell_int2dec]
 	SET A, command_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
-	JSR int2dec
+	JSR [AtlasShell_int2dec]
 	SET A, command_number_buffer
 	ADD A, 1
 	SET [A], [command_version_separator]
 	ADD A, 2
 	SET [A], [command_version_separator]
 	SET A, command_number_buffer
-	JSR text_out
-	JSR newline
+	JSR [AtlasShell_text_out]
+	JSR [AtlasShell_newline]
 	SET PC, POP
 ; Clears the parameter buffer
 :command_clear_parameter_buffer
@@ -2230,7 +2226,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	SET A, command_parameter_buffer
 	SET B, 32
-	JSR mem_clear
+	JSR [AtlasShell_mem_clear]
 	SET B, POP
 	SET A, POP
 	SET PC, POP
@@ -2309,6 +2305,26 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
 
+; API Jump table
+:AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
+:AtlasShell_proc_id dat 0x1002 ; 1st index in API * 2 words long = 0x02, proc_id
+:AtlasShell_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+:AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+:AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
+:AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
+:AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+:AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
+:AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
+:AtlasShell_read_line dat 0x1026 ; 19th index in API * 2 words long = 0x26, read_line
+:AtlasShell_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
+:AtlasShell_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
+:AtlasShell_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
+:AtlasShell_atoi dat 0x1032 ; 25th index in API * 2 words long = 0x32, atoi
+:AtlasShell_strlen dat 0x1034 ; 26th index in API * 2 words long = 0x34, strlen
+:AtlasShell_strcmp dat 0x1036 ; 27th index in API * 2 words long = 0x36, strcmp
+:AtlasShell_proc_load dat 0x103C ; 30th index in API * 2 words long = 0x3C, proc_load
+:AtlasShell_proc_callback_list dat 0x103E ; 31st index in API * 2 words long = 0x3E, proc_callback_list
+
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -2325,7 +2341,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :application_table
 :app1 dat "hello", 0, hello, hello_end
 :app2 dat "ball", 0, app02, app02_end
-:app3 dat "goodbye", 0, goodbye, goodbye_end
 :app4 dat "free", 0, free, free_end
 :app5 dat "AtlasText", 0, AtlasText, AtlasText_end
 :app6 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
@@ -2333,16 +2348,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :AtlasShell_end
 
-:kernel_end
-; ################################
-; ################################
-:apps
-
-
 
 ; AtlasText - A simple, dummy text editor
 :AtlasText
-	JSR clear
+	JSR [AtlasText_clear]
 
 	SET I, AtlasText_loop_end ; Calculate the length of the back-jump
 	SUB I, AtlasText_loop
@@ -2351,7 +2360,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, AtlasText_input_buffer
 	; And ask for exclusive keyboard access
 	SET B, 1
-	JSR keyboard_register
+	JSR [AtlasText_keyboard_register]
 :AtlasText_loop
 	; If we hit ESC kill the editor
 	IFE [AtlasText_input_buffer], 0x001B
@@ -2359,18 +2368,25 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Just print the text to the screen
 	SET A, AtlasText_input_buffer
-	JSR text_out
+	JSR [AtlasText_text_out]
 
-	JSR proc_suspend
+	JSR [AtlasText_proc_suspend]
 	SUB PC, I
 :AtlasText_loop_end
 :AtlasText_die
 	SET A, AtlasText_input_buffer
-	JSR keyboard_unregister
-	JSR clear
-	JSR proc_kill_me
+	JSR [AtlasText_keyboard_unregister]
+	JSR [AtlasText_clear]
+	JSR [AtlasText_proc_kill_me]
 :AtlasText_data
 	:AtlasText_input_buffer dat 0x0000, 0x0000
+	; API Jump table
+	:AtlasText_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+	:AtlasText_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+	:AtlasText_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+	:AtlasText_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
+	:AtlasText_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
+	:AtlasText_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
 :AtlasText_end
 
 :app02
@@ -2385,7 +2401,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Register our buffer with the driver
 	SET A, app02_input_buffer
 	;SET B, 1
-	JSR keyboard_register
+	JSR [app02_keyboard_register]
 
 	SET A, 0
 	SET B, 0
@@ -2397,7 +2413,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
         IFE C, 0
             ADD PC, 4
         IFN C, 0x744F
-	    JSR char_put
+	    JSR [app02_char_put]
 
 	; If we reached the end of the iterations, quit
 	SUB J, 1
@@ -2437,7 +2453,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFN [app02_wait_counter], 0
 		SET PC, app02_wait_loop
 
-	JSR proc_suspend
+	JSR [app02_proc_suspend]
 	SUB PC, I
 :app02_loop_end
 :app02_update_ball
@@ -2446,23 +2462,28 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		IFN [app02_input_buffer], 0
 			SET [app02_ball_char], [app02_input_buffer]
 	BOR C, [app02_ball_char]
-	JSR char_put
+	JSR [app02_char_put]
 
 	IFN [app02_input_buffer], 0
 		SET [app02_old_input_buffer], [app02_input_buffer]
-	JSR proc_suspend
+	JSR [app02_proc_suspend]
 	SET PC, POP
 :app02_die
 	SET A, app02_input_buffer
-	JSR keyboard_unregister
-;	JSR newline
-	JSR proc_kill_me
+	JSR [app02_keyboard_unregister]
+	JSR [app02_proc_kill_me]
 	SET PC, POP
 :app02_data
 	:app02_input_buffer dat 0x0000
 	:app02_old_input_buffer dat 0x0000
 	:app02_ball_char dat 0x0000
 	:app02_wait_counter dat 0x0000
+	; API Jump table	
+	:app02_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+	:app02_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+	:app02_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
+	:app02_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
+	:app02_char_put dat 0x1024 ; 18th index in API * 2 words long = 0x24, char_put
 :app02_end
 
 :hello ; beginning of application
@@ -2473,54 +2494,44 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :hello_loop ; beginning of application loop
 	SUB J, 1    ; check if application loop should end
 	IFE J, 0
-		JSR proc_kill_me
+		JSR [hello_proc_kill_me]
 
 	SET A, hello_world
-	JSR text_out
+	JSR [hello_text_out]
 
-	JSR proc_suspend
+	JSR [hello_proc_suspend]
 	SUB PC, I
 :hello_loop_end
 	:hello_world dat "Hello World", 0xA0, 0
+	; API Jump table
+	:hello_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+	:hello_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+	:hello_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
 :hello_end
 
-:goodbye ; beginning of application
-	SET I, goodbye_loop_end
-	SUB I, goodbye_loop
-
-	SET J, 3
-:goodbye_loop ; beginning of application loop
-	SUB J, 1    ; check if application loop should end
-	IFE J, 0
-		JSR proc_kill_me
-
-	SET A, goodbye_world
-	JSR text_out
-
-	JSR proc_suspend
-	SUB PC, I
-:goodbye_loop_end
-	:goodbye_world dat "Goodbye World", 0xA0, 0
-:goodbye_end
-
 :free
-     JSR page_check
-     SET X, 0xFFFF
-     SUB X, A
-     SET A, X
-     SET B, free_buffer
-     JSR int2dec
-     SET B, free_buffer2
-     DIV A, 1024
-     SHL A, 1
-     JSR int2dec
-     SET A, free_buffer
-     JSR text_out
-     SET A, free_buffer
-     JSR proc_kill_me
-
-:free_buffer  dat "      words free ("
-:free_buffer2 dat "      KB)", 0xA0, 0x00
+	JSR [free_page_check]
+	SET X, 0xFFFF
+	SUB X, A
+	SET A, X
+	SET B, free_buffer
+	JSR [free_int2dec]
+	SET B, free_buffer2
+	DIV A, 1024
+	SHL A, 1
+	JSR [free_int2dec]
+	SET A, free_buffer
+	JSR [free_text_out]
+	SET A, free_buffer
+	JSR [free_proc_kill_me]
+	
+	:free_buffer  dat "      words free ("
+	:free_buffer2 dat "      KB)", 0xA0, 0x00
+	; API Jump table
+	:free_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+	:free_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
+	:free_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+	:free_page_check dat 0x1038 ; 28th index in API * 2 words long = 0x38, page_check
 :free_end
 
 

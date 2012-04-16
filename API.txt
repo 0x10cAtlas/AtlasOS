@@ -169,7 +169,7 @@ Side effects:
 	If the process doesn't exists nothing happens.
 	
 
-mem_alloc [0x100E]
+page_alloc [0x100E]
 ------------------
 
 Description:
@@ -184,7 +184,7 @@ Return:
 Side effects:
 	Reserves the memory in the memory management table.
 	
-mem_free [0x1010]
+page_free [0x1010]
 -----------------
 
 Description:
@@ -487,23 +487,67 @@ Side effects:
 	The value of the word will be converted into a hexadecimal string.
 
 
-mem_check [0x1032]
+atoi [0x1032]
 -------------
 
 Description:
-	Calculates the amount of free memory on the system in words
+	??
 	
 Parameters:
-	none
+	??
 	
 Return:
-	A - the amount of free words on the system
+	??
 	
 Side effects:
-	none
+	??
 
+strlen [0x1034]
+-------------
 
-srand [0x10]
+Description:
+	??
+	
+Parameters:
+	??
+	
+Return:
+	??
+	
+Side effects:
+	??
+
+strcmp [0x1036]
+-------------
+
+Description:
+	??
+	
+Parameters:
+	??
+	
+Return:
+	??
+	
+Side effects:
+	??
+
+page_check [0x1038]
+-------------
+
+Description:
+	??
+	
+Parameters:
+	??
+	
+Return:
+	??
+	
+Side effects:
+	??
+
+srand [0x103A]
 -------------
 
 Description:
@@ -517,6 +561,36 @@ Return:
 	
 Side effects:
 	Sets the OS's entropy value.
+
+proc_load [0x103C
+-------------
+
+Description:
+	??
+	
+Parameters:
+	??
+	
+Return:
+	??
+	
+Side effects:
+	??
+
+proc_callback_list [0x103E]
+-------------
+
+Description:
+	??
+	
+Parameters:
+	??
+	
+Return:
+	??
+	
+Side effects:
+	??
 	
 
 	
