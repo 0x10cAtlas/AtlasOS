@@ -208,8 +208,7 @@ SET PC, stop
           SET PC, text_out_end
       IFE C, 0x00A0
           SET PC, text_out_nl
-      IFG C, 0x00FF
-          AND C, 0x00FF
+      AND C, 0x00FF
       BOR C, B
       SET [I], C
       ADD A, 1
