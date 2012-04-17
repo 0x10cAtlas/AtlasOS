@@ -266,12 +266,16 @@ SET PC, stop
       SET Y, 0x8020 ; Set Y to the second line in the video memory
 
 :scroll_loop1
-      SET [X], [Y]
-      ADD X, 1
-      ADD Y, 1
-      IFE Y, 0x8180
-          SET PC, scroll_loop2
-      SET PC, scroll_loop1
+      SET [X],   [Y]
+      SET [1+X], [1+Y]
+      SET [2+X], [2+Y]
+      SET [3+X], [3+Y]
+
+      ADD X, 4
+      ADD Y, 4
+
+      IFN Y, 0x8180
+          SET PC, scroll_loop1
 
 :scroll_loop2
       SET [X], [video_clear]
@@ -296,10 +300,13 @@ SET PC, stop
 
 :clear_loop
       SET [A], B
-      ADD A, 1
-      IFE A, 0x8180
-          SET PC, clear_end
-      SET PC, clear_loop
+      SET [1+A], B
+      SET [2+A], B
+      SET [3+A], B
+      ADD A, 4
+
+      IFN A, 0x8180
+          SET PC, clear_loop
 
 :clear_end
       SET [video_cur], [video_mem]
@@ -1406,11 +1413,215 @@ SET PC, stop
 	SET A, POP
 	SET PC, POP
 
+; Registers a new message queue
+; A -> Address of the message queue
+; A <- 1 succeeded, 0 failed
+:msg_queue_reg
+    SET PUSH, B
+    SET PUSH, C
+
+    SET B, message_queue_table
+
+:msg_queue_reg_loop
+    SET C, [B]
+    IFE C, 0
+        SET PC, msg_queue_reg_found
+
+    IFN B, message_queue_table_end
+        SET PC, msg_queue_reg_loop
+
+    SET A, 0        ; No free space in the queue
+
+:msg_queue_reg_end
+    SET C, POP
+    SET B, POP
+    SET PC, POP
+
+:msg_queue_reg_found
+    SET [1+B], A    ; Set message queue address
+    JSR proc_id     ; Set message queue flags (process id)
+    SHL A, 8
+    SET [B], A
+    SET A, 1
+    SET PC, msg_queue_reg_end
+
+; Removes the (all) message queue(s) of the calling application
+:msg_queue_rem
+    SET PUSH, A
+    SET PUSH, B
+    SET PUSH, C
+
+    JSR proc_id     ; Gets the ID of the calling process
+
+    SET B, message_queue_table
+
+:msg_queue_rem_loop
+    SET C, [B]
+    SHR C, 8
+    IFN C, A
+        SET PC, msg_queue_rem_skip
+
+    SET [B], 0x0000
+    SET [1+B], 0x0000
+
+:msg_queue_rem_skip
+    ADD B, 2
+
+    IFN B, message_queue_table_end
+        SET PC, msg_queue_rem_loop
+
+    SET C, POP
+    SET B, POP
+    SET A, POP
+    SET PC, POP
+
+; Sends a message to all message queues
+; A -> Message source
+; B -> Message content
+:msg_broadcast
+    SET PUSH, C
+    SET PUSH, Y
+    SET PUSH, Z
+
+    SET C, [message_queue_table]
+
+:msg_broadcast_loop
+    SET Y, [C]
+    IFN Y, 0
+        JSR msg_send_to
+    ADD C, 2
+    IFN C, message_queue_table_end
+        SET PC, msg_broadcast_loop
+
+    SET Z, POP
+    SET Y, POP
+    SET C, POP
+    SET PC, POP
+
+; Sends a message to a specific process
+; A -> Message source
+; B -> Message content
+; C -> Addr of the entry of the message queue
+:msg_send_to
+    SET PUSH, A       ; Save registers
+    SET PUSH, B
+    SET PUSH, I
+    SET PUSH, J
+    SET PUSH, C
+
+    SET I, [C]        ; Get the pointers
+    SET J, I
+
+    AND I, 0x0002     ; Is the queue full?
+    IFE I, 0x0002
+        SET PC, msg_send_to_end
+
+    SET I, J          ; Restore I
+
+    SHR I, 1          ; "decompress" the pointers
+    SHR J, 4
+    AND I, 0x000E
+    AND J, 0x000E
+
+    SET C, [1+C]      ; address of the message queue
+    ADD I, C          ; address of the new entry
+
+    SET [I], A        ; Write message to the queue
+    SET [1+I], B
+
+    SUB I, C          ; Calculate the new pointer
+    ADD I, 2
+    AND I, 0x000E
+
+    SET C, POP
+
+    AND [C], 0xFF03   ; delete the pointers
+    IFE I, J          ; queue full?
+        BOR [C], 0x0002
+
+    SHL J, 4          ; "compress" the pointers
+    SHL I, 1
+    BOR I, J
+
+    BOR [C], I        ; write the pointers
+
+:msg_send_to_end
+    SET J, POP        ; Restore registers
+    SET I, POP
+    SET B, POP
+    SET A, POP
+    SET PC, POP
+
+; Gets the next message for the current process
+; A <- Source of the message
+; B <- Content of the message
+:msg_get_message
+    SET PUSH, X
+    SET PUSH, Z
+
+    JSR proc_id
+    JSR msg_find_proc_addr ; Finds the address of the process' message queue structure
+
+    IFE A, 0          ; There is no message queue for this process
+        SET PC, msg_get_message_end
+
+    SET Z, A
+
+    SET X, [Z]             ; SET X the flags
+    SHR X, 4               ; Calculate the read ptr
+    AND X, 0x000E
+    ADD X, [1+Z]
+
+    SET A, [X]             ; Reads the message
+    SET B, [1+X]
+    SET [X], 0x0000        ; Removes the message
+    SET [1+X], 0x0000
+
+    SUB X, [1+Z]           ; Calculate the new read pointer
+    ADD X, 2
+    AND X, 0x000E
+    SHL X, 4
+
+    AND [Z], 0xFF1D        ; Delete old read pointer and queue full flag
+    BOR [Z], X             ; Save the new read pointer
+
+:msg_get_message_end
+    SET Z, POP
+    SET X, POP
+    SET PC, POP
+
+; Finds the addr of the message queue of a given process in the message queue table
+; A -> process ID
+; A <- addr (or 0 if not exists)
+:msg_find_proc_addr
+    SET PUSH, B
+    SET PUSH, C
+
+    SET B, A
+    SHL B, 8
+    SET A, message_queue_table
+
+:msg_find_proc_addr_loop
+    SET C, [A]
+    AND C, 0xFF00
+    IFE C, B
+        SET PC, msg_find_proc_addr_end
+    ADD A, 2
+    IFN A, message_queue_table_end
+        SET PC, msg_find_proc_addr_loop
+
+    SET A, 0            ; Nothing found
+
+:msg_find_proc_addr_end
+    SET C, POP
+    SET B, POP
+    SET PC, POP
+
+
 
 ; Copies a string from a source to a destination
-; Takes:
-; A: source address
-; B: destination address
+; A -> source address
+; B -> destination address
 :strcpy
     SET PUSH, A
     SET PUSH, B
@@ -1618,20 +1829,15 @@ SET PC, POP
 
 :text_start dat "AtlasOS v0.5.4 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_logo1 DAT "      ___   __   __             "
-:text_logo2 DAT "     /   | / /_ / /____ ______  "
-:text_logo3 DAT "    / /| |/ __// // __ `/ ___/  "
-:text_logo4 DAT "   / ___ / /  / // /_/ (__  )   "
-:text_logo5 DAT "  /_/  |_\\_/ /_/ \\__,_/____/    "
-:text_logo6 DAT "         / __ \\/ ___/           "
-:text_logo7 DAT "        / / / /\\__ \\            "
-:text_logo8 DAT "       / /_/ /___/ /            "
-:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
-
-:mem_table
-       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
-
-:mem_table_end
+:text_logo1 DAT "      ___   __   __", 0xA0
+:text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
+:text_logo3 DAT "    / /| |/ __// // __ `/ ___/", 0xA0
+:text_logo4 DAT "   / ___ / /  / // /_/ (__  )", 0xA0
+:text_logo5 DAT "  /_/  |_\\_/ /_/ \\__,_/____/", 0xA0
+:text_logo6 DAT "         / __ \\/ ___/", 0xA0
+:text_logo7 DAT "        / / / /\\__ \\", 0xA0
+:text_logo8 DAT "       / /_/ /___/ /", 0xA0
+:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
 
 :page_map
 :page_map0 dat 0x0000
@@ -1639,7 +1845,7 @@ SET PC, POP
 :page_map2 dat 0x0000
 :page_map3 dat 0x0000
 
-:page_table
+:page_table              ; 128 words
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -1657,6 +1863,13 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :page_table_end
+
+:message_queue_table     ; 32 words
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+       dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:message_queue_table_end
 
 :proc_current dat 0x0001
 :proc_buffer dat 0x0000
