@@ -1938,38 +1938,57 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :entropy dat 0x0000
 
 :api_start ; API starts at 0x1000
-    SET PC, os_version		; Returns the version of AtlasOS
-    SET PC, proc_id 		; Returns the ID of the current process
-    SET PC, proc_suspend 	; Suspends the process and starts the next
-    SET PC, proc_get_addr 	; Returns the address of the current processes memory
-    SET PC, proc_get_flags 	; Returns the flags of the current process
-    SET PC, proc_kill_me 	; Kills the current process
-    SET PC, proc_kill 		; Kills a process
-    SET PC, page_alloc 		; Allocates another 1024 words
-    SET PC, page_free 		; Frees allocated memory
-    SET PC, mem_clear 		; Clears memory
-    SET PC, pusha 			; Pushes all registers to the stack
-    SET PC, popa 			; Pops all registers from the stack
-    SET PC, strcpy 			; Copies a string
-    SET PC, strncpy 		; Copies a string with length limitation
-    SET PC, text_out 		; Displays a text on the screen
-    SET PC, newline 		; Linefeed
-    SET PC, scroll 			; Scrolls the screen one line
-    SET PC, clear 			; Clears the screen
-    SET PC, char_put 		; Puts a char on the screen
-    SET PC, read_line 		; Reads a line from the keyboard to a buffer
-    SET PC, rand 			; Gets a random number
-    SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
-    SET PC, keyboard_unregister ; Unregisters a specific memory location
-    SET PC, int2dec 		; Converts a value into the decimal representation
-    SET PC, int2hex 		; Converts a value into the hexadecimal representation
-	SET PC, atoi 			; Converts a textual, decimal number into the actual integer value
-	SET PC, strlen 			; Returns the length of a null-terminated string
-	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
-	SET PC, page_check		; Returns the amount of free memory
-	SET PC, srand			; Initializes the random number generator
-	SET PC, proc_load		; Loads a new process
-	SET PC, proc_callback_list ; Dumps a list of running processes
+    dat os_version		; 0x1000 Returns the version of AtlasOS
+
+    dat proc_id 		; 0x1001 Returns the ID of the current process
+    dat proc_suspend 	        ; 0x1002 Suspends the process and starts the next
+    dat proc_get_addr 	        ; 0x1003 Returns the address of the current processes memory
+    dat proc_get_flags          ; 0x1004 Returns the flags of the current process
+    dat proc_kill_me 	        ; 0x1005 Kills the current process
+    dat proc_kill 		; 0x1006 Kills a process
+    dat proc_load		; 0x1007 Loads a new process
+    dat proc_exec               ; 0x1008 Loads a new ABI process
+    dat proc_callback_list      ; 0x1009 Dumps a list of running processes
+
+    dat msg_queue_reg           ; 0x100A Registers a new message queue
+    dat msg_queue_rem           ; 0x100B Removes a message queue
+    dat msg_broadcast           ; 0x100C Broadcasts a message
+    dat 0x0000                  ; 0x100D Not implemented yet: msg_send
+    dat msg_get_message         ; 0x100E Receives the nest message in the queue
+
+    dat page_alloc 		; 0x100F Allocates another 1024 words
+    dat page_free 		; 0x1010 Frees allocated memory
+    dat page_check		; 0x1011 Returns the amount of reserved memory
+    dat page_check_of           ; 0x1012 Returns the amount of reserved memory per process
+
+    dat mem_copy                ; 0x1013 Copies memory
+    dat mem_clear 		; 0x1014 Clears memory
+
+    dat pusha 			; 0x1015 Pushes all registers to the stack
+    dat popa 			; 0x1016 Pops all registers from the stack
+
+    dat strcpy 			; 0x1017 Copies a string
+    dat strncpy 		; 0x1018 Copies a string with length limitation
+    dat strlen 			; 0x1019 Returns the length of a null-terminated string
+    dat strcmp 			; 0x101A Compares two null-terminated strings to see if they're equal
+
+    dat int2dec 		; 0x101B Converts a value into the decimal representation
+    dat int2hex 		; 0x101C Converts a value into the hexadecimal representation
+    dat atoi 			; 0x101D Converts a textual, decimal number into the actual integer value
+
+    dat text_out 		; 0x101E Displays a text on the screen
+    dat newline 		; 0x101F Linefeed
+    dat scroll 			; 0x1020 Scrolls the screen one line
+    dat clear 			; 0x1021 Clears the screen
+    dat char_put 		; 0x1022 Puts a char on the screen
+    dat read_line 		; 0x1023 Reads a line from the keyboard to a buffer
+
+    dat rand 			; 0x1024 Gets a random number
+    dat srand			; 0x1025 Initializes the random number generator
+
+    dat keyboard_register       ; 0x1026 Registers a specific memory location as keyboard buffer
+    dat keyboard_unregister     ; 0x1027 Unregisters a specific memory location
+
 :api_end
 
 ; TODO: Need to find a way to pad the kernel up to 0x1400 dynamically
@@ -2008,7 +2027,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; BASH-like Process
 :AtlasShell
 	SET A, text_versionoutput
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 :AtlasShell_start
 	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
 	SUB I, AtlasShell_loop
@@ -2025,7 +2044,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Display the prompt
 	SET A, text_prompt
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 
 	; Reset the basics
 	SET [ack_command], 0 ; reset command recognized
@@ -2034,7 +2053,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, input_text_buffer
 	SET B, 32
 	SET C, input_buffer
-	JSR [AtlasShell_read_line]
+	JSR [0x1023]
 
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
@@ -2087,16 +2106,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR command_unknownf
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SUB PC, I
 :AtlasShell_loop_end
 
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET a, text_unrecognized
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET pc, pop
 
 ; Command function to display version info
@@ -2109,7 +2128,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
-	JSR [AtlasShell_mem_clear]
+	JSR [0x1014]
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -2128,15 +2147,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE C, 0
 		SET PC, command_versionf_os
 :command_versionf_shell
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, text_versionoutput
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
 :command_versionf_os
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	JSR command_os_version_display
 	SET C, POP
 	SET B, POP
@@ -2146,7 +2165,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; Command function to clear the screen
 :command_clearf
 	SET [ack_command], 1 ; acknowledge recognized command
-	JSR [AtlasShell_clear]
+	JSR [0x1021]
 	SET pc, pop
 
 ; Command function to load a new process
@@ -2197,7 +2216,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :command_loadf_loop_end
 	SET PUSH, A
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_parameter_buffer
 	JSR [AtlasShell_strlen]
 	SET A, POP
@@ -2220,22 +2239,22 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, command_loadf_end
 
 :command_loadf_help
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_load_help
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_loadf_end
 
 :command_loadf_list
 	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, application_table
 :command_loadf_list_loop
 	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
 		SET PC, command_loadf_end
 	IFG A, application_table_end ; if index is past end of the table, finish listing apps
 		SET PC, command_loadf_end
-	JSR [AtlasShell_text_out] ;print out app name
-	JSR [AtlasShell_newline]
+	JSR [0x101E] ;print out app name
+	JSR [0x101F]
 	; Get the length of the app name and move our pointer forward past that
 	JSR [AtlasShell_strlen]
 	ADD A, B
@@ -2244,15 +2263,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, command_loadf_list_loop ; loopback
 
 :command_loadf_unknown
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_load_unknown
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, POP
 
 ; Command function to kill a running process
@@ -2288,7 +2307,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Selfkill?
 	SET PUSH, A
-	JSR [AtlasShell_proc_id]
+	JSR [0x1001]
 	IFE A, C      ; Wants to kill me?
 		SET PC, AtlasShell_die
 	SET A, POP
@@ -2298,29 +2317,29 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, command_killf_forbidden
 
 	; Kill the corresponding process
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, C
-	JSR [AtlasShell_proc_kill]
+	JSR [0x1006]
 	SET PC, command_killf_end
 :command_killf_forbidden
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_kill_forbidden
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_killf_end
 :command_killf_last
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, [last_proc]
-	JSR [AtlasShell_proc_kill]
+	JSR [0x1006]
 	SET PC, command_killf_end
 :command_killf_help
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_kill_help
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 :command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, POP
 
 ; Command function to list process IDs
@@ -2345,9 +2364,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, command_listf_helper
 	JSR [AtlasShell_proc_callback_list]
 
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_list_info
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET A, 0 ; OS process
 	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
@@ -2383,16 +2402,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, command_number_buffer
 	JSR [AtlasShell_int2dec]
 	SET A, command_number_buffer
-	JSR [AtlasShell_text_out]
-	JSR [AtlasShell_newline]
+	JSR [0x101E]
+	JSR [0x101F]
 
 	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
 	JSR [AtlasShell_keyboard_unregister]
-	JSR [AtlasShell_newline]
-	JSR [AtlasShell_proc_kill_me]
+	JSR [0x101F]
+	JSR [0x1005]
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -2403,7 +2422,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, 0
 	SET C, 0
 	; A - main version, B - sub version, C - fix version
-	JSR [AtlasShell_os_version]
+	JSR [0x1000]
 	SET PUSH, C
 	SET PUSH, B
 	MUL A, 10000
@@ -2428,8 +2447,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	ADD A, 2
 	SET [A], [command_version_separator]
 	SET A, command_number_buffer
-	JSR [AtlasShell_text_out]
-	JSR [AtlasShell_newline]
+	JSR [0x101E]
+	JSR [0x101F]
 	SET PC, POP
 ; Clears the parameter buffer
 :command_clear_parameter_buffer
@@ -2437,7 +2456,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	SET A, command_parameter_buffer
 	SET B, 32
-	JSR [AtlasShell_mem_clear]
+	JSR [0x1014]
 	SET B, POP
 	SET A, POP
 	SET PC, POP
