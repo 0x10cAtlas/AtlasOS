@@ -42,7 +42,7 @@ SET A, 0x1000
 JSR page_reserve
 
 ;Reserve application memory
-SET A, apps
+SET A, 0
 :apps_mem
 IFG A, apps_end
     SET PC, apps_mem_end
@@ -54,7 +54,7 @@ SET PC, apps_mem
 :apps_mem_end
 
 ;Reserve virtual filesystem memory
-SET A, files
+SET A, 0
 :files_mem
 IFG A, files_end
     SET PC, files_mem_end
@@ -265,7 +265,7 @@ SET PC, stop
       SET Y, 0x8020 ; Set Y to the second line in the video memory
 
 :scroll_loop1
-      SET [X],   [Y]
+      SET [X], [Y]
       SET [1+X], [1+Y]
       SET [2+X], [2+Y]
       SET [3+X], [3+Y]
@@ -274,7 +274,7 @@ SET PC, stop
       ADD Y, 4
 
       IFN Y, 0x8180
-          SET PC, scroll_loop1
+      SET PC, scroll_loop1
 
 :scroll_loop2
       SET [X], [video_clear]
@@ -304,8 +304,9 @@ SET PC, stop
       SET [3+A], B
       ADD A, 4
 
-      IFN A, 0x8180
-          SET PC, clear_loop
+      IFE A, 0x8180
+          SET PC, clear_end
+      SET PC, clear_loop
 
 :clear_end
       SET [video_cur], [video_mem]
@@ -1079,7 +1080,7 @@ SET PC, stop
       SET PUSH, Z
 
       IFE [A], 0x4714  ; Check for magic number
-          SET PC, proc_exec     ; No flat binary, call advanced loader
+          JSR proc_exec     ; No flat binary, call advanced loader
 
 
       SET X, proc_table
@@ -1198,48 +1199,53 @@ SET PC, stop
 	ADD A, 1
 	SET J, [A] ; Save the length of the code+data
 	ADD A, 1
-	SET C, [A] ; Do nothing with the flags data
+	SET C, [A] ; Save the flags data
 	
-	IFE I, 5 ; Check if we have a short header
-		SET PC, proc_exec_check_errors
+	AND C, 0x0001 ; Check if the app has an ART
+	IFE C, 1
+		JSR proc_exec_process_relocation
+	
+	SET PC, proc_exec_check_errors
 :proc_exec_process_relocation
+	; Check if the header length isn't enough to contain the ART with at least 1 entry
+	IFG 7, I
+		SET PC, proc_load_error ; We throw an error because the flags said there should be an ART
+
 	ADD A, 1
 	SET C, [A] ; Get the number of entries in the relocaton table
-	ADD A, C ; Skip over relocaton table data
-	SET PUSH, A
-	SUB A, B
-	IFE A, I ; Check if we're at the end of the header
-		SET PC, proc_exec_check_errors
-	SET A, POP
-:proc_exec_process_library
-	ADD A, 1
-	SET C, [A]
-	ADD A, C ; Skip over library table data
+:proc_exec_process_relocation_loop
+	IFE C, 0
+		SET PC, POP
+	SET PUSH, B
+	SET PUSH, X
+	ADD B, I ; Offset our pointer by the length of the header. This puts us at the start of the program code
+	SET X, B ; Store the program start location
+	ADD A, 1 ; Increment to next entry in ART
+	ADD B, [A] ; Add the ART offset to our pointer
+	ADD [B], X ; Add the program start location to the program code
+	SUB C, 1 ; Decrement our ART counter
+	SET X, POP
+	SET B, POP
+	SET PC, proc_exec_process_relocation_loop
 :proc_exec_check_errors
 	ADD A, 1 ; Move A to the start of the code
-	
-	; Check that the header length is correct
-	SET C, B
-	ADD C, I ; Add the header length onto 
-	IFN A, C
-		SET PC, proc_load_error
 
 	; Check that the calculated total size is what we got from the function call
 	ADD I, J
 	IFN I, X
 		SET PC, proc_load_error
-		
+	SUB I, J
+:proc_exec_prepare_pointers
 	; Start loading the app
 	; Must have code start in A, and length in B
 	SET A, B
 	ADD A, I
 	SET B, J ; Copy code length that we got from header
-	SET X, proc_table
 	
 	SET J, POP
 	SET I, POP
 	
-	SET PC, proc_load_loop
+	SET PC, POP
 	
 	
 ; Kill self
@@ -1620,7 +1626,7 @@ SET PC, stop
 
 ; Copies a string from a source to a destination
 ; A -> source address
-; B -> destination address
+; B -> destination address:strcpy
 :strcpy
     SET PUSH, A
     SET PUSH, B
@@ -1836,7 +1842,7 @@ SET PC, POP
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
-:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
+:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
 
 :page_map
 :page_map0 dat 0x0000
@@ -1971,6 +1977,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, proc_callback_list ; Dumps a list of running processes
 :api_end
 
+; API Padding. This is temporary to buffer the kernel so that the API space doesn't overwrite program code
 ; TODO: Need to find a way to pad the kernel up to 0x1400 dynamically
 ; 2750 words
 :api_padding
@@ -2698,26 +2705,16 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app02_end
 
 :hello ; beginning of application
-	SET I, hello_loop_end
-	SUB I, hello_loop
-
-	SET J, 2
-:hello_loop ; beginning of application loop
-	SUB J, 1    ; check if application loop should end
-	IFE J, 0
-		JSR [hello_proc_kill_me]
-
 	SET A, hello_world
 	JSR [hello_text_out]
-
 	JSR [hello_proc_suspend]
-	SUB PC, I
-:hello_loop_end
-	:hello_world dat "Hello World", 0xA0, 0
+	JSR [hello_proc_kill_me]
+
+	:hello_world dat "Hello World", 0xA0, 0x00
 	; API Jump table
-	:hello_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
 	:hello_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
 	:hello_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+	:hello_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
 :hello_end
 
 :free
@@ -2789,12 +2786,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :file02 ; AtlasOS ABI-compliant version of HelloWorld
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
-	dat 0x0005 ; Length of header
-	dat 0x0020 ; Length of the code and data
-	dat 0x000A ; Flags
+	dat 0x000A ; Length of header (5 base + 5 for ART)
+	dat 0x0018 ; Length of the code and data
+	dat 0x000B ; Flags 00000000 00001011
+	dat 0x0004 ; ART length
+	dat 0x0001, 0x0003, 0x0005, 0x0007 ; ART entries
 	; Compiled binary data
-	dat 0x7c61, 0x0010, 0x7c63, 0x0005, 0x8871, 0x8473, 0x807c, 0x7810, 0x001f, 0x7c01, 0x0010, 0x7810, 0x001d, 0x7810, 0x001e, 0x19c3
-	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000, 0x101c, 0x1004, 0x100a
+	dat 0x7C01, 0x0008, 0x7810, 0x0017, 0x7810, 0x0015, 0x7810, 0x0016
+	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000, 0x1004, 0x100A, 0x101C
 :file02_end
 
 
