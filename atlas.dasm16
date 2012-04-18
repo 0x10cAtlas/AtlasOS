@@ -42,7 +42,7 @@ SET A, 0x1000
 JSR page_reserve
 
 ;Reserve application memory
-SET A, 0
+SET A, apps
 :apps_mem
 IFG A, apps_end
     SET PC, apps_mem_end
@@ -54,7 +54,7 @@ SET PC, apps_mem
 :apps_mem_end
 
 ;Reserve virtual filesystem memory
-SET A, 0
+SET A, files
 :files_mem
 IFG A, files_end
     SET PC, files_mem_end
@@ -274,7 +274,7 @@ SET PC, stop
       ADD Y, 4
 
       IFN Y, 0x8180
-      SET PC, scroll_loop1
+		SET PC, scroll_loop1
 
 :scroll_loop2
       SET [X], [video_clear]
@@ -304,9 +304,8 @@ SET PC, stop
       SET [3+A], B
       ADD A, 4
 
-      IFE A, 0x8180
-          SET PC, clear_end
-      SET PC, clear_loop
+      IFN A, 0x8180
+          SET PC, clear_loop
 
 :clear_end
       SET [video_cur], [video_mem]
