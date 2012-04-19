@@ -2101,6 +2101,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE c, O
 	JSR command_lsf
 
+	;Check for 'cd' command
+	SET a, command_cd
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
+	JSR command_cdf
+
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
 	JSR command_unknownf
@@ -2413,6 +2420,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	SET PUSH, B
 
+	JSR command_clear_parameter_buffer
+
 	JSR [AtlasShell_newline]
 
 	SET A, [current_directory]
@@ -2431,13 +2440,119 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [AtlasShell_strlen]
 	ADD A, B
 	ADD A, 3 ; skip past null terminater, file start, file end
-	IFE A, 0xffff
-		SET PC, command_lsf_end
 	SET PC, command_lsf_loop
 
 :command_lsf_end
 	SET B, POP
 	SET A, POP
+	JSR [AtlasShell_proc_suspend]
+	SET PC, POP
+
+:command_cdf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	JSR [AtlasShell_newline]
+
+	;check if 'cd'
+	SET A, command_parameter_buffer
+	SET B, command_cd
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_help
+
+	; check if blank > load help
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_cdf_help
+
+	;check if '..'
+	SET A, command_parameter_buffer
+	SET B, command_cd_back
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_back
+
+	;check if '/'
+	SET A, command_parameter_buffer
+	SET B, command_cd_root
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_root
+
+	SET A, [current_directory]
+	; Get the length of the folder name and move our pointer forward past that
+	JSR [AtlasShell_strlen]
+	ADD A, B
+	ADD A, 1 ; skip past null terminater
+:command_cdf_loop
+	IFE [A], 0xffff ;magic number end of directory
+		SET PC, command_cdf_unknown
+	ADD A, 1
+	IFE [A], 1
+		SET PC, command_cdf_skip_file
+	ADD A, 2
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp] ; compare table strings
+	IFE C, 0
+		SET PC, command_cdf_cd ; if equal change directory
+	JSR [AtlasShell_strlen] ; Get the length of the folder name and move our pointer forward past that
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_cdf_loop
+
+:command_cdf_skip_file
+	ADD A, 1
+	JSR [AtlasShell_strlen] ; Get the length of the folder name and move our pointer forward past that
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_cdf_loop
+
+:command_cdf_help
+	SET A, command_cd_help
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_back
+	SET [current_directory], [old_directory]
+	SET PC, command_cdf_end
+
+:command_cdf_root
+	SET [old_directory], files_table
+	SET [current_directory], files_table
+	SET PC, command_cdf_end
+
+
+:command_cdf_unknown
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_text_out]
+	SET A, command_cd_unknown
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_cd
+	JSR [AtlasShell_strlen] ; Get the length of the folder name and move our pointer forward past that
+	ADD A, B
+	ADD A, 1
+	SET [old_directory], [current_directory]
+	SET [current_directory], [A]
+
+:command_cdf_end
+	JSR command_clear_parameter_buffer
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [AtlasShell_proc_suspend]
 	SET PC, POP
 
 :AtlasShell_die
@@ -2566,9 +2681,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_list dat "list", 0
 :command_list_info dat "Process list:", 0xA0, 0x00
 :command_ls dat "ls", 0
+:command_cd dat "cd", 0
+:command_cd_back dat "..", 0
+:command_cd_root dat "/", 0
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
+:command_cd_unknown dat " doesn't exist", 0xA0, 0
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
 :current_directory dat 0x0000
+:old_directory dat 0x0000
 
 ; API Jump table
 :AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
@@ -2823,6 +2944,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "root", 0
 	dat 0x0001, 0x0001, 0x0003, "file01", 0, file01, file01_end
 	dat 0x0002, 0x0001, 0x0001, "hello_world", 0, file02, file02_end
+	dat 0x0003, 0x0000, 0x0001, "folder", 0, folder, folder_end
 	dat 0xffff
 :files_table_end
 
@@ -2847,7 +2969,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000, 0x1004, 0x100A, 0x101C
 :file02_end
 
-
+:folder
+	dat "folder", 0
+	dat 0x0001, 0x0001, 0x0003, "file01", 0, file01, file01_end
+	dat 0x0002, 0x0001, 0x0001, "hello_world", 0, file02, file02_end
+	dat 0xffff
+:folder_end
 
 
 
