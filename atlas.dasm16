@@ -656,6 +656,29 @@ SET PC, stop
 :page_alloc_error
       SET A, 0
       SET PC, page_alloc_end
+	
+; Variation of page_alloc that is used for proc_exec to pre-allocate memory space for a new process
+:proc_exec_page_alloc
+	SET PUSH, B
+
+	JSR page_find_free
+	IFE A, 0
+		SET PC, page_alloc_error
+
+	SET PUSH, A
+
+	; B is passed in as the procID to associate this page
+	; Therefore we don't call JSR proc_id
+	SET A, PEEK
+
+	JSR page_combine
+	JSR page_add
+	IFE A, 0
+		SET PC, page_alloc_error2
+
+	SET A, POP
+	MUL A, 1024
+	SET PC, page_alloc_end
 
 ; Frees the given page for the current application
 ; A: memory
@@ -1077,11 +1100,13 @@ SET PC, stop
       SET PUSH, X
       SET PUSH, Y
       SET PUSH, Z
+	  
+	  SET C, 0 ; Clear this out in case proc_exec is triggered because C will contain flag info
 
       IFE [A], 0x4714  ; Check for magic number
-          JSR proc_exec     ; No flat binary, call advanced loader
+          SET PC, proc_exec     ; No flat binary, call advanced loader
 
-
+:proc_load_start
       SET X, proc_table
 
 :proc_load_loop
@@ -1104,77 +1129,86 @@ SET PC, stop
       SET PC, POP
 
 :proc_load_to
-      ; Calculate the ProcID
-      SET [X], X
-      SUB [X], proc_table
-      DIV [X], 12
-      ADD [X], 1
+	; Calculate the ProcID
+	SET [X], X
+	SUB [X], proc_table
+	DIV [X], 12
+	ADD [X], 1
 
-      ; X = ProcInfo Addr
+	; Check if we have any flags to deal with
+	IFN C, 0
+		JSR proc_handle_flags
+		
+	SET PUSH, C
 
-      ; Finaly load the Process
-      SET C, B
-      SET Y, A
+	; X = ProcInfo Addr
 
-      SET Z, [proc_current]   ; Fake the process ID
-      SET [proc_current], [X]
+	; Finaly load the Process
+	SET C, B
+	SET Y, A
 
-      JSR page_alloc
+	SET Z, [proc_current]   ; Fake the process ID
+	SET [proc_current], [X]
 
-      SET [proc_current], z
+	JSR page_alloc
 
-      IFE A, 0
-          SET PC, proc_load_error
+	SET [proc_current], z
 
-      SET B, A
-      SET A, Y
-      JSR mem_copy
+	IFE A, 0
+		SET PC, proc_load_error
 
-      SET A, [X] ; A return the ProcID
+	SET B, A
+	SET A, Y
+	JSR mem_copy
+	
+	SET C, POP
 
-      ADD X, 1 ; A
-      SET [X], 0
-      ADD X, 1 ; B
-      SET [X], 0
-      ADD X, 1 ; C
-      SET [X], 0
-      ADD X, 1 ; X
-      SET [X], 0
-      ADD X, 1 ; Y
-      SET [X], 0
-      ADD X, 1 ; Z
-      SET [X], 0
-      ADD X, 1 ; I
-      SET [X], 0
-      ADD X, 1 ; J
-      SET [X], 0
-      ADD X, 1 ; SP
-      SET [X], B
-      ADD [X], 1023
-      SET Y, [X] ; Save stack address
-      ADD X, 1
-      SET [X], B
-      ADD X, 1 ; Flags
-      SET [X], 0x0001
+	SET A, [X] ; A return the ProcID
 
-      SET [Y], B ; "Push" the "return" address on the stack
+	ADD X, 1 ; A
+	SET [X], 0
+	ADD X, 1 ; B
+	SET [X], 0
+	ADD X, 1 ; C
+	SET [X], 0
+	ADD X, 1 ; X
+	SET [X], 0
+	ADD X, 1 ; Y
+	SET [X], 0
+	ADD X, 1 ; Z
+	SET [X], 0
+	ADD X, 1 ; I
+	SET [X], 0
+	ADD X, 1 ; J
+	SET [X], 0
+	ADD X, 1 ; SP
+	SET [X], B
+	ADD [X], 1023
+	SET Y, [X] ; Save stack address
+	ADD X, 1
+	SET [X], B
+	ADD X, 1 ; Flags
+	BOR C, 0x0001 ; OR in the active flag. This will overwrite the ART flag but we don't care
+	SET [X], C
 
-      SET PC, proc_load_end
+	SET [Y], B ; "Push" the "return" address on the stack
 
+	SET PC, proc_load_end
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+:proc_handle_flags
+	SET PUSH, A
+	SET PUSH, B
+	
+	; If bit 1 is true then backup the character set data
+	SET A, 0 ; Param for manage_charset to save charset data
+	SET B, C
+	AND B, 0x0002
+	IFE B, 1
+		JSR manage_charset
+		
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 
 
@@ -1185,8 +1219,14 @@ SET PC, stop
 	IFN [A], 0x4714     ; seems to be a flat binary, call legacy loader
 		SET PC, proc_load
 
+	SET PUSH, X
 	SET PUSH, I
 	SET PUSH, J
+	
+	; Allocate pages of memory and copy the program to the new memory
+	; This is important because we don't want to modify the original
+	; As the original may be read-only or not in RAM
+	JSR proc_exec_prealloc_pages
 
 	SET X, B ; Store the given length for error checking
 	SET B, A ; Store the start point for error checking in a bit as the ABI format determines the BLOB length
@@ -1198,13 +1238,31 @@ SET PC, stop
 	ADD A, 1
 	SET J, [A] ; Save the length of the code+data
 	ADD A, 1
-	SET C, [A] ; Save the flags data
+	SET Y, [A] ; Save the flags data
 	
+	SET C, Y
 	AND C, 0x0001 ; Check if the app has an ART
 	IFE C, 1
 		JSR proc_exec_process_relocation
+:proc_exec_check_errors
+	; Check that the calculated total size is what we got from the function call
+	ADD I, J
+	IFN I, X
+		SET PC, proc_load_error
+	SUB I, J ; Clean up I, takes less time than PUSH and POP
+:proc_exec_prepare_pointers
+	; Start loading the app
+	; Must have code start in A, and length in B
+	SET A, B
+	ADD A, I
+	SET B, J ; Copy code length that we got from header
+	SET C, Y ; Save the flags
 	
-	SET PC, proc_exec_check_errors
+	SET J, POP
+	SET I, POP
+	SET X, POP
+	
+	SET PC, proc_load_start
 :proc_exec_process_relocation
 	; Check if the header length isn't enough to contain the ART with at least 1 entry
 	IFG 7, I
@@ -1226,46 +1284,77 @@ SET PC, stop
 	SET X, POP
 	SET B, POP
 	SET PC, proc_exec_process_relocation_loop
-:proc_exec_check_errors
-	ADD A, 1 ; Move A to the start of the code
+	
+:proc_exec_prealloc_pages
+	SET PUSH, X
+	SET PUSH, A ; Contains start of blob
+	SET PUSH, B ; Contains blob size
 
-	; Check that the calculated total size is what we got from the function call
-	ADD I, J
-	IFN I, X
-		SET PC, proc_load_error
-	SUB I, J
-:proc_exec_prepare_pointers
-	; Start loading the app
-	; Must have code start in A, and length in B
-	SET A, B
-	ADD A, I
-	SET B, J ; Copy code length that we got from header
+	SET X, B ; Backup the blob size
+	SET B, proc_table
+
+:proc_exec_precalc_procid_loop
+	IFE [B], 0x0000
+		SET PC, proc_exec_precalc_procid_end
+
+	ADD B, 12
+	IFN B, proc_table_end
+		SET PC, proc_exec_precalc_procid_loop
+:proc_exec_precalc_procid_end
+	; Calculate the ProcID
+	SUB B, proc_table
+	DIV B, 12
+	ADD B, 1
 	
-	SET J, POP
-	SET I, POP
+	JSR proc_exec_page_alloc ; Allocate a page to the proposed proc ID
+	SET PUSH, A
+	SET PUSH, X
+:proc_exec_prealloc_pages_add
+	IFG 1024, X ; Check if our blob is too big to fit in one page
+		SET PC, proc_exec_prealloc_pages_add_done
+	JSR proc_exec_page_alloc ; Allocate a page to the proposed proc ID
+	SUB X, 1024
+	SET PC, proc_exec_prealloc_pages_add
+:proc_exec_prealloc_pages_add_done
+	SET X, POP
+	SET A, POP
+	SET C, POP ; Set the length for the copy
+	SET B, A ; Set the destination at the start of the new page
+	SET A, POP ; Set the source
+	JSR mem_copy ; Copy the program to the new allocated memory
 	
+	SET A, B ; Set A to the new start location in the new memory
+	SET B, X ; Set B back to the blob size we stored in X
+:proc_exec_prealloc_pages_end
+	SET X, POP
 	SET PC, POP
 	
 	
 ; Kill self
 :proc_kill_me
-      JSR proc_id ; Save process ID
-      SET X, A
-      JSR proc_get_info_of ; Save process info address
-      SET Y, A
-      ADD A, 10 ; Save memory page
-      SET Z, [A]
+	JSR proc_id ; Save process ID
+	SET X, A
+	JSR proc_get_info_of ; Save process info address
+	SET Y, A
+	ADD A, 10 ; Save memory page
+	SET Z, [A]
 
-      SET A, Y ; Delete the process info entry
-      SET B, 12
-      JSR mem_clear
+	ADD A, 1 ; Move to the flags word
+	SET A, [A] ; And retrieve the process flags
+	AND A, 0x0002 ; Check if this was a foreground app
+	IFE A, 1 ; Restore the character set. Since A is already 1 (restore charset) no need for extra ops here
+		JSR manage_charset
 
-      SET A, X
-      JSR page_free_of
+	SET A, Y ; Delete the process info entry
+	SET B, 12
+	JSR mem_clear
 
-      SET A, Y ; Restore the pointer to the info entry
-      SET C, 12
-      SET PC, proc_kill_me_hook
+	SET A, X
+	JSR page_free_of
+
+	SET A, Y ; Restore the pointer to the info entry
+	SET C, 12
+	SET PC, proc_kill_me_hook
 
 :proc_kill
       SET PUSH, B
@@ -1325,6 +1414,33 @@ SET PC, stop
      SET PC, [pushpop_buffer] ; jump back
 
 :pushpop_buffer dat 0x0000
+
+; Charset functions
+; Takes:
+; A: 0 to save charset, 1 to restore charset
+:manage_charset
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
+	SET A, char_set
+	SET B, 0x8180
+:manage_charset_loop
+	IFE A, char_set_end
+		SET PC, manage_charset_end
+	IFE C, 0
+		SET [A], [B]
+	IFG C, 0
+		SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, manage_charset_loop
+:manage_charset_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
 
 ; Driver functions
 
@@ -1815,6 +1931,65 @@ SET PC, POP
 	XOR A, 1273
 	SET [entropy], A
 	SET PC, POP
+	
+; ########################################
+
+; FILESYSTEM FUNCTIONS
+	
+; Return start of the filesystem
+:filesystem_getfile_table
+	SET A, files_table
+	SET PC, POP
+	
+; Sets the present working directory
+:filesystem_setpwd
+	SET [present_working_directory], A
+	SET PC, POP
+	
+; Returns the present working directory ID
+:filesystem_getpwd
+	SET A, [present_working_directory]
+	SET PC, POP
+	
+; Returns pointer to start of file entry in file table in C, returns 0 if file not found
+; A: buffer containing file name
+:filesystem_getfile
+	SET PUSH, X
+	SET PUSH, B
+	SET PUSH, A
+	
+	SET B, A
+	
+	JSR filesystem_getfile_table
+	SET X, [A] ; Get the number of files in the table
+	ADD A, 1 ; Jump down to the start of the table
+:filesystem_getfile_loop
+	SET C, 0 ; Reset our return
+	IFE X, 0 ; Check if we've gone through all of the files
+		SET PC, filesystem_getfile_end
+	SUB X, 1
+	
+	ADD A, 2 ; Skip over the directory ID and flags
+	JSR strcmp ; Check if the current filename (A) matches the original filename (B)
+	IFE C, 0
+		SET PC, filesystem_getfile_found
+	ADD A, 18 ; Skip over the filename, start, and end
+	
+	SET PC, filesystem_getfile_loop
+:filesystem_getfile_found
+	SUB A, 2 ; Backs up the pointer to the start of the file entry
+	SET C, A ; Sets C to the start of the entry
+
+	;JSR newline ; DEBUG
+	;SET A, text_start_ok ; DEBUG
+	;JSR text_out ; DEBUG
+:filesystem_getfile_end
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
+	
+; ########################################
 
 ; Halts the CPU
 :stop SET PC, stop
@@ -1841,7 +2016,7 @@ SET PC, POP
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
-:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
+:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
 
 :page_map
 :page_map0 dat 0x0000
@@ -1925,19 +2100,47 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table_end
 
+; Keyboard driver variables
 :keyboard_buffers
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_end
 :keyboard_buffers_flags
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_flags_end
-:keyboard_buffers_exclusive dat 0x0000
+:keyboard_buffers_exclusive dat 0x0000 ; Contains buffer mem loc that has exclusive access
 :keyboard_oldvalue dat 0x0000
-:keypointer dat 0x0000
 
+; Filesystem variables
+:present_working_directory dat 0x0000
+
+; Kernel watchdog variables
 :kernel_watchdog_proc_list_buffer
 	dat 0x0000, 0x0000
 :kernel_watchdog_proc_list_buffer_end
+
+; This is used to buffer the character set before a foreground application is loaded
+; and to restore it after the app has closed
+; This will allow foreground applications to alter the character set without impacting
+; applications that will run after the foreground app has closed
+:char_set
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:char_set_end
+:screen_buffer_exclusive dat 0x0000
 
 :entropy dat 0x0000
 
@@ -1974,34 +2177,34 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, srand			; Initializes the random number generator
 	SET PC, proc_load		; Loads a new process
 	SET PC, proc_callback_list ; Dumps a list of running processes
+	SET PC, keyboard_is_exclusive_active ; Set A to non-zero if there is an exclusive keyboard buffer active
+	SET PC, filesystem_getfile ; Returns the start of the filesystem in A
+	SET PC, filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
 :api_end
 
 ; API Padding. This is temporary to buffer the kernel so that the API space doesn't overwrite program code
 ; TODO: Need to find a way to pad the kernel up to 0x1400 dynamically
-; 2750 words
+; 2560 words
 :api_padding
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                              "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "          "
 
 :kernel_end
 ; ################################
@@ -2024,7 +2227,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
-	JSR keyboard_is_exclusive_active
+	JSR [AtlasShell_keyboard_is_exclusive_active]
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 
@@ -2086,6 +2289,17 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [AtlasShell_strcmp]
 	IFE c, 0
 	JSR command_listf
+	
+	; Check for the 'ls' command
+	SET A, command_ls
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_lsf
+		
+	; Check if we're trying to run a file
+	IFN [ack_command], 1
+		JSR command_runfile
 
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
@@ -2392,6 +2606,156 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [AtlasShell_newline]
 
 	SET PC, POP
+	
+; Command to list all files in current directory
+:command_lsf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	JSR [AtlasShell_newline]
+	JSR [AtlasShell_filesystem_getfile_table]
+	SET X, [A]
+	SET Y, 0
+	ADD A, 1
+:command_lsf_loop
+	IFE Y, X
+		SET PC, command_lsf_end
+	ADD Y, 1
+	SET B, command_ls_row
+
+	;SET C, [A] ; Ignore the directory value for now, will be finished later
+	
+	ADD A, 1 ; Move on to flags
+	
+	; Check if the file is hidden
+	SET C, [A]
+	AND C, 0x0004
+	IFE C, 4
+		SET [B], 0x48 ; 'H'
+
+	; Store if this is a directory
+	SET C, [A]
+	AND C, 0x0010
+	IFE C, 16
+		SET [B], 0x44 ; 'D'
+	ADD B, 1
+	
+	; Store if this file can be read
+	SET C, [A]
+	AND C, 0x0001
+	IFE C, 1
+		SET [B], 0x52 ; 'R'
+	ADD B, 1
+	
+	; Store if this file can be written to
+	SET C, [A]
+	AND C, 0x0002
+	IFE C, 2
+		SET [B], 0x57 ; 'W'
+	ADD B, 1
+	
+	; Store if this file is executable
+	SET C, [A]
+	AND C, 0x0008
+	IFE C, 8
+		SET [B], 0x45 ; 'E'
+	ADD B, 1
+	
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	ADD A, 1
+	
+	; Store the file name
+	JSR [AtlasShell_strcpy]
+	ADD B, 16
+	ADD A, 16
+	
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	;ADD A, 1
+	
+	; Display file size
+	SET C, [A] ; Get the file start
+	ADD A, 1
+	SET PUSH, A
+	SET A, [A]
+	SUB A, C
+	JSR [AtlasShell_int2dec]
+	SET A, POP
+	
+	; Output the file info
+	SET C, A
+	SET A, command_ls_row
+	JSR [AtlasShell_text_out]
+	SET A, C
+	
+	; Clear out the row buffer
+	SET C, command_ls_row
+	ADD C, 32
+	SET B, command_ls_row
+:command_lsf_clearrow
+	SET [B], 0x20
+	ADD B, 1
+	IFN B, C
+		SET PC, command_lsf_clearrow
+	
+	; Move on to the next entry
+	ADD A, 1
+	SET PC, command_lsf_loop
+:command_lsf_end
+	;JSR [AtlasShell_proc_suspend]
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+:command_runfile
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR [AtlasShell_newline]
+
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_filesystem_getfile]
+	IFE C, 0
+		SET PC, command_runfile_end
+		
+	;SET A, [C] ; Skip over the directory ID, will finish later
+	
+	ADD C, 1
+	SET A, [C] ; Get the file flags
+	AND A, 0x0008 ; Check if the file is executable
+	IFE A, 0
+		SET PC, command_runfile_notexe
+		
+	ADD C, 1
+	
+	ADD C, 16
+	SET A, [C]
+	ADD C, 1
+	SET B, [C]
+	SUB B, A
+	JSR [AtlasShell_proc_load]
+	IFN A, 0
+		SET [ack_command], 1
+	SET PC, command_runfile_end
+:command_runfile_notexe
+	SET A, command_runfile_notexe_text
+	JSR [AtlasShell_text_out]
+	SET [ack_command], 1
+:command_runfile_end	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
@@ -2520,6 +2884,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_list_info dat "Process list:", 0xA0, 0x00
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
+:command_ls dat "ls", 0
+:command_ls_row dat "                                ", 0x00
+:command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
 
 ; API Jump table
 :AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
@@ -2528,6 +2895,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
 :AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
 :AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
+:AtlasShell_strcpy dat 0x1018 ; 12th index in API * 2 words long = 0x18, strcpy
 :AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
 :AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
 :AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
@@ -2540,6 +2908,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_strcmp dat 0x1036 ; 27th index in API * 2 words long = 0x36, strcmp
 :AtlasShell_proc_load dat 0x103C ; 30th index in API * 2 words long = 0x3C, proc_load
 :AtlasShell_proc_callback_list dat 0x103E ; 31st index in API * 2 words long = 0x3E, proc_callback_list
+:AtlasShell_keyboard_is_exclusive_active dat 0x1040 ; 32nd index in API * 2 words long = 0x40, keyboard_is_exclusive_active
+:AtlasShell_filesystem_getfile dat 0x1042 ; 33rd index in API * words long = 0x42, filesystem_getfile
+:AtlasShell_filesystem_getfile_table dat 0x1044 ; 34th index in API * 2 words long = 0x44, filesystem_getfile_table
 
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -2560,7 +2931,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :app4 dat "free", 0, free, free_end
 :app5 dat "AtlasText", 0, AtlasText, AtlasText_end
 :app6 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
-:app7 dat "ABI", 0, file02, file02_end
 :application_table_end
 
 :AtlasShell_end
@@ -2657,7 +3027,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	MUL B, 32
 	ADD B, A
-	ADD B, [video_mem]
+	ADD B, 0x8000
 	SET Z, [B]
 	SET B, POP
 
@@ -2743,35 +3113,20 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 :apps_end
 
 :files
 
 ; Primary file table
-; Entry type is 0 for folder, 1 for file
-; Access flags: 00 - no access, 01 - read, 10 - write, 11 - read+write
-; index, type, access, name, null terminator, start, end
+; Flags: Bit 0 - read, Bit 1 - write, Bit 2 - hidden, Bit 3 - executable, Bit 4 - directory
+; Each entry must be 20 words long
+; directory ID, flags, name, null terminator, padding, start, end
 :files_table
-	dat 0x0001, 0x0001, 0x0003, "file01", 0, file01, file01_end
-	dat 0x0002, 0x0001, 0x0001, "hello_world", 0, file02, file02_end
+	dat 0x0004 ; Number of files in table
+	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
+	dat 0x0001, 0x0009, "hello_world", 0, "    ", file02, file02_end
+	dat 0x0001, 0x0009, "free_mem", 0, "       ", file03, file03_end
+	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
 :files_table_end
 
 ; Basic flat text file
@@ -2781,8 +3136,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "Termination", 0x00
 :file01_end
 
-; Executable file
-:file02 ; AtlasOS ABI-compliant version of HelloWorld
+; HelloWorld
+; Description: Displays 
+:file02 ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x000A ; Length of header (5 base + 5 for ART)
@@ -2790,12 +3146,34 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x000B ; Flags 00000000 00001011
 	dat 0x0004 ; ART length
 	dat 0x0001, 0x0003, 0x0005, 0x0007 ; ART entries
-	; Compiled binary data
+	; Code
 	dat 0x7C01, 0x0008, 0x7810, 0x0017, 0x7810, 0x0015, 0x7810, 0x0016
+	; Data
 	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000, 0x1004, 0x100A, 0x101C
 :file02_end
 
+; Free
+; Description: Displays the amount of free memory in RAM
+:file03 ; AtlasOS ABI-compliant executable file
+	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
+	dat 0x0001 ; Revision 1 of the ABI
+	dat 0x000F ; Length of header (5 base + 10 for ART)
+	dat 0x003A ; Length of the code and data
+	dat 0x000B ; Flags 00000000 00001011
+	dat 0x0009 ; ART length
+	dat 0x0001, 0x0007, 0x0009, 0x000B, 0x0010, 0x0012, 0x0014, 0x0016, 0x0018 ; ART entries
+	; Code
+	dat 0x7810, 0x0039, 0x7c31, 0xffff, 0x0033, 0x0c01, 0x7c11, 0x0019, 0x7810, 0x0037, 0x7c11, 0x002b, 0x7c05, 0x0400, 0x8407, 0x7810
+	dat 0x0037, 0x7c01, 0x0019, 0x7810, 0x0036, 0x7c01, 0x0019, 0x7810, 0x0038
+	; Data
+	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0077, 0x006f, 0x0072, 0x0064, 0x0073, 0x0020, 0x0066, 0x0072, 0x0065, 0x0065, 0x0020, 0x0028
+	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x004b, 0x0042, 0x0029, 0x00a0, 0x0000
+	dat 0x101c, 0x102e, 0x100a, 0x1038
+:file03_end
 
+:file04
+	dat "I am hidden, muahaha!", 0x00
+:file04_end
 
 
 
