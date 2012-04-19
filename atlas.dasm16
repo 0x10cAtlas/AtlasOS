@@ -83,6 +83,9 @@ SET [keyboard_buffers_exclusive], 0
 SET [keyboard_oldvalue], 0
 JSR keyboard_unregister_all
 
+;Set a few things to start with
+SET [current_directory], files_table
+SET [old_directory], files_table
 ; The kernel constantly polls the keyboard.
 :kernel_loop
 
@@ -2028,6 +2031,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 
+	;Place current directory in front of prompt
+	SET A, [current_directory]
+	JSR [AtlasShell_text_out]
+
 	; Display the prompt
 	SET A, text_prompt
 	JSR [AtlasShell_text_out]
@@ -2086,6 +2093,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [AtlasShell_strcmp]
 	IFE c, 0
 	JSR command_listf
+
+	;Check for the 'ls' command
+	SET a, command_ls
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, O
+	JSR command_lsf
 
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
@@ -2393,6 +2407,39 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	SET PC, POP
 
+;Command to list files and folders
+:command_lsf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+
+	JSR [AtlasShell_newline]
+
+	SET A, [current_directory]
+
+	; Get the length of the folder name and move our pointer forward past that
+	JSR [AtlasShell_strlen]
+	ADD A, B
+	ADD A, 1 ; skip past null terminater
+:command_lsf_loop
+	IFE [A], 0xffff ; simple magic number saying we are at the end of the directory table
+		SET PC, command_lsf_end
+	ADD A, 3
+	JSR [AtlasShell_text_out]
+	JSR [AtlasShell_newline]
+	; Get the length of the file/folder name and move our pointer forward past that
+	JSR [AtlasShell_strlen]
+	ADD A, B
+	ADD A, 3 ; skip past null terminater, file start, file end
+	IFE A, 0xffff
+		SET PC, command_lsf_end
+	SET PC, command_lsf_loop
+
+:command_lsf_end
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
 :AtlasShell_die
 	SET A, input_buffer
 	JSR [AtlasShell_keyboard_unregister]
@@ -2518,8 +2565,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_kill_last dat "last", 0
 :command_list dat "list", 0
 :command_list_info dat "Process list:", 0xA0, 0x00
+:command_ls dat "ls", 0
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
+:current_directory dat 0x0000
 
 ; API Jump table
 :AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
@@ -2766,12 +2815,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :files
 
 ; Primary file table
+; starts with folder name
 ; Entry type is 0 for folder, 1 for file
 ; Access flags: 00 - no access, 01 - read, 10 - write, 11 - read+write
 ; index, type, access, name, null terminator, start, end
 :files_table
+	dat "root", 0
 	dat 0x0001, 0x0001, 0x0003, "file01", 0, file01, file01_end
 	dat 0x0002, 0x0001, 0x0001, "hello_world", 0, file02, file02_end
+	dat 0xffff
 :files_table_end
 
 ; Basic flat text file
