@@ -1978,6 +1978,61 @@ SET PC, POP
 	SET B, POP
 	SET X, POP
 	SET PC, POP
+
+; Returns pointer to start of current directory name string in file table in C, if root returns 0
+; takes nothing
+:filesystem_current
+	SET PUSH, X
+	SET PUSH, B
+	SET PUSH, A
+	
+	IFE [present_working_directory], 0
+		
+	JSR filesystem_getfile_table
+	SET X, [A] ; Get the number of files in the table
+	ADD A, 1 ; Jump down to the start of the table
+:filesystem_current_loop
+	SET C, 0 ; Reset our return
+	IFE X, 0 ; Check if we've gone through all of the files
+		SET PC, filesystem_current_root
+	SUB X, 1
+	
+	ADD A, 1 ;skip over directory ID
+	SET B, [A] ; set B to flags
+	AND B, 0x10 ; check to see if entry is a directory
+	IFN B, 0x10
+		SET PC, filesystem_current_fileskip
+	ADD A, 17 ;skip name to directory start ID
+	IFE [A], [present_working_directory] ; match present working directory to table entry
+		SET PC, filesystem_current_found
+	ADD A, 1 ; Skip over the end
+	
+	SET PC, filesystem_current_loop
+
+:filesystem_current_fileskip
+	SUB X, 1 ;reduce file count
+	ADD A, 18 ;skip over name, start, end
+	SET PC, filesystem_current_loop
+
+:filesystem_current_root
+	SET C, 0
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
+
+:filesystem_current_found
+	SUB A, 16 ; Backs up the pointer to the start of the folder name
+	SET C, A ; Sets C to the start of the entry
+
+	;JSR newline ; DEBUG
+	;SET A, text_start_ok ; DEBUG
+	;JSR text_out ; DEBUG
+:filesystem_current_end
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
 	
 ; ########################################
 
@@ -2167,6 +2222,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, keyboard_is_exclusive_active ; Set A to non-zero if there is an exclusive keyboard buffer active
 	SET PC, filesystem_getfile ; Returns the start of the filesystem in A
 	SET PC, filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
+	SET PC, filesystem_current ; Returns start address of present working directory name string in file table.
 :api_end
 
 ; API Padding. This is temporary to buffer the kernel so that the API space doesn't overwrite program code
@@ -2218,6 +2274,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 
+	; Display current directory
+	JSR [AtlasShell_filesystem_current]
+	IFE C, 0
+	    SET PC, AtlasShell_prompt
+	SET A, C
+	JSR [AtlasShell_text_out]
+ :AtlasShell_prompt
 	; Display the prompt
 	SET A, text_prompt
 	JSR [AtlasShell_text_out]
@@ -3048,6 +3111,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_keyboard_is_exclusive_active dat 0x1040 ; 32nd index in API * 2 words long = 0x40, keyboard_is_exclusive_active
 :AtlasShell_filesystem_getfile dat 0x1042 ; 33rd index in API * words long = 0x42, filesystem_getfile
 :AtlasShell_filesystem_getfile_table dat 0x1044 ; 34th index in API * 2 words long = 0x44, filesystem_getfile_table
+:AtlasShell_filesystem_current dat 0x1046 ; 35th index in API * 2 words long = 0x44, filesyste_current
 
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
