@@ -1941,16 +1941,6 @@ SET PC, POP
 	SET A, files_table
 	SET PC, POP
 	
-; Sets the present working directory
-:filesystem_setpwd
-	SET [present_working_directory], A
-	SET PC, POP
-	
-; Returns the present working directory ID
-:filesystem_getpwd
-	SET A, [present_working_directory]
-	SET PC, POP
-	
 ; Returns pointer to start of file entry in file table in C, returns 0 if file not found
 ; A: buffer containing file name
 :filesystem_getfile
@@ -1999,14 +1989,14 @@ SET PC, POP
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0005
-:os_version_fix dat 0x0004
+:os_version_fix dat 0x0005
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 :video_clear dat 0x7020
 
-:text_start dat "AtlasOS v0.5.4 starting... ", 0x00
+:text_start dat "AtlasOS v0.5.5 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo1 DAT "      ___   __   __", 0xA0
 :text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
@@ -2109,9 +2099,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_flags_end
 :keyboard_buffers_exclusive dat 0x0000 ; Contains buffer mem loc that has exclusive access
 :keyboard_oldvalue dat 0x0000
-
-; Filesystem variables
-:present_working_directory dat 0x0000
 
 ; Kernel watchdog variables
 :kernel_watchdog_proc_list_buffer
@@ -2296,6 +2283,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [AtlasShell_strcmp]
 	IFE C, 0
 		JSR command_lsf
+		
+	; Check for the 'cd' command
+	SET A, command_cd
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_cdf
 		
 	; Check if we're trying to run a file
 	IFN [ack_command], 1
@@ -2626,22 +2620,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	ADD Y, 1
 	SET B, command_ls_row
 
-	;SET C, [A] ; Ignore the directory value for now, will be finished later
+	SET PUSH, A
+	SET C, [A] ; Ignore the directory value for now, will be finished later
+	SET A, [present_working_directory]
+	IFN C, A
+		SET PC, command_lsf_skip_file
+	SET A, POP
 	
 	ADD A, 1 ; Move on to flags
-	
-	; Check if the file is hidden
-	SET C, [A]
-	AND C, 0x0004
-	IFE C, 4
-		SET [B], 0x48 ; 'H'
-
-	; Store if this is a directory
-	SET C, [A]
-	AND C, 0x0010
-	IFE C, 16
-		SET [B], 0x44 ; 'D'
-	ADD B, 1
 	
 	; Store if this file can be read
 	SET C, [A]
@@ -2664,6 +2650,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET [B], 0x45 ; 'E'
 	ADD B, 1
 	
+	; Check if the file is hidden
+	SET C, [A]
+	AND C, 0x0004
+	IFE C, 4
+		SET [B], 0x48 ; 'H'
+
+		; Store if this is a directory
+	SET C, [A]
+	AND C, 0x0010
+	IFE C, 16
+		SET [B], 0x44 ; 'D'
+	ADD B, 1
+
 	; Add separator
 	SET [B], 0x7C ; '|'
 	ADD B, 1
@@ -2679,6 +2678,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	ADD B, 1
 	;ADD A, 1
 	
+	IFE C, 16
+		SET PC, command_lsf_skip_filesize
+	
 	; Display file size
 	SET C, [A] ; Get the file start
 	ADD A, 1
@@ -2687,13 +2689,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SUB A, C
 	JSR [AtlasShell_int2dec]
 	SET A, POP
-	
+:command_lsf_skip_filesize	
+	IFE C, 16
+		ADD A, 1
 	; Output the file info
 	SET C, A
 	SET A, command_ls_row
 	JSR [AtlasShell_text_out]
 	SET A, C
-	
+	SET PC, command_lsf_skip_file_end
+:command_lsf_skip_file
+	SET A, POP
+	ADD A, 19
+:command_lsf_skip_file_end
 	; Clear out the row buffer
 	SET C, command_ls_row
 	ADD C, 32
@@ -2728,7 +2736,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFE C, 0
 		SET PC, command_runfile_end
 		
-	;SET A, [C] ; Skip over the directory ID, will finish later
+	SET A, [C] ; Skip over the directory ID, will finish later
+	IFN A, [present_working_directory]
+		SET PC, command_runfile_end
 	
 	ADD C, 1
 	SET A, [C] ; Get the file flags
@@ -2755,6 +2765,128 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET C, POP
 	SET B, POP
 	SET A, POP
+	SET PC, POP
+	
+:command_cdf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	JSR [AtlasShell_newline]
+
+	;check if 'cd'
+	SET A, command_parameter_buffer
+	SET B, command_cd
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_help
+
+	; check if blank > load help
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_cdf_help
+
+	;check if '..'
+	SET A, command_parameter_buffer
+	SET B, command_cd_back
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_back
+
+	;check if '/'
+	SET A, command_parameter_buffer
+	SET B, command_cd_root
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_root
+
+	JSR [AtlasShell_filesystem_getfile]
+	IFN C, 0
+		SET PC, command_cdf_cd
+	SET PC, command_cdf_unknown
+
+:command_cdf_help
+	SET A, command_cd_help
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_back
+	SET A, directory_stack
+	SET B, 15
+	ADD B, A
+:command_cdf_back_traverse_directorystack
+	IFE A, B
+		SET PC, command_cdf_back_end
+	IFE [A], 0
+		SET PC, command_cdf_back_end
+	ADD A, 1
+	SET PC, command_cdf_back_traverse_directorystack
+:command_cdf_back_end
+	SUB A, 2
+	SET [present_working_directory], [A]
+	SET [A], 0
+	SET PC, command_cdf_end
+
+:command_cdf_root
+	SET A, 0x0000
+	SET [present_working_directory], A
+	SET B, 16 ; Current max directory depth, hardcoded for now
+	SET A, directory_stack
+:command_cdf_root_clear_directorystack
+	IFE B, 0
+		SET PC, command_cdf_end
+	SUB B, 1
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_cdf_root_clear_directorystack
+
+:command_cdf_unknown
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_text_out]
+	SET A, command_cd_unknown
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_cd
+	IFN [C], [present_working_directory] ; Check if we're trying to access a directory not in our current directory
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move past to the flags
+	SET A, [C]
+	AND A, 0x0010 ; Check the flags to see if this file is a directory
+	IFN A, 16
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move to the name
+	
+	ADD C, 16 ; Move past the name
+	
+	SET B, directory_stack
+	SET A, 16
+	ADD A, B
+:command_cdf_cd_addtodirectorystack
+	IFE B, A
+		SET PC, command_cdf_end ; Directory stack is full, cannot change directory
+	IFE [B], 0
+		SET PC, command_cdf_cd_addtodirectorystack_end
+	ADD B, 1
+	SET PC, command_cdf_cd_addtodirectorystack
+:command_cdf_cd_addtodirectorystack_end
+	SET A, [C] ; Store the directory ID
+	SET [B], A
+	SET [present_working_directory], A
+
+:command_cdf_end
+	JSR command_clear_parameter_buffer
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [AtlasShell_proc_suspend]
 	SET PC, POP
 
 :AtlasShell_die
@@ -2886,6 +3018,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_number_buffer dat "     ", 0x00
 :command_ls dat "ls", 0
 :command_ls_row dat "                                ", 0x00
+:command_cd dat "cd", 0
+:command_cd_back dat "..", 0
+:command_cd_root dat "/", 0
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
+:command_cd_unknown dat " doesnt exist", 0xA0, 0
 :command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
 
 ; API Jump table
@@ -2922,15 +3059,19 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :text_versionoutput dat "Atlas-Shell v0.3.3", 0xA0, 0x00
 :text_prompt dat "$> ", 0x00
 
+:present_working_directory dat 0x0000
+:directory_stack
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:directory_stack_end
+
 ; Note: This application table will be changed / go away once we have a filesystem
 ;application_table_format
 ;dat "name_of_app", 0, app_location, app_location_end
 :application_table
-:app1 dat "hello", 0, hello, hello_end
-:app2 dat "ball", 0, app02, app02_end
-:app4 dat "free", 0, free, free_end
-:app5 dat "AtlasText", 0, AtlasText, AtlasText_end
-:app6 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:app1 dat "ball", 0, app02, app02_end
+:app2 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app3 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
 :application_table_end
 
 :AtlasShell_end
@@ -3121,11 +3262,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; Flags: Bit 0 - read, Bit 1 - write, Bit 2 - hidden, Bit 3 - executable, Bit 4 - directory
 ; Each entry must be 20 words long
 ; directory ID, flags, name, null terminator, padding, start, end
+; For directory entries, the 'start' contains the ID and the 'end' is unused
 :files_table
-	dat 0x0004 ; Number of files in table
+	dat 0x0007 ; Number of files in table
+	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
+	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
+	dat 0x0002, 0x0011, "System", 0, "         ", 0x0003, 0x0000
 	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
-	dat 0x0001, 0x0009, "hello_world", 0, "    ", file02, file02_end
-	dat 0x0001, 0x0009, "free_mem", 0, "       ", file03, file03_end
+	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
+	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
 	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
 :files_table_end
 
