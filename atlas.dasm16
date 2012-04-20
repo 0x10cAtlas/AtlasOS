@@ -1,7 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-; AtlasOS version 0.5.4
-; Atlas-Shell version 0.3.3
+; AtlasOS version 0.5.5
+; Atlas-Shell version 0.4.0
 
 :kernel_boot
 ; clear screen (for emulator)
@@ -1970,10 +1970,42 @@ SET PC, POP
 	SUB A, 2 ; Backs up the pointer to the start of the file entry
 	SET C, A ; Sets C to the start of the entry
 
-	;JSR newline ; DEBUG
-	;SET A, text_start_ok ; DEBUG
-	;JSR text_out ; DEBUG
 :filesystem_getfile_end
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
+	
+; Returns pointer to start of file entry in file table in C, returns 0 if file not found
+; A: Program start or directory ID
+:filesystem_getfile_bystart
+	SET PUSH, X
+	SET PUSH, B
+	SET PUSH, A
+	
+	SET B, A
+	
+	JSR filesystem_getfile_table
+	SET X, [A] ; Get the number of files in the table
+	ADD A, 1 ; Jump down to the start of the table
+:filesystem_getfile_bystart_loop
+	SET C, 0 ; Reset our return
+	IFE X, 0 ; Check if we've gone through all of the files
+		SET PC, filesystem_getfile_bystart_end
+	SUB X, 1
+	
+	ADD A, 18 ; Skip over the directory ID, flags, and filename
+	IFE B, [A]
+		SET PC, filesystem_getfile_bystart_found
+	
+	ADD A, 2 ; Skip over end and jump to next entry
+	
+	SET PC, filesystem_getfile_bystart_loop
+:filesystem_getfile_bystart_found
+	SUB A, 18 ; Backs up the pointer to the start of the file entry
+	SET C, A ; Sets C to the start of the entry
+
+:filesystem_getfile_bystart_end
 	SET A, POP
 	SET B, POP
 	SET X, POP
@@ -2165,8 +2197,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, proc_load		; Loads a new process
 	SET PC, proc_callback_list ; Dumps a list of running processes
 	SET PC, keyboard_is_exclusive_active ; Set A to non-zero if there is an exclusive keyboard buffer active
-	SET PC, filesystem_getfile ; Returns the start of the filesystem in A
+	SET PC, filesystem_getfile ; Returns the start of the matched filesystem entry in C, 0 otherwise
 	SET PC, filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
+	SET PC, filesystem_getfile_bystart ; Returns the start of the matched filesystem entry in C, 0 otherwise
 :api_end
 
 ; API Padding. This is temporary to buffer the kernel so that the API space doesn't overwrite program code
@@ -2191,13 +2224,22 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
-	dat "          "
+	dat "              "
 
 :kernel_end
 ; ################################
 ; ################################
 :apps
 
+; Note: This application table will ONLY contain built-in apps eventually
+; This means that we will likely get rid of it once external storage is implemented by Notch
+;application_table_format
+;dat "name_of_app", 0, app_location, app_location_end
+:application_table
+:app1 dat "ball", 0, app02, app02_end
+:app2 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app3 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:application_table_end
 
 
 ; BASH-like Process
@@ -2205,19 +2247,29 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, text_versionoutput
 	JSR [AtlasShell_text_out]
 :AtlasShell_start
-	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
-	SUB I, AtlasShell_loop
-
 	; Register our buffer with the driver
 	SET A, input_buffer
 	JSR [AtlasShell_keyboard_register]
-
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
 	JSR [AtlasShell_keyboard_is_exclusive_active]
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
-
+	
+	; Load the pwd name
+	JSR command_clear_present_working_directory_name
+	SET A, [present_working_directory]
+	JSR [AtlasShell_filesystem_getfile_bystart]
+	IFE C, 0
+		SET PC, AtlasShell_skip_display_path
+	ADD C, 2
+	SET A, C
+	SET B, present_working_directory_name
+	JSR [AtlasShell_strcpy]
+	; Display the current path
+	SET A, present_working_directory_name
+	JSR [AtlasShell_text_out]
+:AtlasShell_skip_display_path
 	; Display the prompt
 	SET A, text_prompt
 	JSR [AtlasShell_text_out]
@@ -2301,7 +2353,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
 	JSR [AtlasShell_proc_suspend]
-	SUB PC, I
+	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
 ; ==BEGIN COMMAND FUNCTIONS==
@@ -2818,31 +2870,28 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PC, command_cdf_end
 
 :command_cdf_back
-	SET A, directory_stack
-	SET B, 15
-	ADD B, A
+	SET A, directory_stack_end
+	SUB A, 1
 :command_cdf_back_traverse_directorystack
-	IFE A, B
+	IFE A, directory_stack
 		SET PC, command_cdf_back_end
-	IFE [A], 0
+	IFN [A], 0
 		SET PC, command_cdf_back_end
-	ADD A, 1
+	SUB A, 1
 	SET PC, command_cdf_back_traverse_directorystack
 :command_cdf_back_end
-	SUB A, 2
-	SET [present_working_directory], [A]
 	SET [A], 0
+	IFN A, directory_stack
+		SUB A, 1
+	SET [present_working_directory], [A]
 	SET PC, command_cdf_end
 
 :command_cdf_root
-	SET A, 0x0000
-	SET [present_working_directory], A
-	SET B, 16 ; Current max directory depth, hardcoded for now
+	SET [present_working_directory], 0x0000
 	SET A, directory_stack
 :command_cdf_root_clear_directorystack
-	IFE B, 0
+	IFE A, directory_stack_end
 		SET PC, command_cdf_end
-	SUB B, 1
 	SET [A], 0
 	ADD A, 1
 	SET PC, command_cdf_root_clear_directorystack
@@ -2863,14 +2912,13 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFN A, 16
 		SET PC, command_cdf_unknown
 	ADD C, 1 ; Move to the name
+	SET A, C
 	
 	ADD C, 16 ; Move past the name
 	
 	SET B, directory_stack
-	SET A, 16
-	ADD A, B
 :command_cdf_cd_addtodirectorystack
-	IFE B, A
+	IFE B, directory_stack_end
 		SET PC, command_cdf_end ; Directory stack is full, cannot change directory
 	IFE [B], 0
 		SET PC, command_cdf_cd_addtodirectorystack_end
@@ -2956,6 +3004,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET [A], 32
 	ADD A, 1
 	SET [A], 32
+	SET A, POP
+	SET PC, POP
+:command_clear_present_working_directory_name
+	SET PUSH, A
+	SET PUSH, B
+	SET A, present_working_directory_name
+	SET B, 16
+	JSR [AtlasShell_mem_clear]
+	SET B, POP
 	SET A, POP
 	SET PC, POP
 
@@ -3048,6 +3105,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_keyboard_is_exclusive_active dat 0x1040 ; 32nd index in API * 2 words long = 0x40, keyboard_is_exclusive_active
 :AtlasShell_filesystem_getfile dat 0x1042 ; 33rd index in API * words long = 0x42, filesystem_getfile
 :AtlasShell_filesystem_getfile_table dat 0x1044 ; 34th index in API * 2 words long = 0x44, filesystem_getfile_table
+:AtlasShell_filesystem_getfile_bystart dat 0x1046 ; 35th index in API * 2 words long = 0x46, filesystem_getfile_bystart
 
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -3056,23 +3114,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.3.3", 0xA0, 0x00
-:text_prompt dat "$> ", 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.0", 0xA0, 0x00
+:text_prompt dat " $> ", 0x00
 
 :present_working_directory dat 0x0000
+:present_working_directory_name dat "                ", 0x00
 :directory_stack
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :directory_stack_end
-
-; Note: This application table will be changed / go away once we have a filesystem
-;application_table_format
-;dat "name_of_app", 0, app_location, app_location_end
-:application_table
-:app1 dat "ball", 0, app02, app02_end
-:app2 dat "AtlasText", 0, AtlasText, AtlasText_end
-:app3 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
-:application_table_end
 
 :AtlasShell_end
 
@@ -3264,9 +3314,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
 :files_table
-	dat 0x0007 ; Number of files in table
+	dat 0x0009 ; Number of files in table
+	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000 ; root directory
 	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
 	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
+	dat 0x0000, 0x0011, "Data", 0, "           ", 0x0004, 0x0000
 	dat 0x0002, 0x0011, "System", 0, "         ", 0x0003, 0x0000
 	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
 	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
