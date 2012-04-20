@@ -2277,10 +2277,10 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Display current directory
 	JSR [AtlasShell_filesystem_current]
 	IFE C, 0
-		ADD PC, 2
+	    SET PC, AtlasShell_prompt
 	SET A, C
 	JSR [AtlasShell_text_out]
-
+ :AtlasShell_prompt
 	; Display the prompt
 	SET A, text_prompt
 	JSR [AtlasShell_text_out]
