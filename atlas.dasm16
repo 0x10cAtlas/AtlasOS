@@ -1885,7 +1885,9 @@ SET PC, POP
 	 JSR proc_suspend
      IFE [C], 0
          SET PC, read_line_skip
-     IFE [C], 0xA
+     IFE [C], 0xA ; \n
+         SET PC, read_line_end
+     IFE [C], 0xD ; \r
          SET PC, read_line_end
      IFE [C], 0x8
          SET PC, read_line_backspace
