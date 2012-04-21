@@ -455,9 +455,9 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-; A: source
-; B: dest
-; C: length
+; A -> source
+; B -> dest
+; C -> length
 :mem_copy
       SET PUSH, A
       SET PUSH, B
@@ -521,6 +521,7 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
+; Combines page number (into high byte) and proc id (into low byte).
 ; A -> page num
 ; B -> proc id
 ; A <- combined page entry
@@ -547,7 +548,8 @@ SET PC, stop
 
       SET PC, POP
 
-; A -> page entry
+; Find an empty entry in the page_table and store the page descriptor.
+; A -> combined page entry
 ; A <- 1 of succeeded, 0 if failed
 :page_add
       SET PUSH, B
@@ -576,12 +578,15 @@ SET PC, stop
       SET A, 1
       SET PC, page_add_end
 
+; Finds the first free page of memory by inspecting the bits of the page_map.
+; A <- first free page number.
 :page_find_free
 
       ;SET PC, page_find_free
 
       SET PUSH, B
 
+      ; 0xFFFF means given 16kB is fully occupied.
       SET A, page_map
       SET B, 0
       IFN [A], 0xFFFF
@@ -606,9 +611,12 @@ SET PC, stop
       SET B, POP
       SET PC, POP
 
+; Find free page within this 16kB block by looking for a bit set to 0.
 :page_find_free_found
       SET PUSH, [A]
+	  ; B is the id of the page_map word - each word covers 16 pages.
       MUL B, 16
+	  ; A will hold the final number.
       SET A, B
 
 :page_find_free_found_loop
@@ -625,6 +633,7 @@ SET PC, stop
 
 
 ; Allocates a page for the current application
+; A <- Address of the allocated memory page.
 :page_alloc
       SET PUSH, B
 
@@ -635,8 +644,8 @@ SET PC, stop
       SET PUSH, A
 
       JSR proc_id
-      SET B, A
-      SET A, PEEK
+      SET B, A ; proc_id
+      SET A, PEEK ; free page number
 
       JSR page_combine
       JSR page_add
@@ -644,6 +653,8 @@ SET PC, stop
           SET PC, page_alloc_error2
 
       SET A, POP
+
+	  ; Calculate the real mem address of the allocated page.
       MUL A, 1024
 
 :page_alloc_end
@@ -753,13 +764,15 @@ SET PC, stop
       SET B, POP
       SET A, POP
 
-; A: page num
+; Flip the bit on the page_map to mark the page as taken.
+; A -> page num
 :page_set_map
       SET PUSH, A
       SET PUSH, B
 
       SET B, 0x0001
 
+      ; Select the relevant page_map word.
       IFG 16, A
           SET PC, page_set_map_0
       IFG 32, A
@@ -1109,6 +1122,7 @@ SET PC, stop
 :proc_load_start
       SET X, proc_table
 
+; Search for empty record in the proc_table.
 :proc_load_loop
       IFE [X], 0x0000
           SET PC, proc_load_to
@@ -1128,8 +1142,11 @@ SET PC, stop
       SET B, POP
       SET PC, POP
 
+; Load the process and fill the details in the proc_table.
+; X -> addr of the empty proc_table record for this process
+; A <- proc id
 :proc_load_to
-	; Calculate the ProcID
+	; Calculate the ProcID by finding the proc_table record number (OS is 1).
 	SET [X], X
 	SUB [X], proc_table
 	DIV [X], 12
@@ -1141,13 +1158,12 @@ SET PC, stop
 		
 	SET PUSH, C
 
-	; X = ProcInfo Addr
-
-	; Finaly load the Process
+	; Finally load the Process - A is the source mem addr, B is length.
 	SET C, B
 	SET Y, A
 
-	SET Z, [proc_current]   ; Fake the process ID
+	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
+	SET Z, [proc_current]   
 	SET [proc_current], [X]
 
 	JSR page_alloc
@@ -1157,14 +1173,17 @@ SET PC, stop
 	IFE A, 0
 		SET PC, proc_load_error
 
+	; Copy the program to the newly allocated memory.
 	SET B, A
 	SET A, Y
 	JSR mem_copy
 	
+	; Get the flags back.
 	SET C, POP
 
 	SET A, [X] ; A return the ProcID
 
+	; Fill the proc_table entry for this process.
 	ADD X, 1 ; A
 	SET [X], 0
 	ADD X, 1 ; B
@@ -1181,17 +1200,21 @@ SET PC, stop
 	SET [X], 0
 	ADD X, 1 ; J
 	SET [X], 0
+	
+	; Set the SP to the last byte of the allocated memory page (B+1023)
 	ADD X, 1 ; SP
 	SET [X], B
 	ADD [X], 1023
-	SET Y, [X] ; Save stack address
+	SET Y, [X] ; Save stack address for later.
+
+	; Store the memory address of the process.
 	ADD X, 1
 	SET [X], B
 	ADD X, 1 ; Flags
 	BOR C, 0x0001 ; OR in the active flag. This will overwrite the ART flag but we don't care
 	SET [X], C
 
-	SET [Y], B ; "Push" the "return" address on the stack
+	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
 
 	SET PC, proc_load_end
 
@@ -2040,12 +2063,18 @@ SET PC, POP
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
 :text_logo9 DAT "       \\____//____/", 0xA0, 0x00
 
+; Bitmap of the OS-managed memory, occupied pages are marked by 1's.
+; Total of 64kB of memory supported here - each word covers 16kB.
 :page_map
 :page_map0 dat 0x0000
 :page_map1 dat 0x0000
 :page_map2 dat 0x0000
 :page_map3 dat 0x0000
 
+; Table mapping memory pages to processes.
+; Each word holds a page descriptor. Low byte encodes proc id, high byte encodes 
+; the memory offset of the associated 1kB page. For example 0x0702 marks the memory area
+; from 0x1C00 to 0x1FFF (7th page) as belonging to process 2.
 :page_table              ; 128 words
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -2072,6 +2101,7 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :message_queue_table_end
 
+; Process buffer, used for holding the current process info temporarily when switching processes.
 :proc_current dat 0x0001
 :proc_buffer dat 0x0000
 :proc_buffer_a dat 0x0000
@@ -2085,8 +2115,13 @@ SET PC, POP
 :proc_buffer_sp dat 0x0000
 :proc_buffer_mem dat 0x0000
 :proc_buffer_flags dat 0x0000
+
+; Process table used for storing the information about currently running processes. OS is always 1st.
+; Stores: process id, 8 registers, SP, memory address of the process, flags.
 :proc_table
        dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+
+; 10th word mark, OS SP.
 :proc_table10
        dat 0xFFFF, 0x0000, 0xFFFD ; OS-Proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 1st proc
