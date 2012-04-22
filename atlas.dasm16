@@ -725,27 +725,41 @@ SET PC, stop
       SET PC, page_free_end
 
 
+; Deallocate all pages belonging to the process
+; A -> proc_id (or proc info structure)
 :page_free_of
       SET PUSH, A
       SET PUSH, B
+      SET PUSH, C
 
       AND A, 0x00FF
       SET PUSH, A
-      SET B, page_table
+      SET C, page_table
 
 :page_free_of_loop
-      SET A, [B]
-      AND A, 0x00FF
-      IFE A, PEEK
-          SET [B], 0x0000
-      ADD B, 1
-      IFN B, page_table_end
+      SET A, [C]
+      JSR page_decombine
+
+      ; check the proc id
+      IFN B, PEEK
+          SET PC, page_free_of_loop_skip
+
+      ; found page associated with the process - free it in page_table
+      SET [C], 0x0000
+      ; unset the page bit in page_map (page number is in A after decombine)
+      JSR page_unset_map
+
+:page_free_of_loop_skip
+      ADD C, 1
+      IFN C, page_table_end
           SET PC, page_free_of_loop
 
       ADD SP, 1
 
+      SET C, POP
       SET B, POP
       SET A, POP
+      SET PC, POP
 
 ; A: page num
 :page_set_map
