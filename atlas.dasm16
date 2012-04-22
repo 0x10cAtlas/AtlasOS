@@ -528,7 +528,6 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-; Combines page number (into high byte) and proc id (into low byte).
 ; A -> page num
 ; B -> proc id
 ; A <- combined page entry
@@ -675,29 +674,6 @@ SET PC, stop
       SET A, 0
       SET PC, page_alloc_end
 	
-; Variation of page_alloc that is used for proc_exec to pre-allocate memory space for a new process
-:proc_exec_page_alloc
-	SET PUSH, B
-
-	JSR page_find_free
-	IFE A, 0
-		SET PC, page_alloc_error
-
-	SET PUSH, A
-
-	; B is passed in as the procID to associate this page
-	; Therefore we don't call JSR proc_id
-	SET A, PEEK
-
-	JSR page_combine
-	JSR page_add
-	IFE A, 0
-		SET PC, page_alloc_error2
-
-	SET A, POP
-	MUL A, 1024
-	SET PC, page_alloc_end
-
 ; Frees the given page for the current application
 ; A: memory
 :page_free
@@ -771,15 +747,13 @@ SET PC, stop
       SET B, POP
       SET A, POP
 
-; Flip the bit on the page_map to mark the page as taken.
-; A -> page num
+; A: page num
 :page_set_map
       SET PUSH, A
       SET PUSH, B
 
       SET B, 0x0001
 
-      ; Select the relevant page_map word.
       IFG 16, A
           SET PC, page_set_map_0
       IFG 32, A
@@ -1115,39 +1089,44 @@ SET PC, stop
 ; B: Length of the BLOB
 :proc_load
 
-      SET PUSH, B
-      SET PUSH, C
-      SET PUSH, X
-      SET PUSH, Y
-      SET PUSH, Z
-	  
-	  SET C, 0 ; Clear this out in case proc_exec is triggered because C will contain flag info
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	SET PUSH, I
+	SET PUSH, J
 
-      IFE [A], 0x4714  ; Check for magic number
-          SET PC, proc_exec     ; No flat binary, call advanced loader
+	SET C, 0 ; Clear this out because C might contain flag info if we load an ABI exe
+
+	SET Z, [A]
+	IFN [A], 0x4714  ; Check for magic number
+		SET PC, proc_load_start
+:proc_load_handle_exec
+	ADD A, 1
+	;SET C, [A] ; Do nothing with the revision # in this interim build
+	ADD A, 1
+	SET I, [A] ; Save the length of the header
+	ADD A, 1
+	SET J, [A] ; Save the length of the code+data
+	ADD A, 1
+	SET C, [A] ; Save the flags data
+	SUB A, 4 ; And now move the pointer back to the start
 
 :proc_load_start
-      SET X, proc_table
+	SET X, proc_table
 
-; Search for empty record in the proc_table.
 :proc_load_loop
-      IFE [X], 0x0000
-          SET PC, proc_load_to
+	IFE [X], 0x0000
+		SET PC, proc_load_to
 
-      ADD X, 12
-      IFN X, proc_table_end
-          SET PC, proc_load_loop
+	ADD X, 12
+	IFN X, proc_table_end
+		SET PC, proc_load_loop
 
 :proc_load_error
-      SET A, 0
-
-:proc_load_end
-      SET Z, POP
-      SET Y, POP
-      SET X, POP
-      SET C, POP
-      SET B, POP
-      SET PC, POP
+	SET A, 0
+	SET PC, proc_load_end
 
 ; Load the process and fill the details in the proc_table.
 ; X -> addr of the empty proc_table record for this process
@@ -1159,37 +1138,44 @@ SET PC, stop
 	DIV [X], 12
 	ADD [X], 1
 
-	; Check if we have any flags to deal with
-	IFN C, 0
-		JSR proc_handle_flags
-		
+	; X = ProcInfo Addr
+
+	; Backup our flags
 	SET PUSH, C
 
 	; Finally load the Process - A is the source mem addr, B is length.
 	SET C, B
-	SET Y, A
+	SET PUSH, A
 
 	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
-	SET Z, [proc_current]   
+	SET PUSH, [proc_current]   
 	SET [proc_current], [X]
 
 	JSR page_alloc
 
-	SET [proc_current], z
+	SET [proc_current], POP
 
 	IFE A, 0
 		SET PC, proc_load_error
-
+		
 	; Copy the program to the newly allocated memory.
-	SET B, A
-	SET A, Y
+	SET B, A ; Save the address of the new page
+	SET A, PEEK ; Get back our original source address
+	IFE Z, 0x4714
+		ADD A, I ; If we are an ABI exe offset the copy destination by the size of the header
+	IFE Z, 0x4714
+		SET C, J ; If we are an ABI exe set the size to just the code length
 	JSR mem_copy
-	
+	SET A, POP
+
 	; Get the flags back.
 	SET C, POP
+	
+	; Check if we have any flags to deal with
+	IFN C, 0
+		JSR proc_handle_flags
 
 	SET A, [X] ; A return the ProcID
-
 	; Fill the proc_table entry for this process.
 	ADD X, 1 ; A
 	SET [X], 0
@@ -1223,89 +1209,54 @@ SET PC, stop
 
 	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
 
-	SET PC, proc_load_end
+:proc_load_end
+	SET J, POP
+	SET I, POP
+	SET Z, POP
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
 
 :proc_handle_flags
 	SET PUSH, A
 	SET PUSH, B
+	SET PUSH, C
 	
 	; If bit 1 is true then backup the character set data
+	SET PUSH, A
 	SET A, 0 ; Param for manage_charset to save charset data
-	SET B, C
-	AND B, 0x0002
-	IFE B, 1
+	AND C, 0x0002
+	IFE C, 1
 		JSR manage_charset
-		
-	SET B, POP
 	SET A, POP
-	SET PC, POP
-
-
-
-; Loads a new process into memory
-; A: Begin of the BLOB
-; B: Length of the BLOB
-:proc_exec
-	IFN [A], 0x4714     ; seems to be a flat binary, call legacy loader
-		SET PC, proc_load
-
-	SET PUSH, X
-	SET PUSH, I
-	SET PUSH, J
-	
-	; Allocate pages of memory and copy the program to the new memory
-	; This is important because we don't want to modify the original
-	; As the original may be read-only or not in RAM
-	JSR proc_exec_prealloc_pages
-
-	SET X, B ; Store the given length for error checking
-	SET B, A ; Store the start point for error checking in a bit as the ABI format determines the BLOB length
-
-	ADD A, 1
-	SET C, [A] ; Do nothing with the revision # in this interim build
-	ADD A, 1
-	SET I, [A] ; Save the length of the header
-	ADD A, 1
-	SET J, [A] ; Save the length of the code+data
-	ADD A, 1
-	SET Y, [A] ; Save the flags data
-	
-	SET C, Y
+		
+	SET C, PEEK
 	AND C, 0x0001 ; Check if the app has an ART
 	IFE C, 1
 		JSR proc_exec_process_relocation
-:proc_exec_check_errors
-	; Check that the calculated total size is what we got from the function call
-	ADD I, J
-	IFN I, X
-		SET PC, proc_load_error
-	SUB I, J ; Clean up I, takes less time than PUSH and POP
-:proc_exec_prepare_pointers
-	; Start loading the app
-	; Must have code start in A, and length in B
-	SET A, B
-	ADD A, I
-	SET B, J ; Copy code length that we got from header
-	SET C, Y ; Save the flags
+:proc_handle_flags_end	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 	
-	SET J, POP
-	SET I, POP
-	SET X, POP
-	
-	SET PC, proc_load_start
+; Handle the ART table for an application
+; A -> Start of the ABI header (i.e. file start)
+; B -> Copy of binary that we are modifying
 :proc_exec_process_relocation
-	; Check if the header length isn't enough to contain the ART with at least 1 entry
-	IFG 7, I
-		SET PC, proc_load_error ; We throw an error because the flags said there should be an ART
-
-	ADD A, 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	ADD A, 5
 	SET C, [A] ; Get the number of entries in the relocaton table
 :proc_exec_process_relocation_loop
 	IFE C, 0
-		SET PC, POP
+		SET PC, proc_exec_process_relocation_end
 	SET PUSH, B
 	SET PUSH, X
-	ADD B, I ; Offset our pointer by the length of the header. This puts us at the start of the program code
 	SET X, B ; Store the program start location
 	ADD A, 1 ; Increment to next entry in ART
 	ADD B, [A] ; Add the ART offset to our pointer
@@ -1314,52 +1265,13 @@ SET PC, stop
 	SET X, POP
 	SET B, POP
 	SET PC, proc_exec_process_relocation_loop
-	
-:proc_exec_prealloc_pages
-	SET PUSH, X
-	SET PUSH, A ; Contains start of blob
-	SET PUSH, B ; Contains blob size
-
-	SET X, B ; Backup the blob size
-	SET B, proc_table
-
-:proc_exec_precalc_procid_loop
-	IFE [B], 0x0000
-		SET PC, proc_exec_precalc_procid_end
-
-	ADD B, 12
-	IFN B, proc_table_end
-		SET PC, proc_exec_precalc_procid_loop
-:proc_exec_precalc_procid_end
-	; Calculate the ProcID
-	SUB B, proc_table
-	DIV B, 12
-	ADD B, 1
-	
-	JSR proc_exec_page_alloc ; Allocate a page to the proposed proc ID
-	SET PUSH, A
-	SET PUSH, X
-:proc_exec_prealloc_pages_add
-	IFG 1024, X ; Check if our blob is too big to fit in one page
-		SET PC, proc_exec_prealloc_pages_add_done
-	JSR proc_exec_page_alloc ; Allocate a page to the proposed proc ID
-	SUB X, 1024
-	SET PC, proc_exec_prealloc_pages_add
-:proc_exec_prealloc_pages_add_done
-	SET X, POP
+:proc_exec_process_relocation_end
+	SET C, POP
+	SET B, POP
 	SET A, POP
-	SET C, POP ; Set the length for the copy
-	SET B, A ; Set the destination at the start of the new page
-	SET A, POP ; Set the source
-	JSR mem_copy ; Copy the program to the new allocated memory
-	
-	SET A, B ; Set A to the new start location in the new memory
-	SET B, X ; Set B back to the blob size we stored in X
-:proc_exec_prealloc_pages_end
-	SET X, POP
 	SET PC, POP
 	
-	
+
 ; Kill self
 :proc_kill_me
 	JSR proc_id ; Save process ID
@@ -2110,7 +2022,6 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :message_queue_table_end
 
-; Process buffer, used for holding the current process info temporarily when switching processes.
 :proc_current dat 0x0001
 :proc_buffer dat 0x0000
 :proc_buffer_a dat 0x0000
@@ -2124,13 +2035,8 @@ SET PC, POP
 :proc_buffer_sp dat 0x0000
 :proc_buffer_mem dat 0x0000
 :proc_buffer_flags dat 0x0000
-
-; Process table used for storing the information about currently running processes. OS is always 1st.
-; Stores: process id, 8 registers, SP, memory address of the process, flags.
 :proc_table
        dat 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
-
-; 10th word mark, OS SP.
 :proc_table10
        dat 0xFFFF, 0x0000, 0xFFFD ; OS-Proc
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 ; 1st proc
@@ -2268,7 +2174,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
-	dat "              "
+	dat "                                                                                                                                "
 
 :kernel_end
 ; ################################
@@ -2280,9 +2186,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ;application_table_format
 ;dat "name_of_app", 0, app_location, app_location_end
 :application_table
-:app1 dat "ball", 0, app02, app02_end
-:app2 dat "AtlasText", 0, AtlasText, AtlasText_end
-:app3 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:app1 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app2 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
 :application_table_end
 
 
@@ -3211,143 +3116,6 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	:AtlasText_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
 :AtlasText_end
 
-:app02
-	SET X, 1
-	SET Y, 1
-
-	SET I, app02_loop_end
-	SUB I, app02_loop
-
-	SET J, 200
-
-	; Register our buffer with the driver
-	SET A, app02_input_buffer
-	;SET B, 1
-	JSR [app02_keyboard_register]
-
-	SET A, 0
-	SET B, 0
-	SET C, 0
-
-:app02_loop
-	; Restore the old character
-	SET C, Z
-        IFE C, 0
-            ADD PC, 4
-        IFN C, 0x744F
-	    JSR [app02_char_put]
-
-	; If we reached the end of the iterations, quit
-	SUB J, 1
-	IFE J, 0
-		JSR app02_die
-
-	; Update the coordinates of the ball
-	ADD A, X
-	ADD B, Y
-
-	IFE A, 31
-	SET X, 0xFFFF
-
-	IFE B, 11
-	SET Y, 0xFFFF
-
-	IFE A, 0
-	SET X, 1
-
-	IFE B, 0
-	SET Y, 1
-
-	; Save the character before we write so we can restore later
-	SET PUSH, B
-	MUL B, 32
-	ADD B, A
-	ADD B, 0x8000
-	SET Z, [B]
-	SET B, POP
-
-	SET [app02_wait_counter], 8
-:app02_wait_loop
-	SET PUSH, [app02_wait_counter]
-	JSR app02_update_ball
-	SET [app02_wait_counter], POP
-	SUB [app02_wait_counter], 1
-	IFN [app02_wait_counter], 0
-		SET PC, app02_wait_loop
-
-	JSR [app02_proc_suspend]
-	SUB PC, I
-:app02_loop_end
-:app02_update_ball
-	SET C, 0x7400
-	IFN [app02_input_buffer], [app02_old_input_buffer]
-		IFN [app02_input_buffer], 0
-			SET [app02_ball_char], [app02_input_buffer]
-	BOR C, [app02_ball_char]
-	JSR [app02_char_put]
-
-	IFN [app02_input_buffer], 0
-		SET [app02_old_input_buffer], [app02_input_buffer]
-	JSR [app02_proc_suspend]
-	SET PC, POP
-:app02_die
-	SET A, app02_input_buffer
-	JSR [app02_keyboard_unregister]
-	JSR [app02_proc_kill_me]
-	SET PC, POP
-:app02_data
-	:app02_input_buffer dat 0x0000
-	:app02_old_input_buffer dat 0x0000
-	:app02_ball_char dat 0x0000
-	:app02_wait_counter dat 0x0000
-	; API Jump table	
-	:app02_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-	:app02_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:app02_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
-	:app02_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
-	:app02_char_put dat 0x1024 ; 18th index in API * 2 words long = 0x24, char_put
-:app02_end
-
-:hello ; beginning of application
-	SET A, hello_world
-	JSR [hello_text_out]
-	JSR [hello_proc_suspend]
-	JSR [hello_proc_kill_me]
-
-	:hello_world dat "Hello World", 0xA0, 0x00
-	; API Jump table
-	:hello_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-	:hello_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:hello_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-:hello_end
-
-:free
-	JSR [free_page_check]
-	SET X, 0xFFFF
-	SUB X, A
-	SET A, X
-	SET B, free_buffer
-	JSR [free_int2dec]
-	SET B, free_buffer2
-	DIV A, 1024
-	SHL A, 1
-	JSR [free_int2dec]
-	SET A, free_buffer
-	JSR [free_text_out]
-	SET A, free_buffer
-	JSR [free_proc_kill_me]
-	
-	:free_buffer  dat "      words free ("
-	:free_buffer2 dat "      KB)", 0xA0, 0x00
-	; API Jump table
-	:free_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-	:free_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
-	:free_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:free_page_check dat 0x1038 ; 28th index in API * 2 words long = 0x38, page_check
-:free_end
-
-
-
 :apps_end
 
 :files
@@ -3358,7 +3126,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
 :files_table
-	dat 0x0009 ; Number of files in table
+	dat 0x000A ; Number of files in table
 	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000 ; root directory
 	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
 	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
@@ -3368,6 +3136,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
 	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
 	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
+	dat 0x0002, 0x0009, "ball_game", 0, "      ", file05, file05_end
 :files_table_end
 
 ; Basic flat text file
@@ -3378,7 +3147,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :file01_end
 
 ; HelloWorld
-; Description: Displays 
+; Description: Displays "Hello World"
 :file02 ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
@@ -3400,7 +3169,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x000F ; Length of header (5 base + 10 for ART)
 	dat 0x003A ; Length of the code and data
-	dat 0x000B ; Flags 00000000 00001011
+	dat 0x000D ; Flags 00000000 00001101
 	dat 0x0009 ; ART length
 	dat 0x0001, 0x0007, 0x0009, 0x000B, 0x0010, 0x0012, 0x0014, 0x0016, 0x0018 ; ART entries
 	; Code
@@ -3416,6 +3185,25 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "I am hidden, muahaha!", 0x00
 :file04_end
 
-
+; Ball
+; Description: Runs a "ball" around on the screen and bounces off of walls
+:file05 ; AtlasOS ABI-compliant executable file
+	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
+	dat 0x0001 ; Revision 1 of the ABI
+	dat 0x000D ; Length of header (5 base + 8 for ART)
+	dat 0x003F ; Length of the code and data ( 63 words )
+	dat 0x000D ; Flags 00000000 00001101
+	dat 0x0007 ; ART length ( 7 entries )
+	dat 0x0021, 0x0027, 0x0029, 0x002E, 0x0035, 0x0037, 0x003A
+	; Code
+	dat 0x7C61, 0x0039, 0x7C63, 0x000A, 0x8001, 0x8011, 0x8431, 0x8441
+	dat 0x7C71, 0x0064, 0x0C02, 0x1012, 0xFC0C, 0x7C31, 0xFFFF, 0xAC1C
+	dat 0x7C41, 0xFFFF, 0x800C, 0x8431, 0x801C, 0x8441, 0x05A1, 0x7C14
+	dat 0x0020, 0x0012, 0x7C12, 0x8000, 0x2451, 0x6011, 0x8473, 0x807C
+	dat 0x7C10, 0x0039, 0xA021, 0x09A1, 0x7C21, 0x7400, 0x7810, 0x003E
+	dat 0x7810, 0x003C, 0x6021, 0x8423, 0x802D, 0x7DC1, 0x0023, 0x1421
+	dat 0x802C, 0x91C2, 0x7C2D, 0x744F, 0x7810, 0x003E, 0x7810, 0x003C
+	dat 0x19C3, 0x7810, 0x003D, 0x61C1, 0x1004, 0x100A, 0x1024
+:file05_end
 
 :files_end
