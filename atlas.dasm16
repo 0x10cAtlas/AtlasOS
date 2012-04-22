@@ -144,12 +144,19 @@ JSR keyboard_unregister_all
 	SET C, 0x9000
 	SET B, 0x0000
 :driver_keyboard_ringbuffloop
+	; Find last non-zero value in the ring buffer (and reset the buffer to 0's)
 	IFN [C], 0
 		SET B, [C]
+	; filter non-ascii - check if any of the upper 9 bits is set, if yes - reset to 0.
+	SET A, B
+	SHR A, 7
+	IFN A, 0
+		SET B, 0
 	SET [C], 0
 	ADD C, 1
 	IFN C, 0x9010
 		SET PC, driver_keyboard_ringbuffloop
+
 	SET [C], B
 
 	; Skip the driver if the key value hasn't changed
@@ -1878,7 +1885,9 @@ SET PC, POP
 	 JSR proc_suspend
      IFE [C], 0
          SET PC, read_line_skip
-     IFE [C], 0xA
+     IFE [C], 0xA ; \n
+         SET PC, read_line_end
+     IFE [C], 0xD ; \r
          SET PC, read_line_end
      IFE [C], 0x8
          SET PC, read_line_backspace
