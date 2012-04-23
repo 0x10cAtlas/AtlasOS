@@ -50,6 +50,11 @@ ASM:
 	SET B, POP
 	SET PC, POP
 
+API calls
+=========
+You call an API function by JSR'ing.
+
+JSR [0x1000]		; Calls the os_version function
 
 API functions
 =============
@@ -71,7 +76,7 @@ Side effects:
 	none
 	
 
-proc_id [0x1002]
+proc_id [0x1001]
 ----------------
 
 Description:
@@ -87,7 +92,7 @@ Side effects:
 	none
 	
 	
-proc_suspend [0x1004]
+proc_suspend [0x1002]
 ---------------------
 
 Description:
@@ -104,7 +109,7 @@ Side effects:
 	Runs other processes before returning to this one.
 
 	
-proc_get_addr [0x1006]
+proc_get_addr [0x1003]
 ----------------------
 
 Description:
@@ -120,7 +125,7 @@ Side effects:
 	none
 	
 
-proc_get_flags [0x1008]
+proc_get_flags [0x1004]
 -----------------------
 
 Description:
@@ -136,7 +141,7 @@ Side effects:
 	none
 	
 
-proc_kill_me [0x100A]
+proc_kill_me [0x1005]
 ---------------------
 
 Description:
@@ -152,7 +157,7 @@ Side effects:
 	The process will be removed from the process list and its initial mem page will be freed.
 	
 
-proc_kill [0x100C]
+proc_kill [0x1006]
 ------------------
 
 Description:
@@ -168,9 +173,122 @@ Side effects:
 	The process is removed from the process list and int initial mem page will be freed.
 	If the process doesn't exists nothing happens.
 	
-
-page_alloc [0x100E]
+proc_load [0x1007]
 ------------------
+
+Description:
+	Loads a new process into memory and starts it.
+	
+Parameters:
+	A - start address of the process BLOB
+	B - length of the process BLOB
+	
+Return:
+	process ID of the newly started process
+	
+Side effects:
+	Some memory is reserved, a new process is started.
+
+reserved [0x1008]
+-----------------
+Mind the gap!
+	
+proc_callback_list [0x1009]
+---------------------------
+
+Description:
+	Calls a given callback function for every entry in the process list.
+	
+Parameters:
+	A - address of the callback function
+	
+Return:
+	none
+	
+Side effects:
+	The callback function is called once for every entry in the process list.
+	For every call of the callback function A is set to process ID.
+	
+msg_queue_reg [0x100A]
+----------------------
+
+Description:
+	Registers a new OS message queue for receiving messages from the OS and other apps.
+
+Parameters:
+	A - Address of the 16 words buffer for the queue
+	
+Return:
+	A - 1 succeeded, 0 failed
+	
+Side effects:
+	Registers a new queue in the kernels queue list.
+
+msg_queue_rem [0x100B]
+----------------------
+
+Description:
+	Removes a OS message queue.
+
+Parameters:
+	A - Address of the 16 words buffer for the queue
+	
+Return:
+	A - 1 succeeded, 0 failed
+	
+Side effects:
+	Deletes a queue in the kernels queue list.
+	
+msg_broadcast [0x100C]
+----------------------
+
+Description:
+	Broadcasts a message to all message queues
+
+Parameters:
+	A - Source of the message
+	B - Content of the message
+	
+Return:
+	none
+	
+Side effects:
+	The message is inserted in ALL message queues,
+	even the queue(s) of the broadcasting process.
+
+msg_send [0x100D] ! not implemented yet !
+-----------------
+Description:
+	Sends a message to a specific process
+
+Parameters:
+	A - process ID
+	B - Source of the message
+	C - Content of the message
+	
+Return:
+	none
+	
+Side effects:
+	The message is inserted in the processes message queue(s).
+	
+msg_get_message [0x100E]
+------------------------
+Description:
+	Receives the next message from the process' message queue.
+
+Parameters:
+	none
+	
+Return:
+	A - Source of the message
+	B - Content of the message
+	
+Side effects:
+	The oldest message queue entry is returnd and removed from the queue.
+
+page_alloc [0x100F]
+-------------------
 
 Description:
 	Allocates a memory page (1024 words) and returns its address.
@@ -200,8 +318,55 @@ Side effects:
 	The memory page will be marked as free in the memory management table.
 	! This does not clear the memory !
 	
+page_check [0x1011]
+-------------------
+
+Description:
+	Returns the amount of reserved memory.
 	
-mem_clear [0x1012]
+Parameters:
+	none
+	
+Return:
+	Amount of reserved memory in words.
+	
+Side effects:
+	none
+
+page_check_of [0x1012]
+----------------------
+
+Description:
+	Returns the amount of reserved memory of a specific process.
+	
+Parameters:
+	A - process ID
+	
+Return:
+	Amount of reserved memory of the given process in words.
+	
+Side effects:
+	none
+	
+mem_copy [0x1013]
+-----------------
+
+Description:
+	Copys a given number of words from source to destination.
+	
+Parameters:
+	A - source address
+	B - destination address
+	C - number of words to copy
+	
+Return:
+	none
+	
+Side effects:
+	The destination memory is overwritten by the contents of source.
+	
+mem_clear [0x1014]
+------------------
 
 Description:
 	Sets all words in the specified memory to 0x0000.
@@ -217,7 +382,7 @@ Side effects:
 	All words in the specified memory are set to 0x0000.
 	
 	
-pusha [0x1014]
+pusha [0x1015]
 --------------
 
 Description:
@@ -267,8 +432,8 @@ Side effects:
 	SET A, POP
 	
 	
-strcpy [0x1018]
--------------
+strcpy [0x1017]
+---------------
 
 Description:
 	Copies a string from a source address to a destination address
@@ -284,8 +449,8 @@ Side effects:
 	Copies the string. The string must be 0-terminated.
 	
 	
-strncpy [0x101A]
--------------
+strncpy [0x1018]
+----------------
 
 Description:
 	Same as strcpy but with length limitation. (Same as C function)
@@ -300,10 +465,90 @@ Return:
 	
 Side effects:
 	Same as strcpy but when C was exceeded the destination string has no 0-termination.
+
+strlen [0x1019]
+---------------
+
+Description:
+	Returns the length of a null-terminated string
 	
+Parameters:
+	A - Start address of the string
 	
-text_out [0x101C]
+Return:
+	B - Length of the string
+	
+Side effects:
+	none
+
+strcmp [0x101A]
+---------------
+
+Description:
+	Compares two null-terminated strings to see if they're equal.
+	
+Parameters:
+	A - address of the first string
+	B - address of the second string
+	
+Return:
+	C and O as follows
+	A = B -> C=0, O=0
+	A > B -> C>0, O=0
+	A < B -> C>0, O>0
+
+Side effects:
+	none
+	
+int2dec [0x101B]
+----------------
+
+Description:
+	Converts a word into the decimal representation.
+	
+Parameters:
+	A - word to be converted
+	B - string buffer (size: 5 words)
+	
+Return:
+	none
+	
+Side effects:
+	The value of the word will be converted into a decimal string.
+	
+int2hex [0x101C]
+----------------
+
+Description:
+	Converts a word into the hexadecimal representation.
+	
+Parameters:
+	A - word to be converted
+	B - string buffer (size: 4 words)
+	
+Return:
+	none
+	
+Side effects:
+	The value of the word will be converted into a hexadecimal string.
+
+atoi [0x101D]
 -------------
+
+Description:
+	Converts a textual, decimal number into the actual integer value
+	
+Parameters:
+	A - address of the source string
+	
+Return:
+	C - integer representation of the string
+	
+Side effects:
+	none
+	
+text_out [0x101E]
+-----------------
 
 Description:
 	Prints the text on the screen. It takes 0x00A0 as line feed.
@@ -319,8 +564,8 @@ Side effects:
 	If the text reaches the bottom of the screen the screen is automaticaly scrolled.
 	
 
-newline [0x101E]
--------------
+newline [0x101F]
+----------------
 
 Description:
 	Sets the screen cursor to the next line.
@@ -336,7 +581,7 @@ Side effects:
 	
 
 scroll [0x1020]
--------------
+---------------
 
 Description:
 	Scrolls the screen one line up.
@@ -350,9 +595,8 @@ Return:
 Side effects:
 	Screen is scrolled up and the screen cursor is set one line up.
 	
-
-clear [0x1022]
--------------
+clear [0x1021]
+--------------
 
 Description:
 	Clears the screen.
@@ -367,8 +611,8 @@ Side effects:
 	Sets the entire screen buffer to 0x7000. Sets the screen cursor to the top left position.
 	
 	
-char_put [0x1024]
--------------
+char_put [0x1022]
+-----------------
 
 Description:
 	Puts the specified char to the specified position on the screen.
@@ -386,8 +630,8 @@ Side effects:
 	! Does not specify a color for the char !
 	
 
-read_line [0x1026]
--------------
+read_line [0x1023]
+------------------
 
 Description:
 	Reads a line from the keyboard to the string buffer
@@ -403,8 +647,7 @@ Return:
 Side effects:
 	Reads the values from the keyboard. Constantly calls proc_suspend to wait for the key buffer to be filled.
 	
-
-rand [0x1028]
+rand [0x1024]
 -------------
 
 Description:
@@ -418,10 +661,26 @@ Return:
 	
 Side effects:
 	Changes the entropy value of the OS.
+
+
+srand [0x1025]
+--------------
+
+Description:
+	Initializes the random number generator
+	
+Parameters:
+	A - seed for the random number generator
+	
+Return:
+	none
+	
+Side effects:
+	Sets the OS's entropy value.
 	
 
-keyboard_register [0x102A]
--------------
+keyboard_register [0x1026]
+--------------------------
 
 Description:
 	Registers a memory address as a keyboard buffer.
@@ -436,9 +695,8 @@ Side effects:
 	adds the memory address to the keyboard buffer list. If the list is full this
 	function silently fail.
 
-	
-keyboard_unregister [0x102C]
--------------
+keyboard_unregister [0x1027]
+----------------------------
 
 Description:
 	Removes a keyboard buffer from the list
@@ -451,149 +709,21 @@ Return:
 	
 Side effects:
 	The specified buffer will no longer be filled by the keyboard driver
-	
-	
-int2dec [0x102E]
+
+keyboard_is_exclusive_active [0x1028]
 -------------
 
 Description:
-	Converts a word into the decimal representation.
+	Returns whether there is an exclusive keyboard buffer active
 	
 Parameters:
-	A - word to be converted
-	B - string buffer (size: 5 words)
-	
-Return:
 	none
 	
-Side effects:
-	The value of the word will be converted into a decimal string.
-	
-	
-int2hex [0x1030]
--------------
-
-Description:
-	Converts a word into the hexadecimal representation.
-	
-Parameters:
-	A - word to be converted
-	B - string buffer (size: 4 words)
-	
 Return:
+	A - 0 if no, 1 if yes
+	
+Side effects:
 	none
-	
-Side effects:
-	The value of the word will be converted into a hexadecimal string.
-
-
-atoi [0x1032]
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-
-strlen [0x1034]
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-
-strcmp [0x1036]
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-
-page_check [0x1038]
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-
-srand [0x103A]
--------------
-
-Description:
-	Initializes the random number generator
-	
-Parameters:
-	A - seed for the random number generator
-	
-Return:
-	none
-	
-Side effects:
-	Sets the OS's entropy value.
-
-proc_load [0x103C
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-
-proc_callback_list [0x103E]
--------------
-
-Description:
-	??
-	
-Parameters:
-	??
-	
-Return:
-	??
-	
-Side effects:
-	??
-	
-
-	
 	
 // Ignore me!	
  [0x10]

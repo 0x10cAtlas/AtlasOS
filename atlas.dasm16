@@ -2123,7 +2123,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
     dat proc_kill_me 	        ; 0x1005 Kills the current process
     dat proc_kill 		; 0x1006 Kills a process
     dat proc_load		; 0x1007 Loads a new process
-    dat 0x0000               ; 0x1008 Loads a new ABI process
+    dat 0x0000                  ; 0x1008 Loads a new ABI process
     dat proc_callback_list      ; 0x1009 Dumps a list of running processes
 
     dat msg_queue_reg           ; 0x100A Registers a new message queue
@@ -2164,7 +2164,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
     dat keyboard_register       ; 0x1026 Registers a specific memory location as keyboard buffer
     dat keyboard_unregister     ; 0x1027 Unregisters a specific memory location
-    dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
+    dat keyboard_is_exclusive_active ; 0x1028 Checks if exclusive keyboard is active
 
     dat filesystem_getfile           ; Returns the start of the matched filesystem entry in C, 0 otherwise
     dat filesystem_getfile_table     ; Returns the start of the filesystem file table. May be deprecated later
