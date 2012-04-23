@@ -1,7 +1,7 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-; AtlasOS version 0.5.4
-; Atlas-Shell version 0.3.3
+; AtlasOS version 0.5.5
+; Atlas-Shell version 0.4.0
 
 :kernel_boot
 ; clear screen (for emulator)
@@ -88,7 +88,7 @@ JSR keyboard_unregister_all
 
 	; Call the keyboard driver
 	JSR driver_keyboard
-	
+
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
@@ -140,16 +140,23 @@ JSR keyboard_unregister_all
     SET PUSH, A
     SET PUSH, B
 	SET PUSH, C
-	
+
 	SET C, 0x9000
 	SET B, 0x0000
 :driver_keyboard_ringbuffloop
+	; Find last non-zero value in the ring buffer (and reset the buffer to 0's)
 	IFN [C], 0
 		SET B, [C]
+	; filter non-ascii - check if any of the upper 9 bits is set, if yes - reset to 0.
+	SET A, B
+	SHR A, 7
+	IFN A, 0
+		SET B, 0
 	SET [C], 0
 	ADD C, 1
 	IFN C, 0x9010
 		SET PC, driver_keyboard_ringbuffloop
+
 	SET [C], B
 
 	; Skip the driver if the key value hasn't changed
@@ -455,9 +462,9 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-; A: source
-; B: dest
-; C: length
+; A -> source
+; B -> dest
+; C -> length
 :mem_copy
       SET PUSH, A
       SET PUSH, B
@@ -547,7 +554,8 @@ SET PC, stop
 
       SET PC, POP
 
-; A -> page entry
+; Find an empty entry in the page_table and store the page descriptor.
+; A -> combined page entry
 ; A <- 1 of succeeded, 0 if failed
 :page_add
       SET PUSH, B
@@ -576,12 +584,15 @@ SET PC, stop
       SET A, 1
       SET PC, page_add_end
 
+; Finds the first free page of memory by inspecting the bits of the page_map.
+; A <- first free page number.
 :page_find_free
 
       ;SET PC, page_find_free
 
       SET PUSH, B
 
+      ; 0xFFFF means given 16kB is fully occupied.
       SET A, page_map
       SET B, 0
       IFN [A], 0xFFFF
@@ -606,9 +617,12 @@ SET PC, stop
       SET B, POP
       SET PC, POP
 
+; Find free page within this 16kB block by looking for a bit set to 0.
 :page_find_free_found
       SET PUSH, [A]
+	  ; B is the id of the page_map word - each word covers 16 pages.
       MUL B, 16
+	  ; A will hold the final number.
       SET A, B
 
 :page_find_free_found_loop
@@ -625,6 +639,7 @@ SET PC, stop
 
 
 ; Allocates a page for the current application
+; A <- Address of the allocated memory page.
 :page_alloc
       SET PUSH, B
 
@@ -635,8 +650,8 @@ SET PC, stop
       SET PUSH, A
 
       JSR proc_id
-      SET B, A
-      SET A, PEEK
+      SET B, A ; proc_id
+      SET A, PEEK ; free page number
 
       JSR page_combine
       JSR page_add
@@ -644,6 +659,8 @@ SET PC, stop
           SET PC, page_alloc_error2
 
       SET A, POP
+
+	  ; Calculate the real mem address of the allocated page.
       MUL A, 1024
 
 :page_alloc_end
@@ -1072,152 +1089,174 @@ SET PC, stop
 ; B: Length of the BLOB
 :proc_load
 
-      SET PUSH, B
-      SET PUSH, C
-      SET PUSH, X
-      SET PUSH, Y
-      SET PUSH, Z
-
-      IFE [A], 0x4714  ; Check for magic number
-          JSR proc_exec     ; No flat binary, call advanced loader
-
-
-      SET X, proc_table
-
-:proc_load_loop
-      IFE [X], 0x0000
-          SET PC, proc_load_to
-
-      ADD X, 12
-      IFN X, proc_table_end
-          SET PC, proc_load_loop
-
-:proc_load_error
-      SET A, 0
-
-:proc_load_end
-      SET Z, POP
-      SET Y, POP
-      SET X, POP
-      SET C, POP
-      SET B, POP
-      SET PC, POP
-
-:proc_load_to
-      ; Calculate the ProcID
-      SET [X], X
-      SUB [X], proc_table
-      DIV [X], 12
-      ADD [X], 1
-
-      ; X = ProcInfo Addr
-
-      ; Finaly load the Process
-      SET C, B
-      SET Y, A
-
-      SET Z, [proc_current]   ; Fake the process ID
-      SET [proc_current], [X]
-
-      JSR page_alloc
-
-      SET [proc_current], z
-
-      IFE A, 0
-          SET PC, proc_load_error
-
-      SET B, A
-      SET A, Y
-      JSR mem_copy
-
-      SET A, [X] ; A return the ProcID
-
-      ADD X, 1 ; A
-      SET [X], 0
-      ADD X, 1 ; B
-      SET [X], 0
-      ADD X, 1 ; C
-      SET [X], 0
-      ADD X, 1 ; X
-      SET [X], 0
-      ADD X, 1 ; Y
-      SET [X], 0
-      ADD X, 1 ; Z
-      SET [X], 0
-      ADD X, 1 ; I
-      SET [X], 0
-      ADD X, 1 ; J
-      SET [X], 0
-      ADD X, 1 ; SP
-      SET [X], B
-      ADD [X], 1023
-      SET Y, [X] ; Save stack address
-      ADD X, 1
-      SET [X], B
-      ADD X, 1 ; Flags
-      SET [X], 0x0001
-
-      SET [Y], B ; "Push" the "return" address on the stack
-
-      SET PC, proc_load_end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-; Loads a new process into memory
-; A: Begin of the BLOB
-; B: Length of the BLOB
-:proc_exec
-	IFN [A], 0x4714     ; seems to be a flat binary, call legacy loader
-		SET PC, proc_load
-
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
 	SET PUSH, I
 	SET PUSH, J
 
-	SET X, B ; Store the given length for error checking
-	SET B, A ; Store the start point for error checking in a bit as the ABI format determines the BLOB length
+	SET C, 0 ; Clear this out because C might contain flag info if we load an ABI exe
 
+	SET Z, [A]
+	IFN [A], 0x4714  ; Check for magic number
+		SET PC, proc_load_start
+:proc_load_handle_exec
 	ADD A, 1
-	SET C, [A] ; Do nothing with the revision # in this interim build
+	;SET C, [A] ; Do nothing with the revision # in this interim build
 	ADD A, 1
 	SET I, [A] ; Save the length of the header
 	ADD A, 1
 	SET J, [A] ; Save the length of the code+data
 	ADD A, 1
 	SET C, [A] ; Save the flags data
-	
+	SUB A, 4 ; And now move the pointer back to the start
+
+:proc_load_start
+	SET X, proc_table
+
+:proc_load_loop
+	IFE [X], 0x0000
+		SET PC, proc_load_to
+
+	ADD X, 12
+	IFN X, proc_table_end
+		SET PC, proc_load_loop
+
+:proc_load_error
+	SET A, 0
+	SET PC, proc_load_end
+
+; Load the process and fill the details in the proc_table.
+; X -> addr of the empty proc_table record for this process
+; A <- proc id
+:proc_load_to
+	; Calculate the ProcID by finding the proc_table record number (OS is 1).
+	SET [X], X
+	SUB [X], proc_table
+	DIV [X], 12
+	ADD [X], 1
+
+	; X = ProcInfo Addr
+
+	; Backup our flags
+	SET PUSH, C
+
+	; Finally load the Process - A is the source mem addr, B is length.
+	SET C, B
+	SET PUSH, A
+
+	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
+	SET PUSH, [proc_current]
+	SET [proc_current], [X]
+
+	JSR page_alloc
+
+	SET [proc_current], POP
+
+	IFE A, 0
+		SET PC, proc_load_error
+
+	; Copy the program to the newly allocated memory.
+	SET B, A ; Save the address of the new page
+	SET A, PEEK ; Get back our original source address
+	IFE Z, 0x4714
+		ADD A, I ; If we are an ABI exe offset the copy destination by the size of the header
+	IFE Z, 0x4714
+		SET C, J ; If we are an ABI exe set the size to just the code length
+	JSR mem_copy
+	SET A, POP
+
+	; Get the flags back.
+	SET C, POP
+
+	; Check if we have any flags to deal with
+	IFN C, 0
+		JSR proc_handle_flags
+
+	SET A, [X] ; A return the ProcID
+	; Fill the proc_table entry for this process.
+	ADD X, 1 ; A
+	SET [X], 0
+	ADD X, 1 ; B
+	SET [X], 0
+	ADD X, 1 ; C
+	SET [X], 0
+	ADD X, 1 ; X
+	SET [X], 0
+	ADD X, 1 ; Y
+	SET [X], 0
+	ADD X, 1 ; Z
+	SET [X], 0
+	ADD X, 1 ; I
+	SET [X], 0
+	ADD X, 1 ; J
+	SET [X], 0
+
+	; Set the SP to the last byte of the allocated memory page (B+1023)
+	ADD X, 1 ; SP
+	SET [X], B
+	ADD [X], 1023
+	SET Y, [X] ; Save stack address for later.
+
+	; Store the memory address of the process.
+	ADD X, 1
+	SET [X], B
+	ADD X, 1 ; Flags
+	BOR C, 0x0001 ; OR in the active flag. This will overwrite the ART flag but we don't care
+	SET [X], C
+
+	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
+
+:proc_load_end
+	SET J, POP
+	SET I, POP
+	SET Z, POP
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+
+
+:proc_handle_flags
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; If bit 1 is true then backup the character set data
+	SET PUSH, A
+	SET A, 0 ; Param for manage_charset to save charset data
+	AND C, 0x0002
+	IFE C, 1
+		JSR manage_charset
+	SET A, POP
+
+	SET C, PEEK
 	AND C, 0x0001 ; Check if the app has an ART
 	IFE C, 1
 		JSR proc_exec_process_relocation
-	
-	SET PC, proc_exec_check_errors
-:proc_exec_process_relocation
-	; Check if the header length isn't enough to contain the ART with at least 1 entry
-	IFG 7, I
-		SET PC, proc_load_error ; We throw an error because the flags said there should be an ART
+:proc_handle_flags_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
-	ADD A, 1
+; Handle the ART table for an application
+; A -> Start of the ABI header (i.e. file start)
+; B -> Copy of binary that we are modifying
+:proc_exec_process_relocation
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	ADD A, 5
 	SET C, [A] ; Get the number of entries in the relocaton table
 :proc_exec_process_relocation_loop
 	IFE C, 0
-		SET PC, POP
+		SET PC, proc_exec_process_relocation_end
 	SET PUSH, B
 	SET PUSH, X
-	ADD B, I ; Offset our pointer by the length of the header. This puts us at the start of the program code
 	SET X, B ; Store the program start location
 	ADD A, 1 ; Increment to next entry in ART
 	ADD B, [A] ; Add the ART offset to our pointer
@@ -1226,46 +1265,38 @@ SET PC, stop
 	SET X, POP
 	SET B, POP
 	SET PC, proc_exec_process_relocation_loop
-:proc_exec_check_errors
-	ADD A, 1 ; Move A to the start of the code
-
-	; Check that the calculated total size is what we got from the function call
-	ADD I, J
-	IFN I, X
-		SET PC, proc_load_error
-	SUB I, J
-:proc_exec_prepare_pointers
-	; Start loading the app
-	; Must have code start in A, and length in B
-	SET A, B
-	ADD A, I
-	SET B, J ; Copy code length that we got from header
-	
-	SET J, POP
-	SET I, POP
-	
+:proc_exec_process_relocation_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
 	SET PC, POP
-	
-	
+
+
 ; Kill self
 :proc_kill_me
-      JSR proc_id ; Save process ID
-      SET X, A
-      JSR proc_get_info_of ; Save process info address
-      SET Y, A
-      ADD A, 10 ; Save memory page
-      SET Z, [A]
+	JSR proc_id ; Save process ID
+	SET X, A
+	JSR proc_get_info_of ; Save process info address
+	SET Y, A
+	ADD A, 10 ; Save memory page
+	SET Z, [A]
 
-      SET A, Y ; Delete the process info entry
-      SET B, 12
-      JSR mem_clear
+	ADD A, 1 ; Move to the flags word
+	SET A, [A] ; And retrieve the process flags
+	AND A, 0x0002 ; Check if this was a foreground app
+	IFE A, 1 ; Restore the character set. Since A is already 1 (restore charset) no need for extra ops here
+		JSR manage_charset
 
-      SET A, X
-      JSR page_free_of
+	SET A, Y ; Delete the process info entry
+	SET B, 12
+	JSR mem_clear
 
-      SET A, Y ; Restore the pointer to the info entry
-      SET C, 12
-      SET PC, proc_kill_me_hook
+	SET A, X
+	JSR page_free_of
+
+	SET A, Y ; Restore the pointer to the info entry
+	SET C, 12
+	SET PC, proc_kill_me_hook
 
 :proc_kill
       SET PUSH, B
@@ -1325,6 +1356,33 @@ SET PC, stop
      SET PC, [pushpop_buffer] ; jump back
 
 :pushpop_buffer dat 0x0000
+
+; Charset functions
+; Takes:
+; A: 0 to save charset, 1 to restore charset
+:manage_charset
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
+	SET A, char_set
+	SET B, 0x8180
+:manage_charset_loop
+	IFE A, char_set_end
+		SET PC, manage_charset_end
+	IFE C, 0
+		SET [A], [B]
+	IFG C, 0
+		SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, manage_charset_loop
+:manage_charset_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
 
 ; Driver functions
 
@@ -1702,7 +1760,7 @@ SET PC, POP
     SUB C, [B]
     SET B, POP
     SET A, POP
-    SET PC, POP 
+    SET PC, POP
 
 ; Stores the length of a given string in B
 ; A: Address of the string buffer
@@ -1739,7 +1797,9 @@ SET PC, POP
 	 JSR proc_suspend
      IFE [C], 0
          SET PC, read_line_skip
-     IFE [C], 0xA
+     IFE [C], 0xA ; \n
+         SET PC, read_line_end
+     IFE [C], 0xD ; \r
          SET PC, read_line_end
      IFE [C], 0x8
          SET PC, read_line_backspace
@@ -1816,6 +1876,87 @@ SET PC, POP
 	SET [entropy], A
 	SET PC, POP
 
+; ########################################
+
+; FILESYSTEM FUNCTIONS
+
+; Return start of the filesystem
+:filesystem_getfile_table
+	SET A, files_table
+	SET PC, POP
+
+; Returns pointer to start of file entry in file table in C, returns 0 if file not found
+; A: buffer containing file name
+:filesystem_getfile
+	SET PUSH, X
+	SET PUSH, B
+	SET PUSH, A
+
+	SET B, A
+
+	JSR filesystem_getfile_table
+	SET X, [A] ; Get the number of files in the table
+	ADD A, 1 ; Jump down to the start of the table
+:filesystem_getfile_loop
+	SET C, 0 ; Reset our return
+	IFE X, 0 ; Check if we've gone through all of the files
+		SET PC, filesystem_getfile_end
+	SUB X, 1
+
+	ADD A, 2 ; Skip over the directory ID and flags
+	JSR strcmp ; Check if the current filename (A) matches the original filename (B)
+	IFE C, 0
+		SET PC, filesystem_getfile_found
+	ADD A, 18 ; Skip over the filename, start, and end
+
+	SET PC, filesystem_getfile_loop
+:filesystem_getfile_found
+	SUB A, 2 ; Backs up the pointer to the start of the file entry
+	SET C, A ; Sets C to the start of the entry
+
+:filesystem_getfile_end
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
+
+; Returns pointer to start of file entry in file table in C, returns 0 if file not found
+; A: Program start or directory ID
+:filesystem_getfile_bystart
+	SET PUSH, X
+	SET PUSH, B
+	SET PUSH, A
+
+	SET B, A
+
+	JSR filesystem_getfile_table
+	SET X, [A] ; Get the number of files in the table
+	ADD A, 1 ; Jump down to the start of the table
+:filesystem_getfile_bystart_loop
+	SET C, 0 ; Reset our return
+	IFE X, 0 ; Check if we've gone through all of the files
+		SET PC, filesystem_getfile_bystart_end
+	SUB X, 1
+
+	ADD A, 18 ; Skip over the directory ID, flags, and filename
+	IFE B, [A]
+		SET PC, filesystem_getfile_bystart_found
+
+	ADD A, 2 ; Skip over end and jump to next entry
+
+	SET PC, filesystem_getfile_bystart_loop
+:filesystem_getfile_bystart_found
+	SUB A, 18 ; Backs up the pointer to the start of the file entry
+	SET C, A ; Sets C to the start of the entry
+
+:filesystem_getfile_bystart_end
+	SET A, POP
+	SET B, POP
+	SET X, POP
+	SET PC, POP
+
+; ########################################
+
 ; Halts the CPU
 :stop SET PC, stop
 
@@ -1824,14 +1965,14 @@ SET PC, POP
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0005
-:os_version_fix dat 0x0004
+:os_version_fix dat 0x0005
 
 :video_mem dat 0x8000
 :video_col dat 0x7000
 :video_cur dat 0x8000
 :video_clear dat 0x7020
 
-:text_start dat "AtlasOS v0.5.4 starting... ", 0x00
+:text_start dat "AtlasOS v0.5.5 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo1 DAT "      ___   __   __", 0xA0
 :text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
@@ -1841,14 +1982,20 @@ SET PC, POP
 :text_logo6 DAT "         / __ \\/ ___/", 0xA0
 :text_logo7 DAT "        / / / /\\__ \\", 0xA0
 :text_logo8 DAT "       / /_/ /___/ /", 0xA0
-:text_logo9 DAT "       \\____//____/             ", 0xA0, 0x00
+:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
 
+; Bitmap of the OS-managed memory, occupied pages are marked by 1's.
+; Total of 64kB of memory supported here - each word covers 16kB.
 :page_map
 :page_map0 dat 0x0000
 :page_map1 dat 0x0000
 :page_map2 dat 0x0000
 :page_map3 dat 0x0000
 
+; Table mapping memory pages to processes.
+; Each word holds a page descriptor. Low byte encodes proc id, high byte encodes
+; the memory offset of the associated 1kB page. For example 0x0702 marks the memory area
+; from 0x1C00 to 0x1FFF (7th page) as belonging to process 2.
 :page_table              ; 128 words
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -1925,19 +2072,44 @@ SET PC, POP
        dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_table_end
 
+; Keyboard driver variables
 :keyboard_buffers
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_end
 :keyboard_buffers_flags
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_flags_end
-:keyboard_buffers_exclusive dat 0x0000
+:keyboard_buffers_exclusive dat 0x0000 ; Contains buffer mem loc that has exclusive access
 :keyboard_oldvalue dat 0x0000
-:keypointer dat 0x0000
 
+; Kernel watchdog variables
 :kernel_watchdog_proc_list_buffer
 	dat 0x0000, 0x0000
 :kernel_watchdog_proc_list_buffer_end
+
+; This is used to buffer the character set before a foreground application is loaded
+; and to restore it after the app has closed
+; This will allow foreground applications to alter the character set without impacting
+; applications that will run after the foreground app has closed
+:char_set
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:char_set_end
+:screen_buffer_exclusive dat 0x0000
 
 :entropy dat 0x0000
 
@@ -1951,7 +2123,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
     dat proc_kill_me 	        ; 0x1005 Kills the current process
     dat proc_kill 		; 0x1006 Kills a process
     dat proc_load		; 0x1007 Loads a new process
-    dat proc_exec               ; 0x1008 Loads a new ABI process
+    dat 0x0000               ; 0x1008 Loads a new ABI process
     dat proc_callback_list      ; 0x1009 Dumps a list of running processes
 
     dat msg_queue_reg           ; 0x100A Registers a new message queue
@@ -1992,41 +2164,50 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
     dat keyboard_register       ; 0x1026 Registers a specific memory location as keyboard buffer
     dat keyboard_unregister     ; 0x1027 Unregisters a specific memory location
+    dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
 
+    dat filesystem_getfile           ; Returns the start of the matched filesystem entry in C, 0 otherwise
+    dat filesystem_getfile_table     ; Returns the start of the filesystem file table. May be deprecated later
+    dat filesystem_getfile_bystart   ; Returns the start of the matched filesystem entry in C, 0 otherwise
 :api_end
 
 ; API Padding. This is temporary to buffer the kernel so that the API space doesn't overwrite program code
 ; TODO: Need to find a way to pad the kernel up to 0x1400 dynamically
-; 2750 words
+; 2560 words
 :api_padding
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                                                                                                    "
-	dat "                                                              "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                                                                                                "
 
 :kernel_end
 ; ################################
 ; ################################
 :apps
 
+; Note: This application table will ONLY contain built-in apps eventually
+; This means that we will likely get rid of it once external storage is implemented by Notch
+; application_table_format
+; dat "name_of_app", 0, app_location, app_location_end
+:application_table
+:app1 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app2 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:application_table_end
 
 
 ; BASH-like Process
@@ -2034,19 +2215,29 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, text_versionoutput
 	JSR [0x101E]
 :AtlasShell_start
-	SET I, AtlasShell_loop_end ; Calculate the length of the back-jump
-	SUB I, AtlasShell_loop
-
 	; Register our buffer with the driver
 	SET A, input_buffer
-	JSR [AtlasShell_keyboard_register]
-
+	JSR [0x1026]
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
-	JSR keyboard_is_exclusive_active
+	JSR [0x1028]
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 
+	; Load the pwd name
+	JSR command_clear_present_working_directory_name
+	SET A, [present_working_directory]
+	JSR [0x102B]
+	IFE C, 0
+		SET PC, AtlasShell_skip_display_path
+	ADD C, 2
+	SET A, C
+	SET B, present_working_directory_name
+	JSR [0x1017]
+	; Display the current path
+	SET A, present_working_directory_name
+	JSR [0x101E]
+:AtlasShell_skip_display_path
 	; Display the prompt
 	SET A, text_prompt
 	JSR [0x101E]
@@ -2062,7 +2253,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, AtlasShell_loop_wait
 
@@ -2074,37 +2265,55 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Check for the 'clear' command
 	SET A, command_clear
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		JSR command_clearf
 
 	; Check for the 'version' command
 	SET a, command_version
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_versionf
 
 	; Check for the 'load' command
 	SET a, command_load
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_loadf
 
 	; Check for the 'kill' command
 	SET a, command_kill
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_killf
 
 	; Check for the 'list' command
 	SET a, command_list
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_listf
+
+	; Check for the 'ls' command
+	SET A, command_ls
+	SET B, command_parameter_buffer
+	JSR [0x101A]
+	IFE C, 0
+		JSR command_lsf
+
+	; Check for the 'cd' command
+	SET A, command_cd
+	SET B, command_parameter_buffer
+	JSR [0x101A]
+	IFE C, 0
+		JSR command_cdf
+
+	; Check if we're trying to run a file
+	IFN [ack_command], 1
+		JSR command_runfile
 
 	; If we don't have an acknowledged command, display the generic response
 	ifn [ack_command], 1
@@ -2112,7 +2321,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
 	JSR [0x1002]
-	SUB PC, I
+	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
 ; ==BEGIN COMMAND FUNCTIONS==
@@ -2141,14 +2350,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_versionf_shell
 
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_versionf_os
 :command_versionf_shell
@@ -2189,14 +2398,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_loadf_help
 
 	;check if list > list applications in table
 	SET A, command_parameter_buffer
 	SET B, command_list
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IfE C, 0
 		SET PC, command_loadf_list
 
@@ -2208,12 +2417,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp] ; compare table string to parameter
+	JSR [0x101A] ; compare table string to parameter
 	IFE C, 0
 		SET PC, command_loadf_loop_end ; if equal move to end
 
 	; Get the length of the app name and move our pointer forward past that
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
@@ -2223,7 +2432,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, A
 	JSR [0x101F]
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	SET A, POP
 	ADD A, B
 	ADD A, 1
@@ -2235,7 +2444,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET B, [B]
 	SUB B, A
 
-	JSR [AtlasShell_proc_load]
+	JSR [0x1007]
 
         IFE A, 0
             SET PC, command_loadf_unknown
@@ -2261,7 +2470,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	JSR [0x101E] ;print out app name
 	JSR [0x101F]
 	; Get the length of the app name and move our pointer forward past that
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
@@ -2295,20 +2504,20 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_killf_help
 
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_killf_last
 
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_atoi]	; A is source, C is result
+	JSR [0x101D]	; A is source, C is result
 
 	; Selfkill?
 	SET PUSH, A
@@ -2367,7 +2576,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
-	JSR [AtlasShell_proc_callback_list]
+	JSR [0x1009]
 
 	JSR [0x101F]
 	SET A, command_list_info
@@ -2405,16 +2614,300 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, POP
 	; Convert to text and display
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	JSR [0x101B]
 	SET A, command_number_buffer
 	JSR [0x101E]
 	JSR [0x101F]
 
 	SET PC, POP
 
+; Command to list all files in current directory
+:command_lsf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	JSR [0x101F]
+	JSR [0x102A]
+	SET X, [A]
+	SET Y, 0
+	ADD A, 1
+:command_lsf_loop
+	IFE Y, X
+		SET PC, command_lsf_end
+	ADD Y, 1
+	SET B, command_ls_row
+
+	SET PUSH, A
+	SET C, [A] ; Ignore the directory value for now, will be finished later
+	SET A, [present_working_directory]
+	IFN C, A
+		SET PC, command_lsf_skip_file
+	SET A, POP
+
+	ADD A, 1 ; Move on to flags
+
+	; Store if this file can be read
+	SET C, [A]
+	AND C, 0x0001
+	IFE C, 1
+		SET [B], 0x52 ; 'R'
+	ADD B, 1
+
+	; Store if this file can be written to
+	SET C, [A]
+	AND C, 0x0002
+	IFE C, 2
+		SET [B], 0x57 ; 'W'
+	ADD B, 1
+
+	; Store if this file is executable
+	SET C, [A]
+	AND C, 0x0008
+	IFE C, 8
+		SET [B], 0x45 ; 'E'
+	ADD B, 1
+
+	; Check if the file is hidden
+	SET C, [A]
+	AND C, 0x0004
+	IFE C, 4
+		SET [B], 0x48 ; 'H'
+
+		; Store if this is a directory
+	SET C, [A]
+	AND C, 0x0010
+	IFE C, 16
+		SET [B], 0x44 ; 'D'
+	ADD B, 1
+
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	ADD A, 1
+
+	; Store the file name
+	JSR [0x1017]
+	ADD B, 16
+	ADD A, 16
+
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	;ADD A, 1
+
+	IFE C, 16
+		SET PC, command_lsf_skip_filesize
+
+	; Display file size
+	SET C, [A] ; Get the file start
+	ADD A, 1
+	SET PUSH, A
+	SET A, [A]
+	SUB A, C
+	JSR [0x101B]
+	SET A, POP
+:command_lsf_skip_filesize
+	IFE C, 16
+		ADD A, 1
+	; Output the file info
+	SET C, A
+	SET A, command_ls_row
+	JSR [0x101E]
+	SET A, C
+	SET PC, command_lsf_skip_file_end
+:command_lsf_skip_file
+	SET A, POP
+	ADD A, 19
+:command_lsf_skip_file_end
+	; Clear out the row buffer
+	SET C, command_ls_row
+	ADD C, 32
+	SET B, command_ls_row
+:command_lsf_clearrow
+	SET [B], 0x20
+	ADD B, 1
+	IFN B, C
+		SET PC, command_lsf_clearrow
+
+	; Move on to the next entry
+	ADD A, 1
+	SET PC, command_lsf_loop
+:command_lsf_end
+	;JSR [0x1002]
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+:command_runfile
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR [0x101F]
+
+	SET A, command_parameter_buffer
+	JSR [0x1029]
+	IFE C, 0
+		SET PC, command_runfile_end
+
+	SET A, [C] ; Skip over the directory ID, will finish later
+	IFN A, [present_working_directory]
+		SET PC, command_runfile_end
+
+	ADD C, 1
+	SET A, [C] ; Get the file flags
+	AND A, 0x0008 ; Check if the file is executable
+	IFE A, 0
+		SET PC, command_runfile_notexe
+
+	ADD C, 1
+
+	ADD C, 16
+	SET A, [C]
+	ADD C, 1
+	SET B, [C]
+	SUB B, A
+	JSR [0x1007]
+	IFN A, 0
+		SET [ack_command], 1
+	SET PC, command_runfile_end
+:command_runfile_notexe
+	SET A, command_runfile_notexe_text
+	JSR [0x101E]
+	SET [ack_command], 1
+:command_runfile_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+:command_cdf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	JSR [0x101F]
+
+	;check if 'cd'
+	SET A, command_parameter_buffer
+	SET B, command_cd
+	JSR [0x101A]
+	IFE C, 0
+		SET PC, command_cdf_help
+
+	; check if blank > load help
+	SET A, command_parameter_buffer
+	JSR [0x1019]
+	IFE B, 0
+		SET PC, command_cdf_help
+
+	;check if '..'
+	SET A, command_parameter_buffer
+	SET B, command_cd_back
+	JSR [0x101A]
+	IFE C, 0
+		SET PC, command_cdf_back
+
+	;check if '/'
+	SET A, command_parameter_buffer
+	SET B, command_cd_root
+	JSR [0x101A]
+	IFE C, 0
+		SET PC, command_cdf_root
+
+	JSR [0x1029]
+	IFN C, 0
+		SET PC, command_cdf_cd
+	SET PC, command_cdf_unknown
+
+:command_cdf_help
+	SET A, command_cd_help
+	JSR [0x101E]
+	SET PC, command_cdf_end
+
+:command_cdf_back
+	SET A, directory_stack_end
+	SUB A, 1
+:command_cdf_back_traverse_directorystack
+	IFE A, directory_stack
+		SET PC, command_cdf_back_end
+	IFN [A], 0
+		SET PC, command_cdf_back_end
+	SUB A, 1
+	SET PC, command_cdf_back_traverse_directorystack
+:command_cdf_back_end
+	SET [A], 0
+	IFN A, directory_stack
+		SUB A, 1
+	SET [present_working_directory], [A]
+	SET PC, command_cdf_end
+
+:command_cdf_root
+	SET [present_working_directory], 0x0000
+	SET A, directory_stack
+:command_cdf_root_clear_directorystack
+	IFE A, directory_stack_end
+		SET PC, command_cdf_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_cdf_root_clear_directorystack
+
+:command_cdf_unknown
+	SET A, command_parameter_buffer
+	JSR [0x101E]
+	SET A, command_cd_unknown
+	JSR [0x101E]
+	SET PC, command_cdf_end
+
+:command_cdf_cd
+	IFN [C], [present_working_directory] ; Check if we're trying to access a directory not in our current directory
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move past to the flags
+	SET A, [C]
+	AND A, 0x0010 ; Check the flags to see if this file is a directory
+	IFN A, 16
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move to the name
+	SET A, C
+
+	ADD C, 16 ; Move past the name
+
+	SET B, directory_stack
+:command_cdf_cd_addtodirectorystack
+	IFE B, directory_stack_end
+		SET PC, command_cdf_end ; Directory stack is full, cannot change directory
+	IFE [B], 0
+		SET PC, command_cdf_cd_addtodirectorystack_end
+	ADD B, 1
+	SET PC, command_cdf_cd_addtodirectorystack
+:command_cdf_cd_addtodirectorystack_end
+	SET A, [C] ; Store the directory ID
+	SET [B], A
+	SET [present_working_directory], A
+
+:command_cdf_end
+	JSR command_clear_parameter_buffer
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [0x1002]
+	SET PC, POP
+
 :AtlasShell_die
 	SET A, input_buffer
-	JSR [AtlasShell_keyboard_unregister]
+	JSR [0x1027]
 	JSR [0x101F]
 	JSR [0x1005]
 
@@ -2432,7 +2925,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	MUL A, 10000
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	JSR [0x101B]
 	IFE A, 0
 		SET [B], 0x0030
 	SET A, command_number_buffer
@@ -2440,12 +2933,12 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, B
 	MUL A, 100
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	JSR [0x101B]
 	SET A, command_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	JSR [0x101B]
 	SET A, command_number_buffer
 	ADD A, 1
 	SET [A], [command_version_separator]
@@ -2479,6 +2972,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET [A], 32
 	ADD A, 1
 	SET [A], 32
+	SET A, POP
+	SET PC, POP
+:command_clear_present_working_directory_name
+	SET PUSH, A
+	SET PUSH, B
+	SET A, present_working_directory_name
+	SET B, 16
+	JSR [0x1014]
+	SET B, POP
 	SET A, POP
 	SET PC, POP
 
@@ -2539,26 +3041,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :command_list_info dat "Process list:", 0xA0, 0x00
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
-
-; API Jump table
-:AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
-:AtlasShell_proc_id dat 0x1002 ; 1st index in API * 2 words long = 0x02, proc_id
-:AtlasShell_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-:AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-:AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
-:AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
-:AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-:AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
-:AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
-:AtlasShell_read_line dat 0x1026 ; 19th index in API * 2 words long = 0x26, read_line
-:AtlasShell_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
-:AtlasShell_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
-:AtlasShell_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
-:AtlasShell_atoi dat 0x1032 ; 25th index in API * 2 words long = 0x32, atoi
-:AtlasShell_strlen dat 0x1034 ; 26th index in API * 2 words long = 0x34, strlen
-:AtlasShell_strcmp dat 0x1036 ; 27th index in API * 2 words long = 0x36, strcmp
-:AtlasShell_proc_load dat 0x103C ; 30th index in API * 2 words long = 0x3C, proc_load
-:AtlasShell_proc_callback_list dat 0x103E ; 31st index in API * 2 words long = 0x3E, proc_callback_list
+:command_ls dat "ls", 0
+:command_ls_row dat "                                ", 0x00
+:command_cd dat "cd", 0
+:command_cd_back dat "..", 0
+:command_cd_root dat "/", 0
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
+:command_cd_unknown dat " doesnt exist", 0xA0, 0
+:command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
 
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -2567,20 +3057,15 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :last_proc dat 0x0000
 
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.3.3", 0xA0, 0x00
-:text_prompt dat "$> ", 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.0", 0xA0, 0x00
+:text_prompt dat " $> ", 0x00
 
-; Note: This application table will be changed / go away once we have a filesystem
-;application_table_format
-;dat "name_of_app", 0, app_location, app_location_end
-:application_table
-:app1 dat "hello", 0, hello, hello_end
-:app2 dat "ball", 0, app02, app02_end
-:app4 dat "free", 0, free, free_end
-:app5 dat "AtlasText", 0, AtlasText, AtlasText_end
-:app6 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
-:app7 dat "ABI", 0, file02, file02_end
-:application_table_end
+:present_working_directory dat 0x0000
+:present_working_directory_name dat "                ", 0x00
+:directory_stack
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:directory_stack_end
 
 :AtlasShell_end
 
@@ -2625,172 +3110,27 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	:AtlasText_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
 :AtlasText_end
 
-:app02
-	SET X, 1
-	SET Y, 1
-
-	SET I, app02_loop_end
-	SUB I, app02_loop
-
-	SET J, 200
-
-	; Register our buffer with the driver
-	SET A, app02_input_buffer
-	;SET B, 1
-	JSR [app02_keyboard_register]
-
-	SET A, 0
-	SET B, 0
-	SET C, 0
-
-:app02_loop
-	; Restore the old character
-	SET C, Z
-        IFE C, 0
-            ADD PC, 4
-        IFN C, 0x744F
-	    JSR [app02_char_put]
-
-	; If we reached the end of the iterations, quit
-	SUB J, 1
-	IFE J, 0
-		JSR app02_die
-
-	; Update the coordinates of the ball
-	ADD A, X
-	ADD B, Y
-
-	IFE A, 31
-	SET X, 0xFFFF
-
-	IFE B, 11
-	SET Y, 0xFFFF
-
-	IFE A, 0
-	SET X, 1
-
-	IFE B, 0
-	SET Y, 1
-
-	; Save the character before we write so we can restore later
-	SET PUSH, B
-	MUL B, 32
-	ADD B, A
-	ADD B, [video_mem]
-	SET Z, [B]
-	SET B, POP
-
-	SET [app02_wait_counter], 8
-:app02_wait_loop
-	SET PUSH, [app02_wait_counter]
-	JSR app02_update_ball
-	SET [app02_wait_counter], POP
-	SUB [app02_wait_counter], 1
-	IFN [app02_wait_counter], 0
-		SET PC, app02_wait_loop
-
-	JSR [app02_proc_suspend]
-	SUB PC, I
-:app02_loop_end
-:app02_update_ball
-	SET C, 0x7400
-	IFN [app02_input_buffer], [app02_old_input_buffer]
-		IFN [app02_input_buffer], 0
-			SET [app02_ball_char], [app02_input_buffer]
-	BOR C, [app02_ball_char]
-	JSR [app02_char_put]
-
-	IFN [app02_input_buffer], 0
-		SET [app02_old_input_buffer], [app02_input_buffer]
-	JSR [app02_proc_suspend]
-	SET PC, POP
-:app02_die
-	SET A, app02_input_buffer
-	JSR [app02_keyboard_unregister]
-	JSR [app02_proc_kill_me]
-	SET PC, POP
-:app02_data
-	:app02_input_buffer dat 0x0000
-	:app02_old_input_buffer dat 0x0000
-	:app02_ball_char dat 0x0000
-	:app02_wait_counter dat 0x0000
-	; API Jump table	
-	:app02_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-	:app02_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:app02_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
-	:app02_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
-	:app02_char_put dat 0x1024 ; 18th index in API * 2 words long = 0x24, char_put
-:app02_end
-
-:hello ; beginning of application
-	SET A, hello_world
-	JSR [hello_text_out]
-	JSR [hello_proc_suspend]
-	JSR [hello_proc_kill_me]
-
-	:hello_world dat "Hello World", 0xA0, 0x00
-	; API Jump table
-	:hello_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-	:hello_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:hello_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-:hello_end
-
-:free
-	JSR [free_page_check]
-	SET X, 0xFFFF
-	SUB X, A
-	SET A, X
-	SET B, free_buffer
-	JSR [free_int2dec]
-	SET B, free_buffer2
-	DIV A, 1024
-	SHL A, 1
-	JSR [free_int2dec]
-	SET A, free_buffer
-	JSR [free_text_out]
-	SET A, free_buffer
-	JSR [free_proc_kill_me]
-	
-	:free_buffer  dat "      words free ("
-	:free_buffer2 dat "      KB)", 0xA0, 0x00
-	; API Jump table
-	:free_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-	:free_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
-	:free_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-	:free_page_check dat 0x1038 ; 28th index in API * 2 words long = 0x38, page_check
-:free_end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 :apps_end
 
 :files
 
 ; Primary file table
-; Entry type is 0 for folder, 1 for file
-; Access flags: 00 - no access, 01 - read, 10 - write, 11 - read+write
-; index, type, access, name, null terminator, start, end
+; Flags: Bit 0 - read, Bit 1 - write, Bit 2 - hidden, Bit 3 - executable, Bit 4 - directory
+; Each entry must be 20 words long
+; directory ID, flags, name, null terminator, padding, start, end
+; For directory entries, the 'start' contains the ID and the 'end' is unused
 :files_table
-	dat 0x0001, 0x0001, 0x0003, "file01", 0, file01, file01_end
-	dat 0x0002, 0x0001, 0x0001, "hello_world", 0, file02, file02_end
+	dat 0x000A ; Number of files in table
+	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000 ; root directory
+	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
+	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
+	dat 0x0000, 0x0011, "Data", 0, "           ", 0x0004, 0x0000
+	dat 0x0002, 0x0011, "System", 0, "         ", 0x0003, 0x0000
+	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
+	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
+	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
+	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
+	dat 0x0002, 0x0009, "ball_game", 0, "      ", file05, file05_end
 :files_table_end
 
 ; Basic flat text file
@@ -2800,8 +3140,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "Termination", 0x00
 :file01_end
 
-; Executable file
-:file02 ; AtlasOS ABI-compliant version of HelloWorld
+; HelloWorld
+; Description: Displays "Hello World"
+:file02 ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x000A ; Length of header (5 base + 5 for ART)
@@ -2809,13 +3150,54 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x000B ; Flags 00000000 00001011
 	dat 0x0004 ; ART length
 	dat 0x0001, 0x0003, 0x0005, 0x0007 ; ART entries
-	; Compiled binary data
+	; Code
 	dat 0x7C01, 0x0008, 0x7810, 0x0017, 0x7810, 0x0015, 0x7810, 0x0016
+	; Data
 	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000, 0x1004, 0x100A, 0x101C
 :file02_end
 
+; Free
+; Description: Displays the amount of free memory in RAM
+:file03 ; AtlasOS ABI-compliant executable file
+	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
+	dat 0x0001 ; Revision 1 of the ABI
+	dat 0x000F ; Length of header (5 base + 10 for ART)
+	dat 0x003A ; Length of the code and data
+	dat 0x000D ; Flags 00000000 00001101
+	dat 0x0009 ; ART length
+	dat 0x0001, 0x0007, 0x0009, 0x000B, 0x0010, 0x0012, 0x0014, 0x0016, 0x0018 ; ART entries
+	; Code
+	dat 0x7810, 0x0039, 0x7c31, 0xffff, 0x0033, 0x0c01, 0x7c11, 0x0019, 0x7810, 0x0037, 0x7c11, 0x002b, 0x7c05, 0x0400, 0x8407, 0x7810
+	dat 0x0037, 0x7c01, 0x0019, 0x7810, 0x0036, 0x7c01, 0x0019, 0x7810, 0x0038
+	; Data
+	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0077, 0x006f, 0x0072, 0x0064, 0x0073, 0x0020, 0x0066, 0x0072, 0x0065, 0x0065, 0x0020, 0x0028
+	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x004b, 0x0042, 0x0029, 0x00a0, 0x0000
+	dat 0x101c, 0x102e, 0x100a, 0x1038
+:file03_end
 
+:file04
+	dat "I am hidden, muahaha!", 0x00
+:file04_end
 
-
+; Ball
+; Description: Runs a "ball" around on the screen and bounces off of walls
+:file05 ; AtlasOS ABI-compliant executable file
+	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
+	dat 0x0001 ; Revision 1 of the ABI
+	dat 0x000D ; Length of header (5 base + 8 for ART)
+	dat 0x003F ; Length of the code and data ( 63 words )
+	dat 0x000D ; Flags 00000000 00001101
+	dat 0x0007 ; ART length ( 7 entries )
+	dat 0x0021, 0x0027, 0x0029, 0x002E, 0x0035, 0x0037, 0x003A
+	; Code
+	dat 0x7C61, 0x0039, 0x7C63, 0x000A, 0x8001, 0x8011, 0x8431, 0x8441
+	dat 0x7C71, 0x0064, 0x0C02, 0x1012, 0xFC0C, 0x7C31, 0xFFFF, 0xAC1C
+	dat 0x7C41, 0xFFFF, 0x800C, 0x8431, 0x801C, 0x8441, 0x05A1, 0x7C14
+	dat 0x0020, 0x0012, 0x7C12, 0x8000, 0x2451, 0x6011, 0x8473, 0x807C
+	dat 0x7C10, 0x0039, 0xA021, 0x09A1, 0x7C21, 0x7400, 0x7810, 0x003E
+	dat 0x7810, 0x003C, 0x6021, 0x8423, 0x802D, 0x7DC1, 0x0023, 0x1421
+	dat 0x802C, 0x91C2, 0x7C2D, 0x744F, 0x7810, 0x003E, 0x7810, 0x003C
+	dat 0x19C3, 0x7810, 0x003D, 0x61C1, 0x1004, 0x100A, 0x1024
+:file05_end
 
 :files_end
