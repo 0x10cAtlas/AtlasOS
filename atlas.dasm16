@@ -198,6 +198,9 @@ JSR keyboard_unregister_all
 
 SET PC, stop
 
+;################
+;Graphics Functions
+
 ; prints a text to stdout
 ; A: start address of the text
 :text_out
@@ -352,96 +355,8 @@ SET PC, stop
       SET A, POP
       SET PC, POP
 
-
-; Converts a Number into a Decimal String
-; A: Number
-; B: StrBuffer (length 5)
-:int2dec
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-
-	ADD B, 4
-
-:int2dec_loop
-	SET C, A
-	MOD C, 10
-
-	SET [B], C
-	ADD [B], 0x0030
-
-	DIV A, 10
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2dec_end
-	SET PC, int2dec_loop
-
-:int2dec_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
-
-; Converts a Number into a Hexadecimal String
-; A: Number
-; B: StrBuffer (length 4)
-:int2hex
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-
-	ADD B, 3
-
-:int2hex_loop
-	SET C, A
-	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
-
-	SET [B], C
-	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
-	IFG [B], 0x0039 ; if it's 3A or more, add seven
-		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
-
-	DIV A, 16
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2hex_end
-	SET PC, int2hex_loop
-
-:int2hex_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
-
-; Takes a text buffer containing an integer and converts it to an integer
-; A: Address of text buffer
-:atoi
-     SET PUSH, A
-     SET PUSH, B
-     SET C, 0
-
-:atoi_loop
-     IFE [A], 0
-     SET PC, atoi_end
-
-     ; Capture the first digit and subtract 48 so our ASCII code for the digit becomes the numeric value of the digit
-     SET B, [A]
-     SUB B, 48
-
-     ; Add the value of the digit to the accumulator
-     ADD C, B
-
-     ; Increment our address and multiply the accumulator
-     ADD A, 1
-     IFE [A], 0
-     SET PC, atoi_end
-     MUL C, 10
-     SET PC, atoi_loop
-
-:atoi_end
-     SET B, POP
-     SET A, POP
-     SET PC, POP
+;##############
+; Memory Functions
 
 ; mem_clear
 ; A: From Addr
@@ -886,18 +801,7 @@ SET PC, stop
 
 
 ; ##############################################################
-
-; Returns the version of AtlasOS
-; Takes: ---
-; Returns:
-; A: main version
-; B: subversion
-; C: fixversion
-:os_version
-      SET A, [os_version_main]
-      SET B, [os_version_sub]
-	  SET C, [os_version_fix]
-	  SET PC, POP
+; Proccess function
 
 ; Returns the ID of the current process
 ; Takes: ---
@@ -1335,67 +1239,6 @@ SET PC, stop
 
 ; ##############################################################
 
-
-
-; PUSHes all registers to the stack
-:pusha
-     SET [pushpop_buffer], POP ; Save jump-back-address
-
-     SET PUSH, A
-     SET PUSH, B
-     SET PUSH, C
-     SET PUSH, X
-     SET PUSH, Y
-     SET PUSH, Z
-     SET PUSH, I
-     SET PUSH, J
-
-     SET PC, [pushpop_buffer] ; jump back
-
-; POPs all registers from the stack
-:popa
-     SET [pushpop_buffer], POP ; Save jump-back-address
-
-     SET J, POP
-     SET I, POP
-     SET Z, POP
-     SET Y, POP
-     SET X, POP
-     SET C, POP
-     SET B, POP
-     SET A, POP
-
-     SET PC, [pushpop_buffer] ; jump back
-
-:pushpop_buffer dat 0x0000
-
-; Charset functions
-; Takes:
-; A: 0 to save charset, 1 to restore charset
-:manage_charset
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-	SET C, A
-	SET A, char_set
-	SET B, 0x8180
-:manage_charset_loop
-	IFE A, char_set_end
-		SET PC, manage_charset_end
-	IFE C, 0
-		SET [A], [B]
-	IFG C, 0
-		SET [B], [A]
-	ADD A, 1
-	ADD B, 1
-	SET PC, manage_charset_loop
-:manage_charset_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
-
-
 ; Driver functions
 
 ; Registers a new keyboard buffer
@@ -1486,6 +1329,80 @@ SET PC, stop
 :keyboard_unregister_all_end
 	SET A, POP
 	SET PC, POP
+	
+; Reads a line of chars from the keyboard
+; A: String buffer address
+; B: Length
+; C: Keybuffer
+:read_line
+     SET PUSH, C
+     SET PUSH, B
+     SET PUSH, A
+
+     JSR mem_clear ; Clear the buffer
+
+     ADD B, A
+
+:read_line_loop
+	 JSR proc_suspend
+     IFE [C], 0
+         SET PC, read_line_skip
+     IFE [C], 0xA ; \n
+         SET PC, read_line_end
+     IFE [C], 0xD ; \r
+         SET PC, read_line_end
+     IFE [C], 0x8
+         SET PC, read_line_backspace
+     IFE A, B
+         SET PC, read_line_skip
+
+     SET [A], [C]
+
+; Put the character on-screen so the user can see what is being typed
+; Maybe have this toggleable?
+     SET PUSH, A
+     SET PUSH, B
+     SET B, [A]
+     BOR B, 0x7400
+     SET A, B
+     SET B, [video_cur]
+     SET [B], A
+     ADD [video_cur], 1
+     SET B, POP
+     SET A, POP
+
+     ADD A, 1
+
+:read_line_skip
+     SET PC, read_line_loop
+
+:read_line_backspace
+; Ensure we don't backspace past the beginning
+     IFE A, PEEK
+     SET PC, read_line_skip
+
+     SET PUSH, A
+     SET PUSH, B
+     SUB [video_cur], 1
+     SET B, [video_cur]
+     SET [B], 0
+     SET B, POP
+     SET A, POP
+     SUB A, 1
+     SET PC, read_line_skip
+
+;
+:read_line_end
+; Add the null terminator
+     SET [A], 0
+; Pop everything back out
+     SET A, POP
+     SET B, POP
+     SET C, POP
+     SET PC, POP
+
+;##########
+; Message queue functions
 
 ; Registers a new message queue
 ; A -> Address of the message queue
@@ -1691,202 +1608,6 @@ SET PC, stop
     SET B, POP
     SET PC, POP
 
-
-
-; Copies a string from a source to a destination
-; A -> source address
-; B -> destination address:strcpy
-:strcpy
-    SET PUSH, A
-    SET PUSH, B
-
-:strcpy_loop
-    IFE [A], 0
-        SET PC, strcpy_end
-    SET [B], [A]
-    ADD A, 1
-    ADD B, 1
-    SET PC, strcpy_loop
-
-:strcpy_end
-    SET B, POP
-    SET A, POP
-	SET PC, POP
-
-; Copies a string from a source to a destination with length limitation
-; Takes:
-; A: source
-; B: destination
-; C: length
-:strncpy
-    SET PUSH, A
-    SET PUSH, B
-    SET PUSH, C
-
-    ADD C, B
-:strncpy_loop1
-    IFE [A], 0
-        SET PC, strncpy_loop2
-    SET [B], [A]
-    ADD A, 1
-    ADD B, 1
-    IFE B, C
-        SET PC, strncpy_end
-    SET PC, strncpy_loop1
-
-:strncpy_loop2
-    SET [B], 0
-    ADD B, 1
-    IFN B, C
-        SET PC, strncpy_loop2
-
-:strncpy_end
-    SET C, POP
-    SET B, POP
-    SET A, POP
-SET PC, POP
-
-; Compares strings and stores the result in C and O
-; A=B => C=0, O=0
-; A>B => C>0, O=0
-; A<B => C>0, O>0
-; Takes:
-; A: source #1
-; B: source #2
-:strcmp
-    SET PUSH, A
-    SET PUSH, B
-    SET O, 0
-    SET C, 0
-:strcmp_loop
-    IFE [A], 0
-        SET PC, strcmp_end
-    IFN [A], [B]
-        SET PC, strcmp_end
-    ADD A, 1
-    ADD B, 1
-    SET PC, strcmp_loop
-
-:strcmp_end
-    SET C, [A]
-    SUB C, [B]
-    SET B, POP
-    SET A, POP
-    SET PC, POP
-
-; Stores the length of a given string in B
-; A: Address of the string buffer
-:strlen
-	SET PUSH, A
-
-	SET B, 0
-:strlen_loop
-	IFE [A], 0
-		SET PC, strlen_end
-	ADD A, 1
-	SET PC, strlen_loop
-:strlen_end
-	SET B, A
-	SUB B, PEEK
-
-	SET A, POP
-	SET PC, POP
-
-; Reads a line of chars from the keyboard
-; A: String buffer address
-; B: Length
-; C: Keybuffer
-:read_line
-     SET PUSH, C
-     SET PUSH, B
-     SET PUSH, A
-
-     JSR mem_clear ; Clear the buffer
-
-     ADD B, A
-
-:read_line_loop
-	 JSR proc_suspend
-     IFE [C], 0
-         SET PC, read_line_skip
-     IFE [C], 0xA ; \n
-         SET PC, read_line_end
-     IFE [C], 0xD ; \r
-         SET PC, read_line_end
-     IFE [C], 0x8
-         SET PC, read_line_backspace
-     IFE A, B
-         SET PC, read_line_skip
-
-     SET [A], [C]
-
-; Put the character on-screen so the user can see what is being typed
-; Maybe have this toggleable?
-     SET PUSH, A
-     SET PUSH, B
-     SET B, [A]
-     BOR B, 0x7400
-     SET A, B
-     SET B, [video_cur]
-     SET [B], A
-     ADD [video_cur], 1
-     SET B, POP
-     SET A, POP
-
-     ADD A, 1
-
-:read_line_skip
-     SET PC, read_line_loop
-
-:read_line_backspace
-; Ensure we don't backspace past the beginning
-     IFE A, PEEK
-     SET PC, read_line_skip
-
-     SET PUSH, A
-     SET PUSH, B
-     SUB [video_cur], 1
-     SET B, [video_cur]
-     SET [B], 0
-     SET B, POP
-     SET A, POP
-     SUB A, 1
-     SET PC, read_line_skip
-
-;
-:read_line_end
-; Add the null terminator
-     SET [A], 0
-; Pop everything back out
-     SET A, POP
-     SET B, POP
-     SET C, POP
-     SET PC, POP
-
-; Sleeps for some cycles
-; TODO: Change this (or add a new func.) to wait for a specific number of CPU cycles
-; A: number of process cycles to wait
-:sleep
-    IFE A, 0
-		SET PC, POP
-    SUB A, 1
-    JSR proc_suspend
-    SET PC, sleep
-
-; Returns a randomized number in A
-:rand
-    MUL [entropy], 52265
-    ADD [entropy], 135
-    SET A, [entropy]
-    SET PC, POP
-
-; Takes a seed in A
-:srand
-	MUL A, 49763
-	SHL A, 2
-	XOR A, 1273
-	SET [entropy], A
-	SET PC, POP
 
 ; ########################################
 
@@ -2206,9 +1927,318 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
 	dat "                                                                                                                                "
+	dat "                                                                                                                                "
+	dat "                                                          "
 
 :kernel_end
 ; ################################
+:libAtlas_end
+;contains advanced functions grouped to different desciptions
+;should not contain functions that only the kernel can or should call. 
+;#####################
+;Type conversions
+
+; Converts a Number into a Decimal String
+; A: Number
+; B: StrBuffer (length 5)
+:int2dec
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	ADD B, 4
+
+:int2dec_loop
+	SET C, A
+	MOD C, 10
+
+	SET [B], C
+	ADD [B], 0x0030
+
+	DIV A, 10
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2dec_end
+	SET PC, int2dec_loop
+
+:int2dec_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+; Converts a Number into a Hexadecimal String
+; A: Number
+; B: StrBuffer (length 4)
+:int2hex
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	ADD B, 3
+
+:int2hex_loop
+	SET C, A
+	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
+
+	SET [B], C
+	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
+	IFG [B], 0x0039 ; if it's 3A or more, add seven
+		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
+
+	DIV A, 16
+	SUB B, 1
+	IFE A, 0
+		SET PC, int2hex_end
+	SET PC, int2hex_loop
+
+:int2hex_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+; Takes a text buffer containing an integer and converts it to an integer
+; A: Address of text buffer
+:atoi
+     SET PUSH, A
+     SET PUSH, B
+     SET C, 0
+
+:atoi_loop
+     IFE [A], 0
+     SET PC, atoi_end
+
+     ; Capture the first digit and subtract 48 so our ASCII code for the digit becomes the numeric value of the digit
+     SET B, [A]
+     SUB B, 48
+
+     ; Add the value of the digit to the accumulator
+     ADD C, B
+
+     ; Increment our address and multiply the accumulator
+     ADD A, 1
+     IFE [A], 0
+     SET PC, atoi_end
+     MUL C, 10
+     SET PC, atoi_loop
+
+:atoi_end
+     SET B, POP
+     SET A, POP
+     SET PC, POP
+	 
+;#######################
+; Advanced Stack functions
+
+; PUSHes all registers to the stack
+:pusha
+     SET [pushpop_buffer], POP ; Save jump-back-address
+
+     SET PUSH, A
+     SET PUSH, B
+     SET PUSH, C
+     SET PUSH, X
+     SET PUSH, Y
+     SET PUSH, Z
+     SET PUSH, I
+     SET PUSH, J
+
+     SET PC, [pushpop_buffer] ; jump back
+
+; POPs all registers from the stack
+:popa
+     SET [pushpop_buffer], POP ; Save jump-back-address
+
+     SET J, POP
+     SET I, POP
+     SET Z, POP
+     SET Y, POP
+     SET X, POP
+     SET C, POP
+     SET B, POP
+     SET A, POP
+
+     SET PC, [pushpop_buffer] ; jump back
+
+:pushpop_buffer dat 0x0000
+
+;#####################
+; Character Set Functions
+; Charset functions
+; Takes:
+; A: 0 to save charset, 1 to restore charset
+:manage_charset
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
+	SET A, char_set
+	SET B, 0x8180
+:manage_charset_loop
+	IFE A, char_set_end
+		SET PC, manage_charset_end
+	IFE C, 0
+		SET [A], [B]
+	IFG C, 0
+		SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, manage_charset_loop
+:manage_charset_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+;#####################
+; String Functions
+
+; Copies a string from a source to a destination
+; A -> source address
+; B -> destination address:strcpy
+:strcpy
+    SET PUSH, A
+    SET PUSH, B
+
+:strcpy_loop
+    IFE [A], 0
+        SET PC, strcpy_end
+    SET [B], [A]
+    ADD A, 1
+    ADD B, 1
+    SET PC, strcpy_loop
+
+:strcpy_end
+    SET B, POP
+    SET A, POP
+	SET PC, POP
+
+; Copies a string from a source to a destination with length limitation
+; Takes:
+; A: source
+; B: destination
+; C: length
+:strncpy
+    SET PUSH, A
+    SET PUSH, B
+    SET PUSH, C
+
+    ADD C, B
+:strncpy_loop1
+    IFE [A], 0
+        SET PC, strncpy_loop2
+    SET [B], [A]
+    ADD A, 1
+    ADD B, 1
+    IFE B, C
+        SET PC, strncpy_end
+    SET PC, strncpy_loop1
+
+:strncpy_loop2
+    SET [B], 0
+    ADD B, 1
+    IFN B, C
+        SET PC, strncpy_loop2
+
+:strncpy_end
+    SET C, POP
+    SET B, POP
+    SET A, POP
+SET PC, POP
+
+; Compares strings and stores the result in C and O
+; A=B => C=0, O=0
+; A>B => C>0, O=0
+; A<B => C>0, O>0
+; Takes:
+; A: source #1
+; B: source #2
+:strcmp
+    SET PUSH, A
+    SET PUSH, B
+    SET O, 0
+    SET C, 0
+:strcmp_loop
+    IFE [A], 0
+        SET PC, strcmp_end
+    IFN [A], [B]
+        SET PC, strcmp_end
+    ADD A, 1
+    ADD B, 1
+    SET PC, strcmp_loop
+
+:strcmp_end
+    SET C, [A]
+    SUB C, [B]
+    SET B, POP
+    SET A, POP
+    SET PC, POP 
+
+; Stores the length of a given string in B
+; A: Address of the string buffer
+:strlen
+	SET PUSH, A
+
+	SET B, 0
+:strlen_loop
+	IFE [A], 0
+		SET PC, strlen_end
+	ADD A, 1
+	SET PC, strlen_loop
+:strlen_end
+	SET B, A
+	SUB B, PEEK
+
+	SET A, POP
+	SET PC, POP
+
+;##############
+; Randomisation Functions
+
+; Returns a randomized number in A
+:rand
+    MUL [entropy], 52265
+    ADD [entropy], 135
+    SET A, [entropy]
+    SET PC, POP
+
+; Takes a seed in A
+:srand
+	MUL A, 49763
+	SHL A, 2
+	XOR A, 1273
+	SET [entropy], A
+	SET PC, POP
+	
+;##################
+; Timing Functions
+; Sleeps for some cycles
+; TODO: Change this (or add a new func.) to wait for a specific number of CPU cycles
+; A: number of process cycles to wait
+:sleep
+    IFE A, 0
+		SET PC, POP
+    SUB A, 1
+    JSR proc_suspend
+    SET PC, sleep
+
+;######################
+; OS variable Functions
+
+; Returns the version of AtlasOS
+; Takes: ---
+; Returns:
+; A: main version
+; B: subversion
+; C: fixversion
+:os_version
+      SET A, [os_version_main]
+      SET B, [os_version_sub]
+	  SET C, [os_version_fix]
+	  SET PC, POP
+:libAtlas_end
+
 ; ################################
 :apps
 
