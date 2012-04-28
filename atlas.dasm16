@@ -48,7 +48,9 @@ HWI Z
 :bios_keyboard_start
 HWN Z
 :bios_keyboard_initloop
-SUB Z,1
+IFE Z, 0 ; Check if the keyboard doesn't exist
+	SET PC, bios_clock_start
+SUB Z, 1
 HWQ Z
 
 IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
@@ -56,11 +58,37 @@ IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
 IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
 	SET PC, bios_keyboard_initloop
 
-SET [keyboard_address], Z
+;SET [keyboard_address], Z
 ;SET A, 3
 ;SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
 ;HWI Z
 
+:bios_clock_start
+HWN Z
+:bios_clock_initloop
+IFE Z, 0 ; Check if the clock doesn't exist
+	SET PC, bios_floppy_start
+SUB Z, 1
+HWQ Z
+
+IFN A, 0xB402 ; Generic Clock (lower 8 bits)
+	SET PC, bios_clock_initloop
+IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
+	SET PC, bios_clock_initloop
+
+SET [clock_address], Z
+
+; Set clock tick rate
+;SET A, 0
+;SET B, 1
+;HWI [clock_address]
+
+; Setup interrupts for clock
+;SET A, 2
+;SET B, [clock_address]
+;HWI [clock_address]
+
+:bios_floppy_start
 ; Jump to the start of the kernel
 SET PC, kernel_boot
 
@@ -68,28 +96,36 @@ SET PC, kernel_boot
 dat 0x0000
 :keyboard_address
 dat 0x0000
+:clock_address
+dat 0x0000
+:floppy_address
+dat 0x0000
 
 ; ####################END BIOS#####################
 
 ; ###############INTERRUPT HANDLER#################
 :kernel_interrupt_handler
+	;JSR proc_suspend
+	;IAS 0
 	;IAQ 1
-	IFE B, [keyboard_address]
-		JSR kernel_interrupt_handler_keypress
+	;IFE B, [keyboard_address]
+	;	JSR kernel_interrupt_handler_keyboard
+	;IFE B, [clock_address]
+	;	JSR kernel_interrupt_handler_clock
 	;IAQ 0
-	SET PC, POP
+	;IAS kernel_interrupt_handler
+	;RFI
+	;SET PC, POP
 
-:kernel_interrupt_handler_keypress
+:kernel_interrupt_handler_keyboard
 	SET PUSH, A
-	SET PUSH, B
-	SET A, 1
-	HWI [keyboard_address]
-	; Emulate a ring buffer
-	SET [keyboard_mem], C
-	SET B, POP
+	; Do something
 	SET A, POP
 	SET PC, POP
-
+	
+:kernel_interrupt_handler_clock
+	;JSR proc_suspend
+	SET PC, POP
 
 ; ##################START KERNEL###################
 
@@ -101,7 +137,7 @@ dat 0x0000
 JSR clear
 
 ; Display the logo
-SET A, text_logo1
+SET A, text_logo
 JSR text_out
 
 ; Bootmessage
@@ -1895,6 +1931,10 @@ SET PC, POP
      SET B, [video_cur]
      SET [B], A
      ADD [video_cur], 1
+	 SET A, [video_mem]
+	 ADD A, 0x180
+	 IFE [video_cur], A
+		JSR scroll
      SET B, POP
      SET A, POP
 
@@ -2055,16 +2095,17 @@ SET PC, POP
 
 :text_start dat "AtlasOS v0.5.6 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
-:text_logo1 DAT "      ___   __   __", 0xA0
-:text_logo2 DAT "     /   | / /_ / /____ ______", 0xA0
-:text_logo3 DAT "    / /| |/ __// // __ `/ ___/", 0xA0
-:text_logo4 DAT "   / ___ / /  / // /_/ (__  )", 0xA0
-:text_logo5 DAT "  /_/  |_\\_/ /_/ \\__,_/____/", 0xA0
-:text_logo6 DAT "         / __ \\/ ___/", 0xA0
-:text_logo7 DAT "        / / / /\\__ \\", 0xA0
-:text_logo8 DAT "       / /_/ /___/ /", 0xA0
-:text_logo9 DAT "       \\____//____/", 0xA0, 0x00
-
+:text_logo
+dat "      ___   __   __", 0xA0
+dat "     /   | / /_ / /____ ______", 0xA0
+dat "    / /| |/ __// // __ `/ ___/", 0xA0
+dat "   / ___ / /  / // /_/ (__  )", 0xA0
+dat "  /_/  |_\\_/ /_/ \\__,_/____/", 0xA0
+dat "         / __ \\/ ___/", 0xA0
+dat "        / / / /\\__ \\", 0xA0
+dat "       / /_/ /___/ /", 0xA0
+dat "       \\____//____/", 0xA0, 0x00
+:text_logo_end
 ; Bitmap of the OS-managed memory, occupied pages are marked by 1's.
 ; Total of 64kB of memory supported here - each word covers 16kB.
 :page_map
