@@ -153,65 +153,39 @@
       SET PC, POP
 
 
-; Converts a Number into a Decimal String
-; A: Number
-; B: StrBuffer (length 5)
-:int2dec
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
+; converts a number to a string in the given radix
+; e.g. 2 is binary, 10 is decimal and 16 is hex
+; A = input number
+; B = buffer location
+; C = radix
+:itoa
+	SET PUSH,I
+	SET PUSH,A
+	SET I,0
 
-	ADD B, 4
-
-:int2dec_loop
-	SET C, A
-	MOD C, 10
-
-	SET [B], C
-	ADD [B], 0x0030
-
-	DIV A, 10
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2dec_end
-	SET PC, int2dec_loop
-
-:int2dec_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
-
-; Converts a Number into a Hexadecimal String
-; A: Number
-; B: StrBuffer (length 4)
-:int2hex
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-
-	ADD B, 3
-
-:int2hex_loop
-	SET C, A
-	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
-
-	SET [B], C
-	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
-	IFG [B], 0x0039 ; if it's 3A or more, add seven
-		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
-
-	DIV A, 16
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2hex_end
-	SET PC, int2hex_loop
-
-:int2hex_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
+;count how long it is
+:itoa_0
+	ADD I,1
+	DIV A,C
+	IFN A,0
+	SET PC,itoa_0
+;itoa proper
+	ADD B,I
+	SET [B],0
+	SET A,POP
+:itoa_1
+	SUB B,1
+	SET I,A
+	MOD I,C
+	DIV A,C
+	IFG I,9
+	ADD I,7
+	ADD I,0x30
+	SET [B],I
+	IFN A,0
+	SET PC,itoa_1
+	SET I,POP
+	SET PC,POP
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer
