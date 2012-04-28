@@ -1,0 +1,25 @@
+; Charset functions
+; Takes:
+; A: 0 to save charset, 1 to restore charset
+:manage_charset
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
+	SET A, char_set
+	SET B, 0x8180
+:manage_charset_loop
+	IFE A, char_set_end
+		SET PC, manage_charset_end
+	IFE C, 0
+		SET [A], [B]
+	IFG C, 0
+		SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, manage_charset_loop
+:manage_charset_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP

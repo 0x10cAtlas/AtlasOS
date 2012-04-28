@@ -1,0 +1,8 @@
+; Note: This application table will ONLY contain built-in apps eventually
+; This means that we will likely get rid of it once external storage is implemented by Notch
+;application_table_format
+;dat "name_of_app", 0, app_location, app_location_end
+:application_table
+:app1 dat "AtlasText", 0, AtlasText, AtlasText_end
+:app2 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:application_table_end

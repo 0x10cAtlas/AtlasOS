@@ -1,0 +1,884 @@
+; BASH-like Process
+:AtlasShell
+	SET A, text_versionoutput
+	JSR [AtlasShell_text_out]
+:AtlasShell_start
+	; Register our buffer with the driver
+	SET A, input_buffer
+	JSR [AtlasShell_keyboard_register]
+:AtlasShell_loop
+	; First check if anything is taking exclusive keyboard access
+	JSR [AtlasShell_keyboard_is_exclusive_active]
+	IFN A, 0
+		SET PC, AtlasShell_loop_wait
+	
+	; Load the pwd name
+	JSR command_clear_present_working_directory_name
+	SET A, [present_working_directory]
+	JSR [AtlasShell_filesystem_getfile_bystart]
+	IFE C, 0
+		SET PC, AtlasShell_skip_display_path
+	ADD C, 2
+	SET A, C
+	SET B, present_working_directory_name
+	JSR [AtlasShell_strcpy]
+	; Display the current path
+	SET A, present_working_directory_name
+	JSR [AtlasShell_text_out]
+:AtlasShell_skip_display_path
+	; Display the prompt
+	SET A, text_prompt
+	JSR [AtlasShell_text_out]
+
+	; Reset the basics
+	SET [ack_command], 0 ; reset command recognized
+
+	; Read a line from the keyboard
+	SET A, input_text_buffer
+	SET B, 32
+	SET C, input_buffer
+	JSR [AtlasShell_read_line]
+
+	; Skip everything if we got an empty line
+	SET A, input_text_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, AtlasShell_loop_wait
+
+	; Parse out the primary command
+	SET A, input_text_buffer
+	SET B, 0
+	JSR shell_getparameter
+
+	; Check for the 'clear' command
+	SET A, command_clear
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_clearf
+
+	; Check for the 'version' command
+	SET a, command_version
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
+	JSR command_versionf
+
+	; Check for the 'load' command
+	SET a, command_load
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
+	JSR command_loadf
+
+	; Check for the 'kill' command
+	SET a, command_kill
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
+	JSR command_killf
+
+	; Check for the 'list' command
+	SET a, command_list
+	SET b, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE c, 0
+	JSR command_listf
+	
+	; Check for the 'ls' command
+	SET A, command_ls
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_lsf
+		
+	; Check for the 'cd' command
+	SET A, command_cd
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		JSR command_cdf
+		
+	; Check if we're trying to run a file
+	IFN [ack_command], 1
+		JSR command_runfile
+
+	; If we don't have an acknowledged command, display the generic response
+	ifn [ack_command], 1
+	JSR command_unknownf
+:AtlasShell_loop_wait
+	; Pause then loop back to start of process
+	JSR [AtlasShell_proc_suspend]
+	SET PC, AtlasShell_loop
+:AtlasShell_loop_end
+
+; ==BEGIN COMMAND FUNCTIONS==
+; Command function when we got an unknown command
+:command_unknownf
+	JSR [AtlasShell_newline]
+	SET a, text_unrecognized
+	JSR [AtlasShell_text_out]
+	SET pc, pop
+
+; Command function to display version info
+:command_versionf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Clear the param buffer
+	SET A, command_parameter_buffer
+	SET B, 16
+	JSR [AtlasShell_mem_clear]
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_versionf_shell
+
+	; Check if our param was 'os' to give OS version
+	SET A, command_version_os
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_versionf_os
+:command_versionf_shell
+	JSR [AtlasShell_newline]
+	SET A, text_versionoutput
+	JSR [AtlasShell_text_out]
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+:command_versionf_os
+	JSR [AtlasShell_newline]
+	JSR command_os_version_display
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+; Command function to clear the screen
+:command_clearf
+	SET [ack_command], 1 ; acknowledge recognized command
+	JSR [AtlasShell_clear]
+	SET pc, pop
+
+; Command function to load a new process
+:command_loadf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR command_clear_parameter_buffer
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	; check if blank > load help
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_loadf_help
+
+	;check if list > list applications in table
+	SET A, command_parameter_buffer
+	SET B, command_list
+	JSR [AtlasShell_strcmp]
+	IfE C, 0
+		SET PC, command_loadf_list
+
+	SET A, application_table
+
+:command_loadf_loop
+	IFE A, application_table_end ; if index is at the end of the table, we have an unknown app
+		SET PC, command_loadf_unknown
+	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
+		SET PC, command_loadf_unknown
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp] ; compare table string to parameter
+	IFE C, 0
+		SET PC, command_loadf_loop_end ; if equal move to end
+
+	; Get the length of the app name and move our pointer forward past that
+	JSR [AtlasShell_strlen]
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_loadf_loop
+
+:command_loadf_loop_end
+	SET PUSH, A
+	JSR [AtlasShell_newline]
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	SET A, POP
+	ADD A, B
+	ADD A, 1
+
+	; Load the start & end addresses and start the process
+	SET B, A
+	ADD B, 1
+	SET A, [A]
+	SET B, [B]
+	SUB B, A
+
+	JSR [AtlasShell_proc_load]
+
+        IFE A, 0
+            SET PC, command_loadf_unknown
+
+	SET [last_proc], A
+	SET PC, command_loadf_end
+
+:command_loadf_help
+	JSR [AtlasShell_newline]
+	SET A, command_load_help
+	JSR [AtlasShell_text_out]
+	SET PC, command_loadf_end
+
+:command_loadf_list
+	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
+	JSR [AtlasShell_newline]
+	SET A, application_table
+:command_loadf_list_loop
+	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
+		SET PC, command_loadf_end
+	IFG A, application_table_end ; if index is past end of the table, finish listing apps
+		SET PC, command_loadf_end
+	JSR [AtlasShell_text_out] ;print out app name
+	JSR [AtlasShell_newline]
+	; Get the length of the app name and move our pointer forward past that
+	JSR [AtlasShell_strlen]
+	ADD A, B
+	; Skip past the null terminator, the start address, and the end address
+	ADD A, 3
+	SET PC, command_loadf_list_loop ; loopback
+
+:command_loadf_unknown
+	JSR [AtlasShell_newline]
+	SET A, command_load_unknown
+	JSR [AtlasShell_text_out]
+
+:command_loadf_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [AtlasShell_proc_suspend]
+	SET PC, POP
+
+; Command function to kill a running process
+:command_killf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR command_clear_parameter_buffer
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	; Check if our param was blank
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_killf_help
+
+	; Check if our param was 'last' to kill the last process
+	SET A, command_kill_last
+	SET B, command_parameter_buffer
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_killf_last
+
+	; Convert the param to an integer
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_atoi]	; A is source, C is result
+
+	; Selfkill?
+	SET PUSH, A
+	JSR [AtlasShell_proc_id]
+	IFE A, C      ; Wants to kill me?
+		SET PC, AtlasShell_die
+	SET A, POP
+
+	; Trying to kill OS?
+	IFE C, 1
+		SET PC, command_killf_forbidden
+
+	; Kill the corresponding process
+	JSR [AtlasShell_newline]
+	SET A, C
+	JSR [AtlasShell_proc_kill]
+	SET PC, command_killf_end
+:command_killf_forbidden
+	JSR [AtlasShell_newline]
+	SET A, command_kill_forbidden
+	JSR [AtlasShell_text_out]
+	SET PC, command_killf_end
+:command_killf_last
+	JSR [AtlasShell_newline]
+	SET A, [last_proc]
+	JSR [AtlasShell_proc_kill]
+	SET PC, command_killf_end
+:command_killf_help
+	JSR [AtlasShell_newline]
+	SET A, command_kill_help
+	JSR [AtlasShell_text_out]
+:command_killf_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [AtlasShell_proc_suspend]
+	SET PC, POP
+
+; Command function to list process IDs
+:command_listf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Clear the process ID buffer first
+	SET A, proc_list_buffer
+:command_listf_clear_proc_list
+	IFE A, proc_list_buffer_end
+		SET PC, command_listf_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_listf_clear_proc_list
+
+:command_listf_end
+	; Get the process ID list
+	SET C, proc_list_buffer
+	SET A, command_listf_helper
+	JSR [AtlasShell_proc_callback_list]
+
+	JSR [AtlasShell_newline]
+	SET A, command_list_info
+	JSR [AtlasShell_text_out]
+	SET A, 0 ; OS process
+	JSR command_listf_display_procID
+	SET A, 1 ; Shell process
+	JSR command_listf_display_procID
+	SET A, 2
+	JSR command_listf_display_procID
+	SET A, 3
+	JSR command_listf_display_procID
+	SET A, 4
+	JSR command_listf_display_procID
+	SET A, 5
+	JSR command_listf_display_procID
+
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+:command_listf_helper
+	SET [C], A
+	ADD C, 1
+	SET PC, POP
+:command_listf_display_procID
+	JSR command_clear_number_buffer
+
+	; Now display the list on-screen
+	SET B, proc_list_buffer
+	ADD B, A
+	SET A, [B]
+	; Don't display if it's 0
+	IFE A, 0
+		SET PC, POP
+	; Convert to text and display
+	SET B, command_number_buffer
+	JSR [AtlasShell_int2dec]
+	SET A, command_number_buffer
+	JSR [AtlasShell_text_out]
+	JSR [AtlasShell_newline]
+
+	SET PC, POP
+	
+; Command to list all files in current directory
+:command_lsf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	JSR [AtlasShell_newline]
+	JSR [AtlasShell_filesystem_getfile_table]
+	SET X, [A]
+	SET Y, 0
+	ADD A, 1
+:command_lsf_loop
+	IFE Y, X
+		SET PC, command_lsf_end
+	ADD Y, 1
+	
+	SET PUSH, A
+	SET C, [A] ; Ignore the directory value for now, will be finished later
+	SET A, [present_working_directory]
+	IFN C, A
+		SET PC, command_lsf_skip_file
+	SET A, POP
+	
+	; Clear out the row buffer
+	SET C, command_ls_row
+	ADD C, 32
+	SET B, command_ls_row
+:command_lsf_clearrow
+	SET [B], 0x20
+	ADD B, 1
+	IFN B, C
+		SET PC, command_lsf_clearrow
+	SET B, command_ls_row
+	
+	ADD A, 1 ; Move on to flags
+	
+	; Store if this file can be read
+	SET C, [A]
+	AND C, 0x0001
+	IFE C, 1
+		SET [B], 0x52 ; 'R'
+	ADD B, 1
+	
+	; Store if this file can be written to
+	SET C, [A]
+	AND C, 0x0002
+	IFE C, 2
+		SET [B], 0x57 ; 'W'
+	ADD B, 1
+	
+	; Store if this file is executable
+	SET C, [A]
+	AND C, 0x0008
+	IFE C, 8
+		SET [B], 0x45 ; 'E'
+	ADD B, 1
+	
+	; Check if the file is hidden
+	SET C, [A]
+	AND C, 0x0004
+	IFE C, 4
+		SET [B], 0x48 ; 'H'
+
+		; Store if this is a directory
+	SET C, [A]
+	AND C, 0x0010
+	IFE C, 16
+		SET [B], 0x44 ; 'D'
+	ADD B, 1
+
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	ADD A, 1
+	
+	; Store the file name
+	JSR [AtlasShell_strcpy]
+	ADD B, 16
+	ADD A, 16
+	
+	; Add separator
+	SET [B], 0x7C ; '|'
+	ADD B, 1
+	;ADD A, 1
+	
+	IFE C, 16
+		SET PC, command_lsf_skip_filesize
+	
+	; Display file size
+	SET C, [A] ; Get the file start
+	ADD A, 1
+	SET PUSH, A
+	SET A, [A]
+	SUB A, C
+	JSR [AtlasShell_int2dec]
+	SET A, POP
+:command_lsf_skip_filesize	
+	IFE C, 16
+		ADD A, 1
+	; Output the file info
+	SET C, A
+	SET A, command_ls_row
+	JSR [AtlasShell_text_out]
+	SET A, C
+	SET PC, command_lsf_skip_file_end
+:command_lsf_skip_file
+	SET A, POP
+	ADD A, 19
+:command_lsf_skip_file_end
+	
+	; Move on to the next entry
+	ADD A, 1
+	SET PC, command_lsf_loop
+:command_lsf_end
+	;JSR [AtlasShell_proc_suspend]
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+:command_runfile
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	JSR [AtlasShell_newline]
+
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_filesystem_getfile]
+	IFE C, 0
+		SET PC, command_runfile_end
+		
+	SET A, [C] ; Skip over the directory ID, will finish later
+	IFN A, [present_working_directory]
+		SET PC, command_runfile_end
+	
+	ADD C, 1
+	SET A, [C] ; Get the file flags
+	AND A, 0x0008 ; Check if the file is executable
+	IFE A, 0
+		SET PC, command_runfile_notexe
+		
+	ADD C, 1
+	
+	ADD C, 16
+	SET A, [C]
+	ADD C, 1
+	SET B, [C]
+	SUB B, A
+	JSR [AtlasShell_proc_load]
+	IFN A, 0
+		SET [ack_command], 1
+	SET PC, command_runfile_end
+:command_runfile_notexe
+	SET A, command_runfile_notexe_text
+	JSR [AtlasShell_text_out]
+	SET [ack_command], 1
+:command_runfile_end	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+:command_cdf
+	SET [ack_command], 1 ; acknowledge recognized command
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+
+	JSR [AtlasShell_newline]
+
+	;check if 'cd'
+	SET A, command_parameter_buffer
+	SET B, command_cd
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_help
+
+	; check if blank > load help
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_strlen]
+	IFE B, 0
+		SET PC, command_cdf_help
+
+	;check if '..'
+	SET A, command_parameter_buffer
+	SET B, command_cd_back
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_back
+
+	;check if '/'
+	SET A, command_parameter_buffer
+	SET B, command_cd_root
+	JSR [AtlasShell_strcmp]
+	IFE C, 0
+		SET PC, command_cdf_root
+
+	JSR [AtlasShell_filesystem_getfile]
+	IFN C, 0
+		SET PC, command_cdf_cd
+	SET PC, command_cdf_unknown
+
+:command_cdf_help
+	SET A, command_cd_help
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_back
+	SET A, directory_stack_end
+	SUB A, 1
+:command_cdf_back_traverse_directorystack
+	IFE A, directory_stack
+		SET PC, command_cdf_back_end
+	IFN [A], 0
+		SET PC, command_cdf_back_end
+	SUB A, 1
+	SET PC, command_cdf_back_traverse_directorystack
+:command_cdf_back_end
+	SET [A], 0
+	IFN A, directory_stack
+		SUB A, 1
+	SET [present_working_directory], [A]
+	SET PC, command_cdf_end
+
+:command_cdf_root
+	SET [present_working_directory], 0x0000
+	SET A, directory_stack
+:command_cdf_root_clear_directorystack
+	IFE A, directory_stack_end
+		SET PC, command_cdf_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, command_cdf_root_clear_directorystack
+
+:command_cdf_unknown
+	SET A, command_parameter_buffer
+	JSR [AtlasShell_text_out]
+	SET A, command_cd_unknown
+	JSR [AtlasShell_text_out]
+	SET PC, command_cdf_end
+
+:command_cdf_cd
+	IFN [C], [present_working_directory] ; Check if we're trying to access a directory not in our current directory
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move past to the flags
+	SET A, [C]
+	AND A, 0x0010 ; Check the flags to see if this file is a directory
+	IFN A, 16
+		SET PC, command_cdf_unknown
+	ADD C, 1 ; Move to the name
+	SET A, C
+	
+	ADD C, 16 ; Move past the name
+	
+	SET B, directory_stack
+:command_cdf_cd_addtodirectorystack
+	IFE B, directory_stack_end
+		SET PC, command_cdf_end ; Directory stack is full, cannot change directory
+	IFE [B], 0
+		SET PC, command_cdf_cd_addtodirectorystack_end
+	ADD B, 1
+	SET PC, command_cdf_cd_addtodirectorystack
+:command_cdf_cd_addtodirectorystack_end
+	SET A, [C] ; Store the directory ID
+	SET [B], A
+	SET [present_working_directory], A
+
+:command_cdf_end
+	JSR command_clear_parameter_buffer
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	JSR [AtlasShell_proc_suspend]
+	SET PC, POP
+
+:AtlasShell_die
+	SET A, input_buffer
+	JSR [AtlasShell_keyboard_unregister]
+	JSR [AtlasShell_newline]
+	JSR [AtlasShell_proc_kill_me]
+
+; ==BEGIN HELPER FUNCTIONS==
+; Displays OS version using API call to get version numbers
+; TODO: Make the output more user-friendly
+:command_os_version_display
+	JSR command_clear_number_buffer
+	SET A, 0
+	SET B, 0
+	SET C, 0
+	; A - main version, B - sub version, C - fix version
+	JSR [AtlasShell_os_version]
+	SET PUSH, C
+	SET PUSH, B
+	MUL A, 10000
+	SET B, command_number_buffer
+	JSR [AtlasShell_int2dec]
+	IFE A, 0
+		SET [B], 0x0030
+	SET A, command_number_buffer
+	SET B, POP
+	SET A, B
+	MUL A, 100
+	SET B, command_number_buffer
+	JSR [AtlasShell_int2dec]
+	SET A, command_number_buffer
+	SET C, POP
+	SET A, C
+	SET B, command_number_buffer
+	JSR [AtlasShell_int2dec]
+	SET A, command_number_buffer
+	ADD A, 1
+	SET [A], [command_version_separator]
+	ADD A, 2
+	SET [A], [command_version_separator]
+	SET A, command_number_buffer
+	JSR [AtlasShell_text_out]
+	JSR [AtlasShell_newline]
+	SET PC, POP
+; Clears the parameter buffer
+:command_clear_parameter_buffer
+	SET PUSH, A
+	SET PUSH, B
+	SET A, command_parameter_buffer
+	SET B, 32
+	JSR [AtlasShell_mem_clear]
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+; Clears the number buffer
+:command_clear_number_buffer
+	; Empty the temp buffer
+	SET PUSH, A
+	SET A, command_number_buffer
+	SET [A], 32
+	ADD A, 1
+	SET [A], 32
+	ADD A, 1
+	SET [A], 32
+	ADD A, 1
+	SET [A], 32
+	ADD A, 1
+	SET [A], 32
+	SET A, POP
+	SET PC, POP
+:command_clear_present_working_directory_name
+	SET PUSH, A
+	SET PUSH, B
+	SET A, present_working_directory_name
+	SET B, 16
+	JSR [AtlasShell_mem_clear]
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+; Takes a command input and parses out a parameter
+; A: Address of source text buffer
+; B: Which param we want to parse out (starts at 0)
+:shell_getparameter
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	; C will keep track of which param we're looking at
+	SET C, 0
+:shell_getparameter_loop
+	IFE C, B
+	SET PC, shell_getparameter_save
+	IFE [A], 32
+	ADD C, 1
+	ADD A, 1
+	IFE [A], 0
+	SET PC, shell_getparameter_end
+	SET PC, shell_getparameter_loop
+:shell_getparameter_save
+	SET B, command_parameter_buffer
+:shell_getparameter_save_loop
+	SET [B], 0
+	IFE [A], 32
+	SET PC, shell_getparameter_end
+	IFE [A], 0
+	SET PC, shell_getparameter_end
+	IFE [A], 10
+	SET PC, shell_getparameter_end
+	SET [B], [A]
+	ADD A, 1
+	ADD B, 1
+	SET PC, shell_getparameter_save_loop
+:shell_getparameter_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+
+; Data
+:input_text_buffer dat "                                ", 0x00
+:input_buffer dat 0x0000
+:ack_command dat 0x00
+:command_clear dat "clear", 0
+:command_version dat "version", 0
+:command_version_os dat "os", 0
+:command_version_separator dat ".", 0
+:command_load dat "load", 0
+:command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
+:command_load_unknown dat "Failed to load application", 0xA0, 0x00
+:command_kill dat "kill", 0
+:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
+:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_kill_last dat "last", 0
+:command_list dat "list", 0
+:command_list_info dat "Process list:", 0xA0, 0x00
+:command_parameter_buffer dat "                                ", 0x00
+:command_number_buffer dat "     ", 0x00
+:command_ls dat "ls", 0
+:command_ls_row dat "                                ", 0x00
+:command_cd dat "cd", 0
+:command_cd_back dat "..", 0
+:command_cd_root dat "/", 0
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
+:command_cd_unknown dat " doesnt exist", 0xA0, 0
+:command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
+
+; API Jump table
+:AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
+:AtlasShell_proc_id dat 0x1002 ; 1st index in API * 2 words long = 0x02, proc_id
+:AtlasShell_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+:AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+:AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
+:AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
+:AtlasShell_strcpy dat 0x1018 ; 12th index in API * 2 words long = 0x18, strcpy
+:AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+:AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
+:AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
+:AtlasShell_read_line dat 0x1026 ; 19th index in API * 2 words long = 0x26, read_line
+:AtlasShell_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
+:AtlasShell_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
+:AtlasShell_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
+:AtlasShell_atoi dat 0x1032 ; 25th index in API * 2 words long = 0x32, atoi
+:AtlasShell_strlen dat 0x1034 ; 26th index in API * 2 words long = 0x34, strlen
+:AtlasShell_strcmp dat 0x1036 ; 27th index in API * 2 words long = 0x36, strcmp
+:AtlasShell_proc_load dat 0x103C ; 30th index in API * 2 words long = 0x3C, proc_load
+:AtlasShell_proc_callback_list dat 0x103E ; 31st index in API * 2 words long = 0x3E, proc_callback_list
+:AtlasShell_keyboard_is_exclusive_active dat 0x1040 ; 32nd index in API * 2 words long = 0x40, keyboard_is_exclusive_active
+:AtlasShell_filesystem_getfile dat 0x1042 ; 33rd index in API * words long = 0x42, filesystem_getfile
+:AtlasShell_filesystem_getfile_table dat 0x1044 ; 34th index in API * 2 words long = 0x44, filesystem_getfile_table
+:AtlasShell_filesystem_getfile_bystart dat 0x1046 ; 35th index in API * 2 words long = 0x46, filesystem_getfile_bystart
+
+:proc_list_buffer
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:proc_list_buffer_end
+:last_proc dat 0x0000
+
+:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.0", 0xA0, 0x00
+:text_prompt dat " $> ", 0x00
+
+:present_working_directory dat 0x0000
+:present_working_directory_name dat "                ", 0x00
+:directory_stack
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+:directory_stack_end
+
+:AtlasShell_end

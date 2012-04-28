@@ -1,0 +1,39 @@
+; AtlasText - A simple, dummy text editor
+:AtlasText
+	JSR [AtlasText_clear]
+
+	SET I, AtlasText_loop_end ; Calculate the length of the back-jump
+	SUB I, AtlasText_loop
+
+	; Register our buffer with the driver
+	SET A, AtlasText_input_buffer
+	; And ask for exclusive keyboard access
+	SET B, 1
+	JSR [AtlasText_keyboard_register]
+:AtlasText_loop
+	; If we hit ESC kill the editor
+	IFE [AtlasText_input_buffer], 0x001B
+		SET PC, AtlasText_die
+
+	; Just print the text to the screen
+	SET A, AtlasText_input_buffer
+	JSR [AtlasText_text_out]
+
+	JSR [AtlasText_proc_suspend]
+	SUB PC, I
+:AtlasText_loop_end
+:AtlasText_die
+	SET A, AtlasText_input_buffer
+	JSR [AtlasText_keyboard_unregister]
+	JSR [AtlasText_clear]
+	JSR [AtlasText_proc_kill_me]
+:AtlasText_data
+	:AtlasText_input_buffer dat 0x0000, 0x0000
+	; API Jump table
+	:AtlasText_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
+	:AtlasText_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
+	:AtlasText_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
+	:AtlasText_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
+	:AtlasText_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
+	:AtlasText_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
+:AtlasText_end

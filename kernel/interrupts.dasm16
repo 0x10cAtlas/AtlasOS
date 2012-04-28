@@ -1,0 +1,22 @@
+:kernel_interrupt_handler
+	;JSR proc_suspend
+	;IAS 0
+	;IAQ 1
+	;IFE B, [keyboard_address]
+	;	JSR kernel_interrupt_handler_keyboard
+	;IFE B, [clock_address]
+	;	JSR kernel_interrupt_handler_clock
+	;IAQ 0
+	;IAS kernel_interrupt_handler
+	;RFI
+	;SET PC, POP
+
+:kernel_interrupt_handler_keyboard
+	SET PUSH, A
+	; Do something
+	SET A, POP
+	SET PC, POP
+	
+:kernel_interrupt_handler_clock
+	;JSR proc_suspend
+	SET PC, POP

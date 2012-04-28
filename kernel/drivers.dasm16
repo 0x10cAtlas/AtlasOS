@@ -1,0 +1,238 @@
+; ################START BIOS#################
+
+:bios_boot
+HWN Z
+IFE Z, 0 ; Loop indefinitely until we have hardware connected
+	SET PC, bios_boot
+
+:bios_display_initloop
+SUB Z, 1
+HWQ Z
+
+
+IFN A,0xf615 ; LEM1802 Monitor
+	SET PC,bios_display_initloop
+IFN B,0x7349 ; LEM1802 Monitor
+	SET PC,bios_display_initloop
+
+SET [display_address], Z
+
+;;map screen
+SET A, 0
+SET B, [video_mem]
+HWI Z
+
+;; dump palette
+SET A, 5
+SET B, [video_palette]
+HWI Z
+;;map palette
+SET A, 2
+SET B, [video_palette]
+HWI Z
+
+;; dump font
+SET A, 4
+SET B, [video_font]
+HWI Z
+;;map font
+SET A, 1
+SET B, [video_font]
+HWI Z
+
+:bios_keyboard_start
+HWN Z
+:bios_keyboard_initloop
+IFE Z, 0 ; Check if the keyboard doesn't exist
+	SET PC, bios_clock_start
+SUB Z, 1
+HWQ Z
+
+IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
+	SET PC, bios_keyboard_initloop
+IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
+	SET PC, bios_keyboard_initloop
+
+;SET [keyboard_address], Z
+;SET A, 3
+;SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+;HWI Z
+
+:bios_clock_start
+HWN Z
+:bios_clock_initloop
+IFE Z, 0 ; Check if the clock doesn't exist
+	SET PC, bios_floppy_start
+SUB Z, 1
+HWQ Z
+
+IFN A, 0xB402 ; Generic Clock (lower 8 bits)
+	SET PC, bios_clock_initloop
+IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
+	SET PC, bios_clock_initloop
+
+SET [clock_address], Z
+
+; Set clock tick rate
+;SET A, 0
+;SET B, 1
+;HWI [clock_address]
+
+; Setup interrupts for clock
+;SET A, 2
+;SET B, [clock_address]
+;HWI [clock_address]
+
+:bios_floppy_start
+; TODO
+
+SET PC, POP
+
+:display_address
+dat 0x0000
+:keyboard_address
+dat 0x0000
+:clock_address
+dat 0x0000
+:floppy_address
+dat 0x0000
+
+; ################END BIOS#################
+
+; Driver functions
+
+; START OF THE KEYBOARD DRIVER
+:driver_keyboard
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	SET A, 1
+    HWI [keyboard_address]
+
+	; Skip the driver if the key value hasn't changed
+	IFE C, [keyboard_oldvalue]
+		SET PC, driver_keyboard_end
+
+	SET A, keyboard_buffers
+
+	IFN [keyboard_buffers_exclusive], 0
+		SET PC, driver_keyboard_exclusive
+
+:driver_keyboard_loop
+	; Check to see if we have a buffer registered at this spot
+    IFN [A], 0
+        JSR driver_keyboard_save_to_buffer
+	; Increment to the next buffer as long as we aren't at the end
+    ADD A, 1
+    IFN A, keyboard_buffers_end
+        SET PC, driver_keyboard_loop
+:driver_keyboard_end
+	SET [keyboard_oldvalue], C
+	SET A, 0
+    HWI [keyboard_address]
+	SET C, POP
+	SET B, POP
+    SET A, POP
+    SET PC, POP
+
+:driver_keyboard_exclusive
+	SET B, [keyboard_buffers_exclusive]
+	SET [B], C
+	SET PC, driver_keyboard_end
+
+:driver_keyboard_save_to_buffer
+	SET B, [A]
+	SET [B], C
+	SET PC, POP
+
+; END OF THE KEYBOARD DRIVER
+
+; Registers a new keyboard buffer
+; Takes:
+; A: Address of the buffer
+; B: Keyboard buffer flags (right now set to 1 to make buffer exclusive)
+:keyboard_register
+	SET PUSH, C
+	SET PUSH, B
+    SET PUSH, A
+
+    SET C, keyboard_buffers
+
+:keyboard_register_loop
+    IFE [C], 0
+        SET PC, keyboard_register_set
+    ADD C, 1
+    IFN C, keyboard_buffers_end
+        SET PC, keyboard_register_loop
+
+:keyboard_register_set
+    SET [C], A
+	IFE B, 1
+		SET [keyboard_buffers_exclusive], A
+
+:keyboard_register_end
+    SET A, POP
+	SET B, POP
+	SET C, POP
+    SET PC, POP
+
+
+; Unregisters a keyboard buffer
+; Takes:
+; A: Address of the buffer
+:keyboard_unregister
+	SET PUSH, B
+    SET PUSH, A
+
+    SET B, keyboard_buffers
+
+:keyboard_unregister_loop
+    IFE [B], A
+        SET PC, keyboard_unregister_unset
+    ADD B, 1
+    IFN B, keyboard_buffers_end
+        SET PC, keyboard_unregister_loop
+	SET PC, keyboard_unregister_end
+:keyboard_unregister_unset
+    SET [B], 0x0000
+
+	; If this is the exclusive buffer, reset the exclusive global flag
+	IFE A, [keyboard_buffers_exclusive]
+		JSR keyboard_unregister_exclusive
+
+:keyboard_unregister_end
+    SET A, POP
+	SET B, POP
+    SET PC, POP
+
+:keyboard_unregister_exclusive
+	; Trigger a keyboard buffer update on any other register buffers
+	SET [keyboard_oldvalue], 0xFFFF
+	; And clear the exclusive data
+	SET [keyboard_buffers_exclusive], 0
+	SET PC, POP
+
+
+
+; Returns whether there is an exclusive keyboard buffer active
+:keyboard_is_exclusive_active
+	SET A, 0
+	IFN [keyboard_buffers_exclusive], 0
+		SET A, 1
+	SET PC, POP
+
+; Wipes out all of the registered keyboard buffers
+; CAUTION! This make break other running applications
+:keyboard_unregister_all
+	SET PUSH, A
+	SET A, keyboard_buffers
+:keyboard_unregister_all_loop
+	IFE A, keyboard_buffers_end
+		SET PC, keyboard_unregister_all_end
+	SET [A], 0
+	ADD A, 1
+	SET PC, keyboard_unregister_all_loop
+:keyboard_unregister_all_end
+	SET A, POP
+	SET PC, POP

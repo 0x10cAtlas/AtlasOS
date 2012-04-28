@@ -1,0 +1,450 @@
+; ##############################################################
+
+; Returns the version of AtlasOS
+; Takes: ---
+; Returns:
+; A: main version
+; B: subversion
+; C: fixversion
+:os_version
+      SET A, [os_version_main]
+      SET B, [os_version_sub]
+	  SET C, [os_version_fix]
+	  SET PC, POP
+
+; Returns the ID of the current process
+; Takes: ---
+; Returns:
+; A: process ID
+:proc_id
+      SET A, [proc_current]
+      SET PC, POP
+
+; Returns the start address of the current process
+; Takes: ---
+; Returns:
+; A: start address
+:proc_get_addr
+      JSR proc_id
+
+:proc_get_addr_of
+      JSR proc_get_info
+
+      ADD A, 10
+      SET A, [A]
+      SET PC, POP
+
+; Returns the flags of the current process
+; Takes: ---
+; Returns:
+; A: flags
+:proc_get_flags
+      JSR proc_id
+
+:proc_get_flags_of
+      JSR proc_get_info_of
+
+      ADD A, 11
+      SET A, [A]
+      SET PC, POP
+
+; Returns the address of the process info structure
+; Takes: ---
+; Returns:
+; A: address
+:proc_get_info
+      JSR proc_id
+
+:proc_get_info_of
+      MUL A, 12
+      ADD A, proc_buffer
+      SET PC, POP
+
+; Sets the flags of the current process
+; Takes:
+; A: flags
+; Returns: ---
+:proc_set_flags
+      SET PUSH, A
+      JSR proc_get_info
+      ADD A, 11
+      IFN A, 11
+          SET [A], PEEK
+      SET A, POP
+      SET PC, POP
+
+; Sets the flags of a process
+; Takes:
+; A: process ID
+; B: flags
+; Returns: ---
+:proc_set_flags_of
+      SET PUSH, A
+      JSR proc_get_info_of
+      ADD A, 11
+      IFN A, 11
+          SET [A], B
+      SET A, POP
+      SET PC, POP
+
+; Sets the active flag of the process
+; Takes:
+; A: process ID
+; Returns: ---
+:proc_set_flag_active_of
+      SET PUSH, B
+      SET PUSH, A
+
+      JSR proc_get_flags_of
+      BOR A, 0x0001
+      SET B, A
+      SET A, POP
+      JSR proc_set_flags_of
+
+      SET B, POP
+      SET PC, POP
+
+; Resets the active flag of the process
+; Takes:
+; A: process ID
+; Returns: ---
+:proc_reset_flag_active_of
+      SET PUSH, B
+      SET PUSH, A
+
+      JSR proc_get_flags_of
+      AND A, 0xFFFE
+      SET B, A
+      SET A, POP
+      JSR proc_set_flags_of
+
+      SET B, POP
+      SET PC, POP
+
+; Toggles the active flag of the process
+; Takes:
+; A: process ID
+; Returns:
+; A: 1 - active, 0 - inactive
+:proc_flag_is_active_of
+      JSR proc_get_flags_of
+      AND A, 0x0001
+      SET PC, POP
+
+; Generates a list of all process IDs and hands it over to a callback-function
+; Takes:
+; A: address of the callback-function (Takes: A: process ID, Returns: ---)
+; Returns: ---
+:proc_callback_list
+      SET PUSH, B
+      SET PUSH, A
+
+      SET B, proc_table
+
+:proc_callback_list_loop
+      SET A, [B]
+      IFN A, 0
+          JSR PEEK
+      ADD B, 12
+      IFN B, proc_table_end
+          SET PC, proc_callback_list_loop
+
+      SET A, POP
+      SET B, POP
+      SET PC, POP
+
+; proc_suspend
+; Takes 260 - 360 cycles to complete which is 2.6ms to 3.6ms
+:proc_suspend
+      SET [proc_buffer], [proc_current] ; Buffer the registers of the current process
+      SET [proc_buffer_a], A
+      SET [proc_buffer_b], B
+      SET [proc_buffer_c], C
+      SET [proc_buffer_x], X
+      SET [proc_buffer_y], Y
+      SET [proc_buffer_z], Z
+      SET [proc_buffer_i], I
+      SET [proc_buffer_j], J
+      SET [proc_buffer_sp], SP
+
+      ; Restore the Stackpointer so we can call subroutines
+      SET SP, [proc_table10]
+
+      ; Copy the buffered state to the table
+      JSR proc_get_info
+      SET B, A
+      SET A, proc_buffer
+
+      SET C, 12
+
+      JSR mem_copy
+
+      ; Process saved, now restore the next proc
+      SET A, B
+
+:proc_kill_me_hook
+      ADD A, 12
+:proc_suspend_loop
+      IFE A, proc_table_end
+          SET A, proc_table
+      SET X, [A]
+      IFN X, 0x0000
+          SET PC, proc_suspend_invoke
+      ADD A, 12
+      SET PC, proc_suspend_loop
+
+:proc_suspend_invoke
+      ; Copy the process information to the registers
+      SET B, proc_buffer
+      JSR mem_copy
+
+      SET [proc_current], [proc_buffer]
+      SET A, [proc_buffer_a]
+      SET B, [proc_buffer_b]
+      SET C, [proc_buffer_c]
+      SET X, [proc_buffer_x]
+      SET Y, [proc_buffer_y]
+      SET Z, [proc_buffer_z]
+      SET I, [proc_buffer_i]
+      SET J, [proc_buffer_j]
+      SET SP, [proc_buffer_sp]
+      SET PC, POP ; Jump into the Programm
+
+; Loads a new process into memory
+; A: Begin of the BLOB
+; B: Length of the BLOB
+:proc_load
+
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	SET PUSH, I
+	SET PUSH, J
+
+	SET C, 0 ; Clear this out because C might contain flag info if we load an ABI exe
+
+	SET Z, [A]
+	IFN [A], 0x4714  ; Check for magic number
+		SET PC, proc_load_start
+:proc_load_handle_exec
+	ADD A, 1
+	;SET C, [A] ; Do nothing with the revision # in this interim build
+	ADD A, 1
+	SET I, [A] ; Save the length of the header
+	ADD A, 1
+	SET J, [A] ; Save the length of the code+data
+	ADD A, 1
+	SET C, [A] ; Save the flags data
+	SUB A, 4 ; And now move the pointer back to the start
+
+:proc_load_start
+	SET X, proc_table
+
+:proc_load_loop
+	IFE [X], 0x0000
+		SET PC, proc_load_to
+
+	ADD X, 12
+	IFN X, proc_table_end
+		SET PC, proc_load_loop
+
+:proc_load_error
+	SET A, 0
+	SET PC, proc_load_end
+
+; Load the process and fill the details in the proc_table.
+; X -> addr of the empty proc_table record for this process
+; A <- proc id
+:proc_load_to
+	; Calculate the ProcID by finding the proc_table record number (OS is 1).
+	SET [X], X
+	SUB [X], proc_table
+	DIV [X], 12
+	ADD [X], 1
+
+	; X = ProcInfo Addr
+
+	; Backup our flags
+	SET PUSH, C
+
+	; Finally load the Process - A is the source mem addr, B is length.
+	SET C, B
+	SET PUSH, A
+
+	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
+	SET PUSH, [proc_current]   
+	SET [proc_current], [X]
+
+	JSR page_alloc
+
+	SET [proc_current], POP
+
+	IFE A, 0
+		SET PC, proc_load_error
+		
+	; Copy the program to the newly allocated memory.
+	SET B, A ; Save the address of the new page
+	SET A, PEEK ; Get back our original source address
+	IFE Z, 0x4714
+		ADD A, I ; If we are an ABI exe offset the copy destination by the size of the header
+	IFE Z, 0x4714
+		SET C, J ; If we are an ABI exe set the size to just the code length
+	JSR mem_copy
+	SET A, POP
+
+	; Get the flags back.
+	SET C, POP
+	
+	; Check if we have any flags to deal with
+	IFN C, 0
+		JSR proc_handle_flags
+
+	SET A, [X] ; A return the ProcID
+	; Fill the proc_table entry for this process.
+	ADD X, 1 ; A
+	SET [X], 0
+	ADD X, 1 ; B
+	SET [X], 0
+	ADD X, 1 ; C
+	SET [X], 0
+	ADD X, 1 ; X
+	SET [X], 0
+	ADD X, 1 ; Y
+	SET [X], 0
+	ADD X, 1 ; Z
+	SET [X], 0
+	ADD X, 1 ; I
+	SET [X], 0
+	ADD X, 1 ; J
+	SET [X], 0
+	
+	; Set the SP to the last byte of the allocated memory page (B+1023)
+	ADD X, 1 ; SP
+	SET [X], B
+	ADD [X], 1023
+	SET Y, [X] ; Save stack address for later.
+
+	; Store the memory address of the process.
+	ADD X, 1
+	SET [X], B
+	ADD X, 1 ; Flags
+	BOR C, 0x0001 ; OR in the active flag. This will overwrite the ART flag but we don't care
+	SET [X], C
+
+	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
+
+:proc_load_end
+	SET J, POP
+	SET I, POP
+	SET Z, POP
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+
+:proc_handle_flags
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; If bit 1 is true then backup the character set data
+	SET PUSH, A
+	SET A, 0 ; Param for manage_charset to save charset data
+	AND C, 0x0002
+	IFE C, 1
+		JSR manage_charset
+	SET A, POP
+		
+	SET C, PEEK
+	AND C, 0x0001 ; Check if the app has an ART
+	IFE C, 1
+		JSR proc_exec_process_relocation
+:proc_handle_flags_end	
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+; Handle the ART table for an application
+; A -> Start of the ABI header (i.e. file start)
+; B -> Copy of binary that we are modifying
+:proc_exec_process_relocation
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	ADD A, 5
+	SET C, [A] ; Get the number of entries in the relocaton table
+:proc_exec_process_relocation_loop
+	IFE C, 0
+		SET PC, proc_exec_process_relocation_end
+	SET PUSH, B
+	SET PUSH, X
+	SET X, B ; Store the program start location
+	ADD A, 1 ; Increment to next entry in ART
+	ADD B, [A] ; Add the ART offset to our pointer
+	ADD [B], X ; Add the program start location to the program code
+	SUB C, 1 ; Decrement our ART counter
+	SET X, POP
+	SET B, POP
+	SET PC, proc_exec_process_relocation_loop
+:proc_exec_process_relocation_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+
+; Kill self
+:proc_kill_me
+	JSR proc_id ; Save process ID
+	SET X, A
+	JSR proc_get_info_of ; Save process info address
+	SET Y, A
+	ADD A, 10 ; Save memory page
+	SET Z, [A]
+
+	ADD A, 1 ; Move to the flags word
+	SET A, [A] ; And retrieve the process flags
+	AND A, 0x0002 ; Check if this was a foreground app
+	IFE A, 1 ; Restore the character set. Since A is already 1 (restore charset) no need for extra ops here
+		JSR manage_charset
+
+	SET A, Y ; Delete the process info entry
+	SET B, 12
+	JSR mem_clear
+
+	SET A, X
+	JSR page_free_of
+
+	SET A, Y ; Restore the pointer to the info entry
+	SET C, 12
+	SET PC, proc_kill_me_hook
+
+:proc_kill
+      SET PUSH, B
+      SET PUSH, Y
+      SET PUSH, Z
+      SET PUSH, A
+
+      JSR proc_get_info_of ; Save process info address
+      SET Y, A
+      ADD A, 10 ; Save memory page
+      SET Z, [A]
+
+      SET A, Y ; Delete the process info entry
+      SET B, 12
+      JSR mem_clear
+
+      SET A, POP ; Free the process memory page
+      JSR page_free_of ; ! It will not be cleared !
+
+      SET Z, POP
+      SET Y, POP
+      SET B, POP
+      SET PC, POP
+
+; ##############################################################
