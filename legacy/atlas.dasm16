@@ -58,10 +58,11 @@ IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
 IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
 	SET PC, bios_keyboard_initloop
 
-;SET [keyboard_address], Z
-;SET A, 3
-;SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
-;HWI Z
+SET [keyboard_address], Z
+
+SET A, 3
+SET B, 0;[keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+HWI Z
 
 :bios_clock_start
 HWN Z
@@ -465,65 +466,39 @@ SET PC, stop
       SET PC, POP
 
 
-; Converts a Number into a Decimal String
-; A: Number
-; B: StrBuffer (length 5)
-:int2dec
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
+; converts a number to a string in the given radix
+; e.g. 2 is binary, 10 is decimal and 16 is hex
+; A = input number
+; B = buffer location
+; C = radix
+:itoa
+	SET PUSH,I
+	SET PUSH,A
+	SET I,0
 
-	ADD B, 4
-
-:int2dec_loop
-	SET C, A
-	MOD C, 10
-
-	SET [B], C
-	ADD [B], 0x0030
-
-	DIV A, 10
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2dec_end
-	SET PC, int2dec_loop
-
-:int2dec_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
-
-; Converts a Number into a Hexadecimal String
-; A: Number
-; B: StrBuffer (length 4)
-:int2hex
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-
-	ADD B, 3
-
-:int2hex_loop
-	SET C, A
-	AND C, 0x000F ; does the same thing as MOD, but AND takes one cycle, MOD takes 3
-
-	SET [B], C
-	ADD [B], 0x0030 ; adding 30 gives us a value of 30 to 3F
-	IFG [B], 0x0039 ; if it's 3A or more, add seven
-		ADD [B], 0x0007 ; giving us 30 - 39, 41 - 46
-
-	DIV A, 16
-	SUB B, 1
-	IFE A, 0
-		SET PC, int2hex_end
-	SET PC, int2hex_loop
-
-:int2hex_end
-	SET C, POP
-	SET B, POP
-	SET A, POP
-	SET PC, POP
+;count how long it is
+:itoa_0
+	ADD I,1
+	DIV A,C
+	IFN A,0
+	SET PC,itoa_0
+;itoa proper
+	ADD B,I
+	SET [B],0
+	SET A,POP
+:itoa_1
+	SUB B,1
+	SET I,A
+	MOD I,C
+	DIV A,C
+	IFG I,9
+	ADD I,7
+	ADD I,0x30
+	SET [B],I
+	IFN A,0
+	SET PC,itoa_1
+	SET I,POP
+	SET PC,POP
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer
@@ -1917,73 +1892,75 @@ SET PC, POP
 ; B: Length
 ; C: Keybuffer
 :read_line
-     SET PUSH, C
-     SET PUSH, B
-     SET PUSH, A
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
 
-     JSR mem_clear ; Clear the buffer
+	JSR mem_clear ; Clear the buffer
 
-     ADD B, A
+	ADD B, A
 
 :read_line_loop
-	 JSR proc_suspend
-     IFE [C], 0
-         SET PC, read_line_skip
-     IFE [C], 0x11 ; 13 -> 17 per keyboard HW
-         SET PC, read_line_end
-     IFE [C], 0x10 ; 8 -> 16 per keyboard HW
-         SET PC, read_line_backspace
-     IFE A, B
-         SET PC, read_line_skip
+	JSR proc_suspend
+	
+	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
+		SET PC, read_line_end
+	IFE [C], 0x10 ; 8 -> 16 per keyboard HW (backspace)
+		SET PC, read_line_backspace
+	IFG 0x20, [C]
+		SET PC, read_line_skip
+	IFG [C], 0x7F
+		SET PC, read_line_skip
+	IFE A, B
+		SET PC, read_line_skip
 
-     SET [A], [C]
+	SET [A], [C]
 
-; Put the character on-screen so the user can see what is being typed
-; Maybe have this toggleable?
-     SET PUSH, A
-     SET PUSH, B
-     SET B, [A]
-     BOR B, 0x7400
-     SET A, B
-     SET B, [video_cur]
-     SET [B], A
-     ADD [video_cur], 1
-	 SET A, [video_mem]
-	 ADD A, 0x180
-	 IFE [video_cur], A
+	; Put the character on-screen so the user can see what is being typed
+	; Maybe have this toggleable?
+	SET PUSH, A
+	SET PUSH, B
+	SET B, [A]
+	BOR B, 0x7400
+	SET A, B
+	SET B, [video_cur]
+	SET [B], A
+	ADD [video_cur], 1
+	SET A, [video_mem]
+	ADD A, 0x180
+	IFE [video_cur], A
 		JSR scroll
-     SET B, POP
-     SET A, POP
+	SET B, POP
+	SET A, POP
 
-     ADD A, 1
+	ADD A, 1
 
 :read_line_skip
-     SET PC, read_line_loop
+	SET PC, read_line_loop
 
 :read_line_backspace
-; Ensure we don't backspace past the beginning
-     IFE A, PEEK
-     SET PC, read_line_skip
+	; Ensure we don't backspace past the beginning
+	IFE A, PEEK
+		SET PC, read_line_skip
 
-     SET PUSH, A
-     SET PUSH, B
-     SUB [video_cur], 1
-     SET B, [video_cur]
-     SET [B], 0
-     SET B, POP
-     SET A, POP
-     SUB A, 1
-     SET PC, read_line_skip
+	SET PUSH, A
+	SET PUSH, B
+	SUB [video_cur], 1
+	SET B, [video_cur]
+	SET [B], 0
+	SET B, POP
+	SET A, POP
+	SUB A, 1
+	SET PC, read_line_skip
 
-;
 :read_line_end
-; Add the null terminator
-     SET [A], 0
-; Pop everything back out
-     SET A, POP
-     SET B, POP
-     SET C, POP
-     SET PC, POP
+	; Add the null terminator
+	SET [A], 0
+	; Pop everything back out
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
 
 ; Sleeps for some cycles
 ; Max of 3000 ms otherwise B will overflow
@@ -2100,8 +2077,8 @@ SET PC, POP
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub dat 0x0005
-:os_version_fix dat 0x0006
+:os_version_sub dat 0x0006
+:os_version_fix dat 0x0000
 
 :video_mem dat 0x8000
 :video_font dat 0x8180
@@ -2110,7 +2087,7 @@ SET PC, POP
 :video_cur dat 0x8000
 :video_clear dat 0x7020
 
-:text_start dat "AtlasOS v0.5.6 starting... ", 0x00
+:text_start dat "AtlasOS v0.6.0 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo
 dat "      ___   __   __", 0xA0
@@ -2558,7 +2535,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp] ; compare table string to parameter
+	JSR [0x101A] ; compare table string to parameter
 	IFE C, 0
 		SET PC, command_loadf_loop_end ; if equal move to end
 
@@ -2755,7 +2732,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, POP
 	; Convert to text and display
 	SET B, command_number_buffer
-	JSR [0x101B]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
 	JSR [0x101E]
 	JSR [0x101F]
@@ -2853,21 +2831,24 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 		SET PC, command_lsf_skip_filesize
 	
 	; Display file size
+	SET PUSH, C
 	SET C, [A] ; Get the file start
 	ADD A, 1
 	SET PUSH, A
 	SET A, [A]
 	SUB A, C
-	JSR [0x101B]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, POP
+	SET C, POP
 :command_lsf_skip_filesize	
 	IFE C, 16
 		ADD A, 1
 	; Output the file info
-	SET C, A
+	SET PUSH, A
 	SET A, command_ls_row
 	JSR [0x101E]
-	SET A, C
+	SET A, POP
 	SET PC, command_lsf_skip_file_end
 :command_lsf_skip_file
 	SET A, POP
@@ -3067,7 +3048,8 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET PUSH, B
 	MUL A, 10000
 	SET B, command_number_buffer
-	JSR [0x101B]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	IFE A, 0
 		SET [B], 0x0030
 	SET A, command_number_buffer
@@ -3075,12 +3057,14 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	SET A, B
 	MUL A, 100
 	SET B, command_number_buffer
-	JSR [0x101B]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
-	JSR [0x101B]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
 	ADD A, 1
 	SET [A], [command_version_separator]
@@ -3210,6 +3194,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :directory_stack_end
 
 :AtlasShell_end
+
 
 
 ; AtlasText - A simple, dummy text editor

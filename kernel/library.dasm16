@@ -352,75 +352,77 @@ SET PC, POP
 ; B: Length
 ; C: Keybuffer
 :read_line
-     SET PUSH, C
-     SET PUSH, B
-     SET PUSH, A
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
 
-     JSR mem_clear ; Clear the buffer
+	JSR mem_clear ; Clear the buffer
 
-     ADD B, A
+	ADD B, A
 
 :read_line_loop
-	 JSR proc_suspend
-     IFE [C], 0
-         SET PC, read_line_skip
-     IFE [C], 0x11 ; 13 -> 17 per keyboard HW
-         SET PC, read_line_end
-     IFE [C], 0x10 ; 8 -> 16 per keyboard HW
-         SET PC, read_line_backspace
-     IFE A, B
-         SET PC, read_line_skip
+	JSR proc_suspend
+	
+	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
+		SET PC, read_line_end
+	IFE [C], 0x10 ; 8 -> 16 per keyboard HW (backspace)
+		SET PC, read_line_backspace
+	IFG 0x20, [C]
+		SET PC, read_line_skip
+	IFG [C], 0x7F
+		SET PC, read_line_skip
+	IFE A, B
+		SET PC, read_line_skip
 
-     SET [A], [C]
+	SET [A], [C]
 
-; Put the character on-screen so the user can see what is being typed
-; Maybe have this toggleable?
-     SET PUSH, A
-     SET PUSH, B
-     SET B, [A]
-     BOR B, 0x7400
-     SET A, B
-     SET B, [video_cur]
-     SET [B], A
-     ADD [video_cur], 1
-	 SET A, [video_mem]
-	 ADD A, 0x180
-	 IFE [video_cur], A
+	; Put the character on-screen so the user can see what is being typed
+	; Maybe have this toggleable?
+	SET PUSH, A
+	SET PUSH, B
+	SET B, [A]
+	BOR B, 0x7400
+	SET A, B
+	SET B, [video_cur]
+	SET [B], A
+	ADD [video_cur], 1
+	SET A, [video_mem]
+	ADD A, 0x180
+	IFE [video_cur], A
 		JSR scroll
-     SET B, POP
-     SET A, POP
+	SET B, POP
+	SET A, POP
 
-     ADD A, 1
+	ADD A, 1
 
 :read_line_skip
-     SET PC, read_line_loop
+	SET PC, read_line_loop
 
 :read_line_backspace
-; Ensure we don't backspace past the beginning
-     IFE A, PEEK
-     SET PC, read_line_skip
+	; Ensure we don't backspace past the beginning
+	IFE A, PEEK
+		SET PC, read_line_skip
 
-     SET PUSH, A
-     SET PUSH, B
-     SUB [video_cur], 1
-     SET B, [video_cur]
-     SET [B], 0
-     SET B, POP
-     SET A, POP
-     SUB A, 1
-     SET PC, read_line_skip
+	SET PUSH, A
+	SET PUSH, B
+	SUB [video_cur], 1
+	SET B, [video_cur]
+	SET [B], 0
+	SET B, POP
+	SET A, POP
+	SUB A, 1
+	SET PC, read_line_skip
 
-;
 :read_line_end
-; Add the null terminator
-     SET [A], 0
-; Pop everything back out
-     SET A, POP
-     SET B, POP
-     SET C, POP
-     SET PC, POP
+	; Add the null terminator
+	SET [A], 0
+	; Pop everything back out
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
 	
-	; Sleeps for some cycles
+; Sleeps for some cycles
 ; Max of 3000 ms otherwise B will overflow
 ; CAUTION! This sleep is blocking. It does not release to other processes during the sleep
 ; A -> number of milliseconds to wait

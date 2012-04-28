@@ -53,10 +53,11 @@ IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
 IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
 	SET PC, bios_keyboard_initloop
 
-;SET [keyboard_address], Z
-;SET A, 3
-;SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
-;HWI Z
+SET [keyboard_address], Z
+
+SET A, 3
+SET B, 0;[keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+HWI Z
 
 :bios_clock_start
 HWN Z
