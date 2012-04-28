@@ -3,8 +3,8 @@ SET PC, data_end
 
 ; OS Variables
 :os_version_main dat 0x0000
-:os_version_sub dat 0x0005
-:os_version_fix dat 0x0006
+:os_version_sub dat 0x0006
+:os_version_fix dat 0x0000
 
 :video_mem dat 0x8000
 :video_font dat 0x8180
@@ -13,7 +13,7 @@ SET PC, data_end
 :video_cur dat 0x8000
 :video_clear dat 0x7020
 
-:text_start dat "AtlasOS v0.5.6 starting... ", 0x00
+:text_start dat "AtlasOS v0.6.0 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo
 dat "      ___   __   __", 0xA0
