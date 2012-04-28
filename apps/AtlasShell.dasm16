@@ -205,7 +205,7 @@
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp] ; compare table string to parameter
+	JSR [0x101A] ; compare table string to parameter
 	IFE C, 0
 		SET PC, command_loadf_loop_end ; if equal move to end
 
