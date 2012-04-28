@@ -158,42 +158,62 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :entropy dat 0x0000
 
 :api_start ; API starts at 0x1000
-    SET PC, os_version		; Returns the version of AtlasOS
-    SET PC, proc_id 		; Returns the ID of the current process
-    SET PC, proc_suspend 	; Suspends the process and starts the next
-    SET PC, proc_get_addr 	; Returns the address of the current processes memory
-    SET PC, proc_get_flags 	; Returns the flags of the current process
-    SET PC, proc_kill_me 	; Kills the current process
-    SET PC, proc_kill 		; Kills a process
-    SET PC, page_alloc 		; Allocates another 1024 words
-    SET PC, page_free 		; Frees allocated memory
-    SET PC, mem_clear 		; Clears memory
-    SET PC, pusha 			; Pushes all registers to the stack
-    SET PC, popa 			; Pops all registers from the stack
-    SET PC, strcpy 			; Copies a string
-    SET PC, strncpy 		; Copies a string with length limitation
-    SET PC, text_out 		; Displays a text on the screen
-    SET PC, newline 		; Linefeed
-    SET PC, scroll 			; Scrolls the screen one line
-    SET PC, clear 			; Clears the screen
-    SET PC, char_put 		; Puts a char on the screen
-    SET PC, read_line 		; Reads a line from the keyboard to a buffer
-    SET PC, rand 			; Gets a random number
-    SET PC, keyboard_register ; Registers a specific memory location as keyboard buffer
-    SET PC, keyboard_unregister ; Unregisters a specific memory location
-    SET PC, int2dec 		; Converts a value into the decimal representation
-    SET PC, int2hex 		; Converts a value into the hexadecimal representation
-	SET PC, atoi 			; Converts a textual, decimal number into the actual integer value
-	SET PC, strlen 			; Returns the length of a null-terminated string
-	SET PC, strcmp 			; Compares two null-terminated strings to see if they're equal
-	SET PC, page_check		; Returns the amount of free memory
-	SET PC, srand			; Initializes the random number generator
-	SET PC, proc_load		; Loads a new process
-	SET PC, proc_callback_list ; Dumps a list of running processes
-	SET PC, keyboard_is_exclusive_active ; Set A to non-zero if there is an exclusive keyboard buffer active
-	SET PC, filesystem_getfile ; Returns the start of the matched filesystem entry in C, 0 otherwise
-	SET PC, filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
-	SET PC, filesystem_getfile_bystart ; Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat os_version ; 0x1000 Returns the version of AtlasOS
+
+	dat proc_id ; 0x1001 Returns the ID of the current process
+	dat proc_suspend ; 0x1002 Suspends the process and starts the next
+	dat proc_get_addr ; 0x1003 Returns the address of the current processes memory
+	dat proc_get_flags ; 0x1004 Returns the flags of the current process
+	dat proc_kill_me ; 0x1005 Kills the current process
+	dat proc_kill ; 0x1006 Kills a process
+	dat proc_load ; 0x1007 Loads a new process
+	dat 0x0000 ; 0x1008 Loads a new ABI process
+	dat proc_callback_list ; 0x1009 Dumps a list of running processes
+
+	dat msg_queue_reg ; 0x100A Registers a new message queue
+	dat msg_queue_rem ; 0x100B Removes a message queue
+	dat msg_broadcast ; 0x100C Broadcasts a message
+	dat 0x0000 ; 0x100D Not implemented yet: msg_send
+	dat msg_get_message ; 0x100E Receives the nest message in the queue
+
+	dat page_alloc ; 0x100F Allocates another 1024 words
+	dat page_free ; 0x1010 Frees allocated memory
+	dat page_check ; 0x1011 Returns the amount of reserved memory
+	dat page_check_of ; 0x1012 Returns the amount of reserved memory per process
+
+	dat mem_copy ; 0x1013 Copies memory
+	dat mem_clear ; 0x1014 Clears memory
+
+	dat pusha ; 0x1015 Pushes all registers to the stack
+	dat popa ; 0x1016 Pops all registers from the stack
+
+	dat strcpy ; 0x1017 Copies a string
+	dat strncpy ; 0x1018 Copies a string with length limitation
+	dat strlen ; 0x1019 Returns the length of a null-terminated string
+	dat strcmp ; 0x101A Compares two null-terminated strings to see if they're equal
+
+	dat itoa ; 0x101B Converts a value into the binary, decimal, or hexadecimal representation
+	dat 0x0000 ; 0x101C Deprecated
+	dat atoi ; 0x101D Converts a textual, decimal number into the actual integer value
+
+	dat text_out ; 0x101E Displays a text on the screen
+	dat newline ; 0x101F Linefeed
+	dat scroll ; 0x1020 Scrolls the screen one line
+	dat clear ; 0x1021 Clears the screen
+	dat char_put ; 0x1022 Puts a char on the screen
+	dat read_line ; 0x1023 Reads a line from the keyboard to a buffer
+
+	dat rand ; 0x1024 Gets a random number
+	dat srand ; 0x1025 Initializes the random number generator
+
+	dat keyboard_register ; 0x1026 Registers a specific memory location as keyboard buffer
+	dat keyboard_unregister ; 0x1027 Unregisters a specific memory location
+	dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
+
+	dat filesystem_getfile ; Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
+	dat filesystem_getfile_bystart ; Returns the start of the matched filesystem entry in C, 0 otherwise
 :api_end
+
 
 :data_end

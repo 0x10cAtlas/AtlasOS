@@ -1,34 +1,34 @@
 ; BASH-like Process
 :AtlasShell
 	SET A, text_versionoutput
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 :AtlasShell_start
 	; Register our buffer with the driver
 	SET A, input_buffer
-	JSR [AtlasShell_keyboard_register]
+	JSR [0x1026]
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
-	JSR [AtlasShell_keyboard_is_exclusive_active]
+	JSR [0x1028]
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 	
 	; Load the pwd name
 	JSR command_clear_present_working_directory_name
 	SET A, [present_working_directory]
-	JSR [AtlasShell_filesystem_getfile_bystart]
+	JSR [0x102B]
 	IFE C, 0
 		SET PC, AtlasShell_skip_display_path
 	ADD C, 2
 	SET A, C
 	SET B, present_working_directory_name
-	JSR [AtlasShell_strcpy]
+	JSR [0x1017]
 	; Display the current path
 	SET A, present_working_directory_name
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 :AtlasShell_skip_display_path
 	; Display the prompt
 	SET A, text_prompt
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 
 	; Reset the basics
 	SET [ack_command], 0 ; reset command recognized
@@ -37,11 +37,11 @@
 	SET A, input_text_buffer
 	SET B, 32
 	SET C, input_buffer
-	JSR [AtlasShell_read_line]
+	JSR [0x1023]
 
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, AtlasShell_loop_wait
 
@@ -53,49 +53,49 @@
 	; Check for the 'clear' command
 	SET A, command_clear
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		JSR command_clearf
 
 	; Check for the 'version' command
 	SET a, command_version
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_versionf
 
 	; Check for the 'load' command
 	SET a, command_load
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_loadf
 
 	; Check for the 'kill' command
 	SET a, command_kill
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_killf
 
 	; Check for the 'list' command
 	SET a, command_list
 	SET b, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE c, 0
 	JSR command_listf
 	
 	; Check for the 'ls' command
 	SET A, command_ls
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		JSR command_lsf
 		
 	; Check for the 'cd' command
 	SET A, command_cd
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		JSR command_cdf
 		
@@ -108,16 +108,16 @@
 	JSR command_unknownf
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET a, text_unrecognized
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET pc, pop
 
 ; Command function to display version info
@@ -130,7 +130,7 @@
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
-	JSR [AtlasShell_mem_clear]
+	JSR [0x1014]
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -138,26 +138,26 @@
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_versionf_shell
 
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_versionf_os
 :command_versionf_shell
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, text_versionoutput
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
 :command_versionf_os
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	JSR command_os_version_display
 	SET C, POP
 	SET B, POP
@@ -167,7 +167,7 @@
 ; Command function to clear the screen
 :command_clearf
 	SET [ack_command], 1 ; acknowledge recognized command
-	JSR [AtlasShell_clear]
+	JSR [0x1021]
 	SET pc, pop
 
 ; Command function to load a new process
@@ -186,14 +186,14 @@
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_loadf_help
 
 	;check if list > list applications in table
 	SET A, command_parameter_buffer
 	SET B, command_list
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IfE C, 0
 		SET PC, command_loadf_list
 
@@ -210,7 +210,7 @@
 		SET PC, command_loadf_loop_end ; if equal move to end
 
 	; Get the length of the app name and move our pointer forward past that
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
@@ -218,9 +218,9 @@
 
 :command_loadf_loop_end
 	SET PUSH, A
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	SET A, POP
 	ADD A, B
 	ADD A, 1
@@ -232,7 +232,7 @@
 	SET B, [B]
 	SUB B, A
 
-	JSR [AtlasShell_proc_load]
+	JSR [0x1007]
 
         IFE A, 0
             SET PC, command_loadf_unknown
@@ -241,39 +241,39 @@
 	SET PC, command_loadf_end
 
 :command_loadf_help
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_load_help
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_loadf_end
 
 :command_loadf_list
 	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, application_table
 :command_loadf_list_loop
 	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
 		SET PC, command_loadf_end
 	IFG A, application_table_end ; if index is past end of the table, finish listing apps
 		SET PC, command_loadf_end
-	JSR [AtlasShell_text_out] ;print out app name
-	JSR [AtlasShell_newline]
+	JSR [0x101E] ;print out app name
+	JSR [0x101F]
 	; Get the length of the app name and move our pointer forward past that
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_list_loop ; loopback
 
 :command_loadf_unknown
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_load_unknown
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, POP
 
 ; Command function to kill a running process
@@ -292,24 +292,24 @@
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_killf_help
 
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_killf_last
 
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_atoi]	; A is source, C is result
+	JSR [0x101D]	; A is source, C is result
 
 	; Selfkill?
 	SET PUSH, A
-	JSR [AtlasShell_proc_id]
+	JSR [0x1001]
 	IFE A, C      ; Wants to kill me?
 		SET PC, AtlasShell_die
 	SET A, POP
@@ -319,29 +319,29 @@
 		SET PC, command_killf_forbidden
 
 	; Kill the corresponding process
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, C
-	JSR [AtlasShell_proc_kill]
+	JSR [0x1006]
 	SET PC, command_killf_end
 :command_killf_forbidden
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_kill_forbidden
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_killf_end
 :command_killf_last
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, [last_proc]
-	JSR [AtlasShell_proc_kill]
+	JSR [0x1006]
 	SET PC, command_killf_end
 :command_killf_help
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_kill_help
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 :command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, POP
 
 ; Command function to list process IDs
@@ -364,11 +364,11 @@
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
-	JSR [AtlasShell_proc_callback_list]
+	JSR [0x1009]
 
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 	SET A, command_list_info
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET A, 0 ; OS process
 	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
@@ -402,10 +402,11 @@
 		SET PC, POP
 	; Convert to text and display
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
-	JSR [AtlasShell_text_out]
-	JSR [AtlasShell_newline]
+	JSR [0x101E]
+	JSR [0x101F]
 
 	SET PC, POP
 	
@@ -417,8 +418,8 @@
 	SET PUSH, C
 	SET PUSH, X
 	SET PUSH, Y
-	JSR [AtlasShell_newline]
-	JSR [AtlasShell_filesystem_getfile_table]
+	JSR [0x101F]
+	JSR [0x102A]
 	SET X, [A]
 	SET Y, 0
 	ADD A, 1
@@ -487,7 +488,7 @@
 	ADD A, 1
 	
 	; Store the file name
-	JSR [AtlasShell_strcpy]
+	JSR [0x1017]
 	ADD B, 16
 	ADD A, 16
 	
@@ -505,7 +506,8 @@
 	SET PUSH, A
 	SET A, [A]
 	SUB A, C
-	JSR [AtlasShell_int2dec]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, POP
 :command_lsf_skip_filesize	
 	IFE C, 16
@@ -513,7 +515,7 @@
 	; Output the file info
 	SET C, A
 	SET A, command_ls_row
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET A, C
 	SET PC, command_lsf_skip_file_end
 :command_lsf_skip_file
@@ -525,7 +527,7 @@
 	ADD A, 1
 	SET PC, command_lsf_loop
 :command_lsf_end
-	;JSR [AtlasShell_proc_suspend]
+	;JSR [0x1002]
 	SET Y, POP
 	SET X, POP
 	SET C, POP
@@ -538,10 +540,10 @@
 	SET PUSH, B
 	SET PUSH, C
 
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_filesystem_getfile]
+	JSR [0x1029]
 	IFE C, 0
 		SET PC, command_runfile_end
 		
@@ -562,13 +564,13 @@
 	ADD C, 1
 	SET B, [C]
 	SUB B, A
-	JSR [AtlasShell_proc_load]
+	JSR [0x1007]
 	IFN A, 0
 		SET [ack_command], 1
 	SET PC, command_runfile_end
 :command_runfile_notexe
 	SET A, command_runfile_notexe_text
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET [ack_command], 1
 :command_runfile_end	
 	SET C, POP
@@ -587,43 +589,43 @@
 	SET B, 1
 	JSR shell_getparameter
 
-	JSR [AtlasShell_newline]
+	JSR [0x101F]
 
 	;check if 'cd'
 	SET A, command_parameter_buffer
 	SET B, command_cd
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_cdf_help
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_strlen]
+	JSR [0x1019]
 	IFE B, 0
 		SET PC, command_cdf_help
 
 	;check if '..'
 	SET A, command_parameter_buffer
 	SET B, command_cd_back
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_cdf_back
 
 	;check if '/'
 	SET A, command_parameter_buffer
 	SET B, command_cd_root
-	JSR [AtlasShell_strcmp]
+	JSR [0x101A]
 	IFE C, 0
 		SET PC, command_cdf_root
 
-	JSR [AtlasShell_filesystem_getfile]
+	JSR [0x1029]
 	IFN C, 0
 		SET PC, command_cdf_cd
 	SET PC, command_cdf_unknown
 
 :command_cdf_help
 	SET A, command_cd_help
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_cdf_end
 
 :command_cdf_back
@@ -655,9 +657,9 @@
 
 :command_cdf_unknown
 	SET A, command_parameter_buffer
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET A, command_cd_unknown
-	JSR [AtlasShell_text_out]
+	JSR [0x101E]
 	SET PC, command_cdf_end
 
 :command_cdf_cd
@@ -691,14 +693,14 @@
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [AtlasShell_proc_suspend]
+	JSR [0x1002]
 	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
-	JSR [AtlasShell_keyboard_unregister]
-	JSR [AtlasShell_newline]
-	JSR [AtlasShell_proc_kill_me]
+	JSR [0x1027]
+	JSR [0x101F]
+	JSR [0x1005]
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -709,12 +711,13 @@
 	SET B, 0
 	SET C, 0
 	; A - main version, B - sub version, C - fix version
-	JSR [AtlasShell_os_version]
+	JSR [0x1000]
 	SET PUSH, C
 	SET PUSH, B
 	MUL A, 10000
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	IFE A, 0
 		SET [B], 0x0030
 	SET A, command_number_buffer
@@ -722,20 +725,22 @@
 	SET A, B
 	MUL A, 100
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
-	JSR [AtlasShell_int2dec]
+	SET C, 10 ; radix
+	JSR [0x101B] ; itoa
 	SET A, command_number_buffer
 	ADD A, 1
 	SET [A], [command_version_separator]
 	ADD A, 2
 	SET [A], [command_version_separator]
 	SET A, command_number_buffer
-	JSR [AtlasShell_text_out]
-	JSR [AtlasShell_newline]
+	JSR [0x101E]
+	JSR [0x101F]
 	SET PC, POP
 ; Clears the parameter buffer
 :command_clear_parameter_buffer
@@ -743,7 +748,7 @@
 	SET PUSH, B
 	SET A, command_parameter_buffer
 	SET B, 32
-	JSR [AtlasShell_mem_clear]
+	JSR [0x1014]
 	SET B, POP
 	SET A, POP
 	SET PC, POP
@@ -768,7 +773,7 @@
 	SET PUSH, B
 	SET A, present_working_directory_name
 	SET B, 16
-	JSR [AtlasShell_mem_clear]
+	JSR [0x1014]
 	SET B, POP
 	SET A, POP
 	SET PC, POP
@@ -838,31 +843,6 @@
 :command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
 :command_cd_unknown dat " doesnt exist", 0xA0, 0
 :command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
-
-; API Jump table
-:AtlasShell_os_version dat 0x1000 ; 0th index in API * 2 words long = 0x00, os_version
-:AtlasShell_proc_id dat 0x1002 ; 1st index in API * 2 words long = 0x02, proc_id
-:AtlasShell_proc_suspend dat 0x1004 ; 2nd index in API * 2 words long = 0x04, proc_suspend
-:AtlasShell_proc_kill_me dat 0x100A ; 5th index in API * 2 words long = 0x0A, proc_kill_me
-:AtlasShell_proc_kill dat 0x100C ; 6th inded in API * 2 words long = 0x0C, proc_kill
-:AtlasShell_mem_clear dat 0x1012 ; 9th index in API * 2 words long = 0x12, mem_clear
-:AtlasShell_strcpy dat 0x1018 ; 12th index in API * 2 words long = 0x18, strcpy
-:AtlasShell_text_out dat 0x101C ; 14th index in API * 2 words long = 0x1C, text_out
-:AtlasShell_newline dat 0x101E ; 15th index in API * 2 words long = 0x1E, newline
-:AtlasShell_clear dat 0x1022 ; 17th index in API * 2 words long = 0x22, char_put
-:AtlasShell_read_line dat 0x1026 ; 19th index in API * 2 words long = 0x26, read_line
-:AtlasShell_keyboard_register dat 0x102A ; 21st index in API * 2 words long = 0x2A, keyboard_register
-:AtlasShell_keyboard_unregister dat 0x102C ; 22nd index in API * 2 words long = 0x2C, keyboard_unregister
-:AtlasShell_int2dec dat 0x102E ; 23rd index in API * 2 words long = 0x2E, int2dec
-:AtlasShell_atoi dat 0x1032 ; 25th index in API * 2 words long = 0x32, atoi
-:AtlasShell_strlen dat 0x1034 ; 26th index in API * 2 words long = 0x34, strlen
-:AtlasShell_strcmp dat 0x1036 ; 27th index in API * 2 words long = 0x36, strcmp
-:AtlasShell_proc_load dat 0x103C ; 30th index in API * 2 words long = 0x3C, proc_load
-:AtlasShell_proc_callback_list dat 0x103E ; 31st index in API * 2 words long = 0x3E, proc_callback_list
-:AtlasShell_keyboard_is_exclusive_active dat 0x1040 ; 32nd index in API * 2 words long = 0x40, keyboard_is_exclusive_active
-:AtlasShell_filesystem_getfile dat 0x1042 ; 33rd index in API * words long = 0x42, filesystem_getfile
-:AtlasShell_filesystem_getfile_table dat 0x1044 ; 34th index in API * 2 words long = 0x44, filesystem_getfile_table
-:AtlasShell_filesystem_getfile_bystart dat 0x1046 ; 35th index in API * 2 words long = 0x46, filesystem_getfile_bystart
 
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
