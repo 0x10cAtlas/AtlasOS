@@ -79,7 +79,7 @@ public class Application {
 						bw.write("\ndat 0x" + toHex(buffer));
 
 					if (verbose)
-						bw.write("\ndat 0x" + toHex(buffer));
+						System.out.print("\ndat 0x" + toHex(buffer));
 
 				} else {
 
