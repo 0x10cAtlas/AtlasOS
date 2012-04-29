@@ -1,4 +1,4 @@
-:app02
+:app02 ; Uses A, B, C, X, Y, Z, I, and J
 SET X, 1
 SET Y, 1
 
@@ -8,34 +8,36 @@ SET A, 0
 SET B, 0
 SET C, 0
 
+SET I, app02_loop_end
+SUB I, app02_loop
+
 :app02_loop
 ; Restore the old character
 SET C, Z
-IFE C, 0
-ADD PC, 4
-IFN C, 0x744F
-JSR [0x1022] ; char_put
+IFN C, 0
+	IFN C, 0x7440
+		JSR [0x1022] ; char_put
 
 ; If we reached the end of the iterations, quit
 SUB J, 1
 IFE J, 0
-JSR [0x1005] ; proc_kill_me
+	JSR [0x1005] ; proc_kill_me
 
 ; Update the coordinates of the ball
 ADD A, X
 ADD B, Y
 
 IFE A, 31
-SET X, 0xFFFF
+	SET X, 0xFFFF
 
 IFE B, 11
-SET Y, 0xFFFF
+	SET Y, 0xFFFF
 
 IFE A, 0
-SET X, 1
+	SET X, 1
 
 IFE B, 0
-SET Y, 1
+	SET Y, 1
 
 ; Save the character before we write so we can restore later
 SET PUSH, B
@@ -45,18 +47,23 @@ ADD B, 0x8000 ; FIX THIS ASAP!
 SET Z, [B]
 SET B, POP
 
-SET PUSH, A
-SET A, 8
+SET PUSH, J
+SET PUSH, I
+SET I, app02_wait_loop_end
+SUB I, app02_wait_loop
+SET J, 8
 :app02_wait_loop
-SET C, 0x7400
+SET C, 0x7440
 JSR [0x1022] ; char_put
 JSR [0x1002] ; proc_suspend
-SUB A, 1
-IFN A, 0
-SET PC, app02_wait_loop
-SET A, POP
+SUB J, 1
+IFN J, 0
+	SUB PC, I
+:app02_wait_loop_end
+SET I, POP
+SET J, POP
 
 JSR [0x1002] ; proc_suspend
-SET PC, app02_loop
+SUB PC, I
 :app02_loop_end
 :app02_end
