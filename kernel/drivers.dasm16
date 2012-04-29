@@ -9,10 +9,9 @@ IFE Z, 0 ; Loop indefinitely until we have hardware connected
 SUB Z, 1
 HWQ Z
 
-
-IFN A,0xf615 ; LEM1802 Monitor
+IFN A, 0xf615 ; LEM1802 Monitor
 	SET PC,bios_display_initloop
-IFN B,0x7349 ; LEM1802 Monitor
+IFN B, 0x7349 ; LEM1802 Monitor
 	SET PC,bios_display_initloop
 
 SET [display_address], Z
