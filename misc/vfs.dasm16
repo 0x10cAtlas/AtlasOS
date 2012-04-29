@@ -6,12 +6,13 @@
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
 :files_table
-	dat 0x000A ; Number of files in table
+	dat 0x000B ; Number of files in table
 	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000 ; root directory
 	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
 	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
 	dat 0x0000, 0x0011, "Data", 0, "           ", 0x0004, 0x0000
 	dat 0x0002, 0x0011, "System", 0, "         ", 0x0003, 0x0000
+	dat 0x0000, 0x0011, "libs", 0, "           ", 0x0005, 0x0000
 	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
 	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
 	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
