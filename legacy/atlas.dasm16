@@ -1,6 +1,6 @@
 ; AtlasOS
 ; A multiprocess capable DCPU OS by Plusmid and Chessmaster42
-; AtlasOS version 0.5.6
+; AtlasOS version 0.6.0
 ; Atlas-Shell version 0.4.0
 
 ; ################START BIOS#################
@@ -1480,6 +1480,7 @@ SET PC, stop
 	SET B, 0x8180
 :manage_charset_loop
 	IFE A, char_set_end
+	IFE A, char_set_end
 		SET PC, manage_charset_end
 	IFE C, 0
 		SET [A], [B]
@@ -1790,6 +1791,207 @@ SET PC, stop
     SET B, POP
     SET PC, POP
 
+; File:    libs.dasm16 
+; Author:  Plusmid
+; Created: 29-04-2012 18:30
+; Description: Routines for loading libraries
+
+; Finds a library in the library list
+; A -> Pointer to the name of the library
+; A <- Pointer to the entry in library list (or 0x0000 if failed)
+:lib_find
+	SET PUSH, B
+	SET PUSH, C
+	
+	SET B, lib_table
+	
+:lib_find_loop		
+	ADD B, 1
+	
+	IFE [0xFFFF + B], 0x0000
+		SET PC, lib_find_skip
+	
+	JSR strcmp
+	
+	IFE C, 0
+		SET PC, lib_find_found
+
+:lib_find_skip
+	ADD B, 21
+	IFN B, lib_table_end
+		SET PC, lib_find_loop
+		
+	SET A, 0
+	
+:lib_find_end
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+:lib_find_found
+	SUB B, 1
+	SET A, B
+	SET PC, lib_find_end
+	
+; Find the address of the next free entry in library list
+; A <- Address or 0x0000 if failed
+:lib_find_free
+	SET A, lib_table
+	
+:lib_find_free_loop
+	IFE [A], 0
+		SET PC, POP
+		
+	ADD A, 22
+	
+	IFN A, lib_table_end
+		SET PC, lib_find_free_loop
+		
+	SET A, 0
+	SET PC, POP
+	
+; Adds a new entry into library table and return address of it
+; A -> Pointer to library name 
+; B -> Pointer to library
+; A <- Address of the entry or 0x0000 if failed
+:lib_table_add
+	SET PUSH, B
+	SET PUSH, C
+	
+	SET C, A
+	JSR lib_find_free
+	IFE A, 0
+		SET PC, lib_table_add_end
+		
+	SET [A], B
+	SET B, A
+	ADD B, 1
+	SET A, C
+	SET C, 19
+	JSR strncpy
+	
+	SET [19 + B], 0
+	SET [20 + B], 0
+	
+	SUB B, 1
+	SET A, B
+	
+:lib_table_add_end
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+; Finds a library in the library list
+; A -> Pointer to the name of the library
+; A <- Pointer to the library (or 0x0000 if failed)
+:lib_get_addr
+	JSR lib_find
+	IFN A, 0
+		SET A, [A]
+	SET PC, POP
+	
+; Finde the address of a function in a given library
+; A -> Library address
+; B -> Name of the function
+; A <- Address of the function
+:lib_get_function
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	
+	JSR lib_get_function_list
+	SET Y, [1+A]
+	IFE Y, 0
+		SET PC, lib_get_function_error
+	ADD A, 2
+	
+:lib_get_function_loop
+	SET X, [A]
+	ADD A, 1
+	JSR strcmp
+	IFE C, 0
+		SET PC, lib_get_function_found
+		
+:lib_get_function_skip_entry
+	ADD A, 1
+	IFN [A], 0
+		SET PC, lib_get_function_skip_entry
+		
+	SUB Y, 1
+	IFN Y, 0
+		SET PC, lib_get_function_loop
+		
+	SET A, 0
+	
+:lib_get_function_end
+	SET Y, POP
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+	
+:lib_get_function_found
+	SET A, X
+	SET PC, lib_get_function_end
+	
+:lib_get_function_error
+	SET A, 0
+	SET PC, lib_get_function_end
+	
+; Gets the address of the list of library functions
+; A -> Address of the library
+; A <- Address of the functions table of the library
+:lib_get_function_list
+	SET PUSH, B
+	
+	IFN [A], 0x4714	; Missing magic number?
+		SET PC, lib_get_function_list_error
+		
+	ADD A, 4
+	SET B, [A]		; Not a library?
+	AND B, 0x0010
+	IFN B, 0x0010
+		SET PC, lib_get_function_list_error
+		
+	SET B, [A]
+	ADD A, 1
+	AND B, 0x0001   ; Has got a ART?
+	IFE B, 0x0001
+		SET PC, lib_get_function_list_skip_art
+
+:lib_get_function_list_end
+	SET B, POP
+	SET PC, POP
+	
+:lib_get_function_list_skip_art
+	SET B, [A]
+	ADD A, B
+	ADD A, 1
+	SET PC, lib_get_function_list_end
+	
+:lib_get_function_list_error
+	SET A, 0
+	SET PC, lib_get_function_list_end
+
+:lib_table
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+	dat 0x0000, "                    ", 0x0000
+:lib_table_end
 
 
 ; Copies a string from a source to a destination

@@ -1,0 +1,16 @@
+bin2asmbin
+
+about:
+Converts a binary file into a dasm16 representation of it.
+
+usage:
+java -jar bin2asmbin <inputfile> [<outputfile>] [-l, -line, -v, -verbose]
+
+<inputfile>   - The binary file to convert into Assembler.
+<outputfile>  - The outputfile. If it exists it will be overwritten if not it will be created. You may omit it if using -v / -verbose
+-l / -line    - Inserts a linefeed every 8 words.
+-v / -verbose - Outputs the converted file on stdout. You may omit outputfile if using this.
+-ver / -version - Shows the version of this application.
+
+license:
+http://creativecommons.org/licenses/by-sa/3.0/
