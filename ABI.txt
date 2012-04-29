@@ -28,10 +28,10 @@ File header
 | 1         | Flags of the programm which are:                |
 |           | H              L                                |
 |           | 1111111111111111                                |
-|           | \___ ____/ ||||+- Has Assembler Relocation Table|
-|           |     V      |||+-- Realtime application*         |
-|           |     |      ||+--- Background application**      |
-|           |   unused   |+---- Driver                        |
+|           | \____ ____/||||+- Has Assembler Relocation Table|
+|           |      V     |||+-- Realtime application*         |
+|           |      |     ||+--- Background application**      |
+|           |    unused  |+---- Driver                        |
 |           |            +----- Library                       |
 |           |                                                 |
 |           |                                                 |
