@@ -159,33 +159,36 @@
 ; B = buffer location
 ; C = radix
 :itoa
-	SET PUSH,I
-	SET PUSH,A
-	SET I,0
+	SET PUSH, I
+	SET PUSH, B
+	SET PUSH, A
+	SET I, 0
 
 ;count how long it is
 :itoa_0
-	ADD I,1
-	DIV A,C
-	IFN A,0
-	SET PC,itoa_0
+	ADD I, 1
+	DIV A, C
+	IFN A, 0
+	SET PC, itoa_0
 ;itoa proper
-	ADD B,I
-	SET [B],0
-	SET A,POP
+	ADD B, I
+	SET [B], 0
+	SET A, PEEK
 :itoa_1
-	SUB B,1
-	SET I,A
-	MOD I,C
-	DIV A,C
-	IFG I,9
-	ADD I,7
-	ADD I,0x30
-	SET [B],I
-	IFN A,0
-	SET PC,itoa_1
-	SET I,POP
-	SET PC,POP
+	SUB B, 1
+	SET I, A
+	MOD I, C
+	DIV A, C
+	IFG I, 9
+	ADD I, 7
+	ADD I, 0x30
+	SET [B], I
+	IFN A, 0
+	SET PC, itoa_1
+	SET A, POP
+	SET B, POP
+	SET I, POP
+	SET PC, POP
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer

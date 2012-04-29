@@ -6,14 +6,20 @@ SET A, X
 SET B, free_buffer
 SET C, 10
 JSR [0x101B] ; itoa
+SET A, X
+SHR A, 9
 SET B, free_buffer2
-DIV A, 1024
-SHL A, 1
 SET C, 10
 JSR [0x101B] ; itoa
 SET A, free_buffer
-JSR [0x101E] ; text_out
+:free_loop
+IFE [A], 0
+	SET [A], 32
+ADD A, 1
+IFN [A], 0xA0
+	SET PC, free_loop
 SET A, free_buffer
+JSR [0x101E] ; text_out
 JSR [0x1005] ; proc_kill_me
 :free_buffer dat "      words free ("
 :free_buffer2 dat "      KB)", 0xA0, 0x00

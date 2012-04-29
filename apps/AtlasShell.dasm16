@@ -501,22 +501,40 @@
 		SET PC, command_lsf_skip_filesize
 	
 	; Display file size
+	SET PUSH, C
 	SET C, [A] ; Get the file start
 	ADD A, 1
 	SET PUSH, A
+	SET PUSH, B
 	SET A, [A]
 	SUB A, C
+	SET B, command_number_buffer
 	SET C, 10 ; radix
 	JSR [0x101B] ; itoa
+	SET A, 5
+:command_lsf_filesize_sanitize
+	IFE [B], 0
+		SET [B], 32
+	ADD B, 1
+	SUB A, 1
+	IFN A, 0
+		SET PC, command_lsf_filesize_sanitize
+	SET A, command_number_buffer
+	SET B, PEEK
+	SET C, 5
+	JSR [0x1018] ; strncpy
+	
+	SET B, POP
 	SET A, POP
+	SET C, POP
 :command_lsf_skip_filesize	
 	IFE C, 16
 		ADD A, 1
 	; Output the file info
-	SET C, A
+	SET PUSH, A
 	SET A, command_ls_row
-	JSR [0x101E]
-	SET A, C
+	JSR [0x101E] ; text_out
+	SET A, POP
 	SET PC, command_lsf_skip_file_end
 :command_lsf_skip_file
 	SET A, POP
