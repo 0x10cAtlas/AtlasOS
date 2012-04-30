@@ -152,6 +152,12 @@
       SET A, POP
       SET B, POP
       SET PC, POP
+	  
+; proc_suspend_interrupt
+; Internal function to handle task switching via interrupts
+:proc_suspend_interrupt
+:proc_suspend_interrupt_end
+	SET PC, POP
 
 ; proc_suspend
 ; Takes 260 - 360 cycles to complete which is 2.6ms to 3.6ms
@@ -336,6 +342,9 @@
 	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
 
 :proc_load_end
+	; Enable preemptive threading via interrupts now that we have a new process
+	SET [preemptive_enabled], 1
+
 	SET J, POP
 	SET I, POP
 	SET Z, POP

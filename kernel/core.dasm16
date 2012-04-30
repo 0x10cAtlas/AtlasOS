@@ -26,7 +26,7 @@ SET PC, kernel_boot
 JSR bios_boot
 
 ; Set the interrupt handler first
-;IAS kernel_interrupt_handler
+IAS kernel_interrupt_handler
 
 ; clear screen (for emulator)
 JSR clear
@@ -71,16 +71,16 @@ SET C, api_end
 SUB C, A
 JSR mem_copy
 
-; OS ready message
-SET A, text_start_ok
-JSR text_out
-
 ; Clear out a few things
 SET [keyboard_buffers_exclusive], 0
 SET [keyboard_oldvalue], 0
 JSR keyboard_unregister_all
 
-; The kernel constantly polls the keyboard.
+; OS ready message
+SET A, text_start_ok
+JSR text_out
+
+; Main kernel loop
 :kernel_loop
 
 	; Call the keyboard driver
@@ -89,9 +89,11 @@ JSR keyboard_unregister_all
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
+	; Release back to other running processes
     JSR proc_suspend
     SET PC, kernel_loop
 
+; Watchdog to ensure the shell is always running even if in the background
 :kernel_watchdog_checkalone
 	SET PUSH, C
 	SET PUSH, B

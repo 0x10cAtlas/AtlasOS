@@ -55,7 +55,8 @@ IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
 SET [keyboard_address], Z
 
 SET A, 3
-SET B, 0;[keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
 HWI Z
 
 :bios_clock_start
@@ -73,15 +74,16 @@ IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
 
 SET [clock_address], Z
 
-; Set clock tick rate
-;SET A, 0
-;SET B, 1
-;HWI [clock_address]
+; Set clock tick rate (60/B = 10/sec)
+SET A, 0
+SET B, 6
+HWI [clock_address]
 
 ; Setup interrupts for clock
-;SET A, 2
-;SET B, [clock_address]
-;HWI [clock_address]
+SET A, 2
+SET B, [clock_address] ; Our magic word to tell the handler we have a clock tick
+ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
+HWI [clock_address]
 
 :bios_floppy_start
 ; TODO

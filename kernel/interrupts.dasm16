@@ -1,22 +1,31 @@
 :kernel_interrupt_handler
-	;JSR proc_suspend
-	;IAS 0
-	;IAQ 1
-	;IFE B, [keyboard_address]
-	;	JSR kernel_interrupt_handler_keyboard
-	;IFE B, [clock_address]
-	;	JSR kernel_interrupt_handler_clock
-	;IAQ 0
-	;IAS kernel_interrupt_handler
-	;RFI
-	;SET PC, POP
+	SUB A, 1 ; Go from HW+1 to HW
+	IFE A, [keyboard_address]
+		JSR kernel_interrupt_handler_keyboard
+	IFE A, [clock_address]
+		JSR kernel_interrupt_handler_clock
+	RFI 0
 
 :kernel_interrupt_handler_keyboard
-	SET PUSH, A
-	; Do something
-	SET A, POP
+	; TODO
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
-	;JSR proc_suspend
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	JSR rand
+	SET C, A
+	AND C, 0x007F ; Keep it in range: 0 - 127
+	BOR C, 0x5000 ; Give some color
+	SET A, 0 ; And stick it in the top left
+	SET B, 0
+	JSR char_put
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	
+	IFN [preemptive_enabled], 0
+		JSR proc_suspend_interrupt
+	
 	SET PC, POP
