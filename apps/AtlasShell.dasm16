@@ -104,11 +104,12 @@
 		JSR command_runfile
 
 	; If we don't have an acknowledged command, display the generic response
-	ifn [ack_command], 1
-	JSR command_unknownf
+	IFN [ack_command], 1
+		JSR command_unknownf
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
 	JSR [0x1002]
+	;INT [clock_address] ; FIX THIS ASAP!
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
@@ -273,7 +274,7 @@
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [0x1002]
+	;JSR [0x1002]
 	SET PC, POP
 
 ; Command function to kill a running process
@@ -341,7 +342,7 @@
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [0x1002]
+	;JSR [0x1002]
 	SET PC, POP
 
 ; Command function to list process IDs
@@ -711,7 +712,7 @@
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	JSR [0x1002]
+	;JSR [0x1002]
 	SET PC, POP
 
 :AtlasShell_die

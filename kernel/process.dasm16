@@ -156,65 +156,81 @@
 ; proc_suspend_interrupt
 ; Internal function to handle task switching via interrupts
 :proc_suspend_interrupt
+	;IAQ 1
+	IAS 0
+	IFE [preemptive_enabled], 0
+		SET PC, proc_suspend_interrupt_end
+		
+	JSR proc_suspend
+
+	;SET A, POP ; Pull A off of the stack
+	;IAQ 0 ; DEBUG CODE
+	;SET PC, POP ; DEBUG CODE
 :proc_suspend_interrupt_end
+	SET A, POP
+	;IAQ 0
+	IAS proc_suspend_interrupt
 	SET PC, POP
 
 ; proc_suspend
 ; Takes 260 - 360 cycles to complete which is 2.6ms to 3.6ms
 :proc_suspend
-      SET [proc_buffer], [proc_current] ; Buffer the registers of the current process
-      SET [proc_buffer_a], A
-      SET [proc_buffer_b], B
-      SET [proc_buffer_c], C
-      SET [proc_buffer_x], X
-      SET [proc_buffer_y], Y
-      SET [proc_buffer_z], Z
-      SET [proc_buffer_i], I
-      SET [proc_buffer_j], J
-      SET [proc_buffer_sp], SP
+	SET [proc_buffer], [proc_current] ; Buffer the registers of the current process
+	SET [proc_buffer_a], A
+	SET [proc_buffer_b], B
+	SET [proc_buffer_c], C
+	SET [proc_buffer_x], X
+	SET [proc_buffer_y], Y
+	SET [proc_buffer_z], Z
+	SET [proc_buffer_i], I
+	SET [proc_buffer_j], J
+	SET [proc_buffer_sp], SP
 
-      ; Restore the Stackpointer so we can call subroutines
-      SET SP, [proc_table10]
+	; Restore the Stackpointer so we can call subroutines
+	SET SP, [proc_table10]
 
-      ; Copy the buffered state to the table
-      JSR proc_get_info
-      SET B, A
-      SET A, proc_buffer
+	; Copy the buffered state to the table
+	JSR proc_get_info
+	SET B, A
+	SET A, proc_buffer
+	SET C, 12
+	JSR mem_copy
 
-      SET C, 12
-
-      JSR mem_copy
-
-      ; Process saved, now restore the next proc
-      SET A, B
-
+	; Process saved, now restore the next proc
+	SET A, B
 :proc_kill_me_hook
-      ADD A, 12
+	ADD A, 12
 :proc_suspend_loop
-      IFE A, proc_table_end
-          SET A, proc_table
-      SET X, [A]
-      IFN X, 0x0000
-          SET PC, proc_suspend_invoke
-      ADD A, 12
-      SET PC, proc_suspend_loop
+	IFE A, proc_table_end
+		SET A, proc_table
+	SET X, [A]
+	IFN X, 0x0000
+		SET PC, proc_suspend_invoke
+	ADD A, 12
+	SET PC, proc_suspend_loop
 
 :proc_suspend_invoke
-      ; Copy the process information to the registers
-      SET B, proc_buffer
-      JSR mem_copy
+	; Copy the process information to the registers
+	SET B, proc_buffer
+	JSR mem_copy
 
-      SET [proc_current], [proc_buffer]
-      SET A, [proc_buffer_a]
-      SET B, [proc_buffer_b]
-      SET C, [proc_buffer_c]
-      SET X, [proc_buffer_x]
-      SET Y, [proc_buffer_y]
-      SET Z, [proc_buffer_z]
-      SET I, [proc_buffer_i]
-      SET J, [proc_buffer_j]
-      SET SP, [proc_buffer_sp]
-      SET PC, POP ; Jump into the Programm
+	SET [proc_current], [proc_buffer]
+	SET A, [proc_buffer_a]
+	SET B, [proc_buffer_b]
+	SET C, [proc_buffer_c]
+	SET X, [proc_buffer_x]
+	SET Y, [proc_buffer_y]
+	SET Z, [proc_buffer_z]
+	SET I, [proc_buffer_i]
+	SET J, [proc_buffer_j]
+	SET SP, [proc_buffer_sp]
+	
+	JSR kernel_interrupt_handler_clock
+	
+	;IAQ 0
+	IAS proc_suspend_interrupt
+	
+	SET PC, POP ; Jump into the Program
 
 ; Loads a new process into memory
 ; A: Begin of the BLOB

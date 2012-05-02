@@ -365,6 +365,7 @@ SET PC, POP
 
 :read_line_loop
 	JSR proc_suspend
+	;INT [clock_address]
 	
 	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
 		SET PC, read_line_end

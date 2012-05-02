@@ -26,7 +26,8 @@ SET PC, kernel_boot
 JSR bios_boot
 
 ; Set the interrupt handler first
-IAS kernel_interrupt_handler
+;IAS kernel_interrupt_handler
+IAS proc_suspend_interrupt
 
 ; clear screen (for emulator)
 JSR clear
@@ -91,6 +92,7 @@ JSR text_out
 
 	; Release back to other running processes
     JSR proc_suspend
+	;INT [clock_address]
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background

@@ -31,4 +31,12 @@ Below is detailed our feature list and planned features.
 * cd - change directory
 * ls - list directory contents
 
+## Building AtlasOS
+### Windows
+Run the shell script of your choice.
+### Linux / Mac
+Install the Mono framework software. Then ensure that all of
+the .sh files are executable. All you need to do now is to
+run the shell script of your choice.
+
 If anyone has any issues please submit to the tracker. Thanks!

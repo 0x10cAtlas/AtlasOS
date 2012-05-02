@@ -74,9 +74,9 @@ IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
 
 SET [clock_address], Z
 
-; Set clock tick rate (60/B = 10/sec)
+; Set clock tick rate (60/B = 5/sec)
 SET A, 0
-SET B, 6
+SET B, 12 ; 5/sec
 HWI [clock_address]
 
 ; Setup interrupts for clock

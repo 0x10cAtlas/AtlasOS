@@ -500,37 +500,26 @@ Return:
 Side effects:
 	none
 	
-int2dec [0x101B]
+itoa [0x101B]
 ----------------
 
 Description:
-	Converts a word into the decimal representation.
+	Converts a word into the numeric representation based on the radix (2, 10, 16).
 	
 Parameters:
 	A - word to be converted
 	B - string buffer (size: 5 words)
+	C - radix
 	
 Return:
 	none
 	
 Side effects:
-	The value of the word will be converted into a decimal string.
+	The value of the word will be converted into a string.
 	
-int2hex [0x101C]
+Deprecated [0x101C]
 ----------------
 
-Description:
-	Converts a word into the hexadecimal representation.
-	
-Parameters:
-	A - word to be converted
-	B - string buffer (size: 4 words)
-	
-Return:
-	none
-	
-Side effects:
-	The value of the word will be converted into a hexadecimal string.
 
 atoi [0x101D]
 -------------
