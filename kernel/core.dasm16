@@ -1,6 +1,6 @@
 #include "AtlasOS.dasm16"
 
-#include "..\include\kernel.inc"
+#include "../include/kernel.inc"
 
 SET PC, kernel_boot
 
@@ -15,12 +15,12 @@ SET PC, kernel_boot
 #include "process.dasm16"
 
 ; Apps
-#include "..\apps\AtlasShell.dasm16"
-#include "..\apps\AtlasText.dasm16"
-#include "..\apps\apps.dasm16"
+#include "../apps/AtlasShell.dasm16"
+#include "../apps/AtlasText.dasm16"
+#include "../apps/apps.dasm16"
 
 ; Virtual Filesystem
-#include "..\misc\vfs.dasm16"
+#include "../misc/vfs.dasm16"
 
 :kernel_boot
 JSR bios_boot
