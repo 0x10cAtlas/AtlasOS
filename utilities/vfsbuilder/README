@@ -1,4 +1,5 @@
 
+
 AtlasOS VFS Builder 
 by Gower
 
@@ -32,6 +33,24 @@ By default, VFS Builder assumes that it is being executed from the AtlasOS
 directory will look to compile for the directory misc/vfs. If this is not the
 case the above options will need to be used.
 
+By default, all files will be readable and writable from within AtlasOS. To
+change this, you can specify flags in the file name. For example:
+	'--re.myfile.bin'
+This is a file that is readable ('r') and executable ('e'). The flags you can
+specify are:
+	'r' - read
+	'w' - write
+	'h' - hidden
+	'e' - executable
+	'd' - directory
+You can specify any of these in any combination, although the behaviour of an
+executable directory that you can write to but not read from is suitably
+undocumented.
+
+You don't need to specify a directory flag for a directory -- all directories
+are automatically added to the VFS as directories. In fact, you can't add any
+flags to directories.
+
 
 ----- Using VFS Builder as a Library -----
 
@@ -39,4 +58,5 @@ If you wish to hack the VFS, you may find it useful to use VFS Builder as a
 Python library. The classes and methods are somewhat general and relatively
 well documented. The main function can be used as a good example of how to use
 them.
+
 
