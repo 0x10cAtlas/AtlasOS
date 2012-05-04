@@ -63,6 +63,14 @@ JSR page_reserve
 SET A, 0x1000
 JSR page_reserve
 
+; Reserve disk paging space 8 sectors at 512 words
+SET A, 0x7000
+:disk_page_reserve
+JSR page_reserve
+ADD A, 0x0200
+IFL A, 0x8000
+SET PC, disk_page_reserve
+
 SET X, 0
 
 ; Copy the API.
