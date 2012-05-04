@@ -304,6 +304,7 @@
 	MOD B, 1024
 	SUB A, B
 	DIV A, 1024
+	SET Y, A ; Store the number of pages
 	JSR page_alloc_big
 
 	SET [proc_current], POP
@@ -327,6 +328,11 @@
 	; Check if we have any flags to deal with
 	IFN C, 0
 		JSR proc_handle_flags
+		
+	; Calculate the stack address
+	MUL Y, 1024 ; Get the end of the pages
+	SUB Y, 1 ; Move back 1
+	ADD Y, B ; Offset by the memory start
 
 	SET A, [X] ; A return the ProcID
 	; Fill the proc_table entry for this process.
@@ -347,11 +353,9 @@
 	ADD X, 1 ; J
 	SET [X], 0
 	
-	; Set the SP to the last byte of the allocated memory page (B+1023)
+	; Set the SP to the last byte of the allocated memory page(s)
 	ADD X, 1 ; SP
-	SET [X], B
-	ADD [X], 1023
-	SET Y, [X] ; Save stack address for later.
+	SET [X], Y
 
 	; Store the memory address of the process.
 	ADD X, 1
