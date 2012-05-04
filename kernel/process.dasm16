@@ -299,7 +299,12 @@
 	SET PUSH, [proc_current]   
 	SET [proc_current], [X]
 
-	JSR page_alloc
+	SET B, C
+	SET A, C
+	MOD B, 1024
+	SUB A, B
+	DIV A, 1024
+	JSR page_alloc_big
 
 	SET [proc_current], POP
 
