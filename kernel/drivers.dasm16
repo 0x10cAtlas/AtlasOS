@@ -70,7 +70,7 @@ HWQ Z
 IFN A, 0xB402 ; Generic Clock (lower 8 bits)
 	SET PC, bios_clock_initloop
 IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
-	SET PC, bios_clock_initloop
+	SET PC, bios_clock_initloop 
 
 SET [clock_address], Z
 
@@ -86,8 +86,45 @@ ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable inter
 HWI [clock_address]
 
 :bios_floppy_start
-; TODO
+HWN Z
+:bios_floppy_init_loop
+IFE Z, 0 ; Check if the flooppy drive doesn't exist
+	SET PC, bios_hardware_end
+SUB Z, 1
+HWQ Z
 
+IFN A, 0x4CAE
+	SET PC, bios_floppy_init_loop
+IFN B, 0x74FA
+	SET PC, bios_floppy_init_loop
+
+SET [floppy_address], Z
+
+;Set interrupts for floppy
+SET A, 5 
+SET B, [floppy_address] ; Our magic word to tell the handler we have a floppy event
+ADD B, 1
+HWI [floppy_address]
+
+SET A, 0 ; check if media is present
+HWI [floppy_address]
+IFE B, 0
+	SET PC, bios_floppy_end
+
+SET A, 0x001 ;check media parameters
+HWI [floppy_address]
+SET [floppy_words_per_sector], B
+SET [floppy_sectors], C
+SET [floppy_write_locked], X
+
+;check media quality
+SET A, 0xFFFF
+HWI [floppy_address]
+SET [floppy_quality], B
+
+:bios_floppy_end
+
+:bios_hardware_end
 SET PC, POP
 
 :display_address
@@ -97,6 +134,14 @@ dat 0x0000
 :clock_address
 dat 0x0000
 :floppy_address
+dat 0x0000
+:floppy_words_per_sector
+dat 0x0000
+:floppy_sectors
+dat 0x0000
+:floppy_write_locked
+dat 0x0000
+:floppy_quality
 dat 0x0000
 
 ; ################END BIOS#################
