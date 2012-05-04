@@ -1,0 +1,42 @@
+
+AtlasOS VFS Builder 
+by Gower
+
+Version: Murky
+
+Use at own risk, absolutely no warranty provided.
+
+
+----- Introduction -----
+
+The virtual file system (VFS) allows you to pre-load AtlasOS with files, at
+least until real storage becomes widely available for DCPU-16 emulators.
+
+VFS Builder is a quick way to create the VFS (which is basically an assembly
+file which is included alongside the kernel) by looking at a given directory
+and indexing the files and subdirectories in it, then looking at each file in
+turn and creating the assembly code equivalent (i.e. a lot of dats and hex).
+
+Python is required to use this script (tested on 3.0, although should work on
+earlier versions to).
+
+
+----- Usage -----
+
+python utilities/vfsbuilder/vfsbuilder.py
+Options:
+	-a, --atlas:	Define the AtlasOS directory
+	-r, --root:	Define the directory to convert to the VFS
+
+By default, VFS Builder assumes that it is being executed from the AtlasOS
+directory will look to compile for the directory misc/vfs. If this is not the
+case the above options will need to be used.
+
+
+----- Using VFS Builder as a Library -----
+
+If you wish to hack the VFS, you may find it useful to use VFS Builder as a
+Python library. The classes and methods are somewhat general and relatively
+well documented. The main function can be used as a good example of how to use
+them.
+
