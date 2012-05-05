@@ -212,9 +212,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat keyboard_unregister ; 0x1027 Unregisters a specific memory location
 	dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
 
-	dat filesystem_getfile ; Returns the start of the matched filesystem entry in C, 0 otherwise
-	dat filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
-	dat filesystem_getfile_bystart ; Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat filesystem_getfile ; 0x1029 Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat filesystem_getfile_table ; 0x102A Returns the start of the filesystem file table. May be deprecated later
+	dat filesystem_getfile_bystart ; 0x102B Returns the start of the matched filesystem entry in C, 0 otherwise
 :api_end
 
 
