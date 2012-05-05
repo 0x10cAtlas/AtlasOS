@@ -167,23 +167,24 @@ class Flags:
 	
 	def __str__(self):
 		return "0x{0:x}".format(self.flag)
-	
-	def getFlagsFromFileName(name):
-		if name[0] != '--': #If there's no flag, uh, flag, then just return the default
-			return name, Flags(True, True, False, False, False)
-		#Since there's a flag-flag, we want to find where the flags end, which is the first '.'
-		dot_pos = name.find('.')
-		if dot_pos == -1: #Clearly if there isn't a dot, we've made a mistake, so skip over
-			return name, Flags(True, True, False, False, False)
-		flag_str = name[2:dot_pos].lower()
-		#Now it's time for the flag-flag flags. Or something
-		r = w = h = e = d = False
-		if 'r' in flag_str: r = True
-		if 'w' in flag_str: w = True
-		if 'h' in flag_str: h = True
-		if 'e' in flag_str: e = True
-		if 'd' in flag_str: d = True
-		return name[dot_pos+1:], Flags(r, w, h, e, d)
+
+
+def getFlagsFromFileName(name):
+	if name[0:2] != '--': #If there's no flag, uh, flag, then just return the default
+		return name, Flags(True, True, False, False, False)
+	#Since there's a flag-flag, we want to find where the flags end, which is the first '.'
+	dot_pos = name.find('.')
+	if dot_pos == -1: #Clearly if there isn't a dot, we've made a mistake, so skip over
+		return name, Flags(True, True, False, False, False)
+	flag_str = name[2:dot_pos].lower()
+	#Now it's time for the flag-flag flags. Or something
+	r = w = h = e = d = False
+	if 'r' in flag_str: r = True
+	if 'w' in flag_str: w = True
+	if 'h' in flag_str: h = True
+	if 'e' in flag_str: e = True
+	if 'd' in flag_str: d = True
+	return name[dot_pos+1:], Flags(r, w, h, e, d)
 
 
 class File:
@@ -276,7 +277,7 @@ class VirtualFileSystem:
 				id = self.addDirectory(dir_id, item)
 				self.addFromRealDirectory(full_path, id)
 			else:
-				flagless_name, flags = Flags.getFlagsFromFileName(full_path)
+				flagless_name, flags = getFlagsFromFileName(item)
 				self.addFile(full_path, dir_id, flagless_name, flags)
 
 
