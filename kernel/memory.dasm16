@@ -232,6 +232,36 @@
       SET A, 0
       SET PC, page_alloc_end
 	
+; Allocates multiple pages for the application to be used if the application exceeds one page length
+; A -> number of pages to allocate
+; A <- address of first page.
+:page_alloc_big
+	  SET PUSH, C
+	  SET C, A
+	  JSR page_alloc
+	  SET PUSH, A
+	  IFE A, 0
+		SET PC, page_alloc_big_end
+:page_alloc_big_loop
+	  IFE C, 0
+		SET PC, page_alloc_big_end
+	  JSR page_alloc
+	  IFE A, 0
+		SET PC, page_alloc_big_error
+	  SUB C, 1
+	  SET PC, page_alloc_big_loop
+
+:page_alloc_big_error
+	  SET A, POP
+	  SET A, 0
+	  SET C, POP
+	  SET PC, POP
+
+:page_alloc_big_end
+	  SET A, POP
+	  SET C, POP
+	  SET PC, POP
+
 ; Frees the given page for the current application
 ; A: memory
 :page_free
