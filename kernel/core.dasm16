@@ -14,20 +14,11 @@ SET PC, kernel_boot
 #include "messages.dasm16"
 #include "process.dasm16"
 
-; Apps
-#include "../apps/AtlasShell.dasm16"
-#include "../apps/AtlasText.dasm16"
-#include "../apps/apps.dasm16"
-
-; Virtual Filesystem
-#include "../misc/vfs.dasm16"
-
 :kernel_boot
 JSR bios_boot
 
 ; Set the interrupt handler first
-;IAS kernel_interrupt_handler
-IAS proc_suspend_interrupt
+IAS kernel_interrupt_handler
 
 ; clear screen (for emulator)
 JSR clear
@@ -51,6 +42,17 @@ ADD X, 1024
 SET PC, kernel_mem
 :kernel_mem_end
 
+; Reserve misc-memory
+SET X, os_content
+:os_content_mem
+IFG X, os_content_end
+    SET PC, os_content_mem_end
+SET A, X
+JSR page_reserve
+ADD X, 1024
+SET PC, os_content_mem
+:os_content_mem_end
+
 ; Reserve video-memory
 SET A, [video_mem]
 JSR page_reserve
@@ -64,12 +66,12 @@ SET A, 0x1000
 JSR page_reserve
 
 ; Reserve disk paging space 8 sectors at 512 words
-SET A, 0x7000
+SET X, 0x7000
 :disk_page_reserve
 JSR page_reserve
-ADD A, 0x0200
-IFL A, 0x8000
-SET PC, disk_page_reserve
+ADD X, 512
+IFN X, 0x8000
+	SET PC, disk_page_reserve
 
 SET X, 0
 
@@ -146,4 +148,32 @@ JSR text_out
 	
 :kernel_end
 	SET PC, kernel_end
+	
+:api_padding
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+dat "                                                                                                                                "
+:api_padding_end
+	
+; Apps
+:os_content
+#include "../apps/AtlasShell.dasm16"
+#include "../apps/AtlasText.dasm16"
+#include "../apps/apps.dasm16"
+
+; Virtual Filesystem
+#include "../misc/vfs.dasm16"
+:os_content_end
 	

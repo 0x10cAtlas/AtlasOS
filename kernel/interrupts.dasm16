@@ -1,15 +1,13 @@
 :kernel_interrupt_handler
-	IAS 0
+	;IAQ 1
 	SUB A, 1 ; Go from HW+1 to HW
 
 	IFE A, [keyboard_address]
 		JSR kernel_interrupt_handler_keyboard
 	IFE A, [clock_address]
-		SET PC, proc_suspend_interrupt
+		JSR kernel_interrupt_handler_clock
 		
-	SET A, POP
-	IAS kernel_interrupt_handler
-	SET PC, POP
+	RFI 0
 
 :kernel_interrupt_handler_keyboard
 	; TODO

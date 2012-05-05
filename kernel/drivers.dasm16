@@ -86,6 +86,9 @@ ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable inter
 HWI [clock_address]
 
 :bios_floppy_start
+
+SET PC, bios_hardware_end ; Disable floppy code for now
+
 HWN Z
 :bios_floppy_init_loop
 IFE Z, 0 ; Check if the flooppy drive doesn't exist

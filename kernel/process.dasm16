@@ -153,25 +153,6 @@
       SET B, POP
       SET PC, POP
 	  
-; proc_suspend_interrupt
-; Internal function to handle task switching via interrupts
-:proc_suspend_interrupt
-	;IAQ 1
-	IAS 0
-	IFE [preemptive_enabled], 0
-		SET PC, proc_suspend_interrupt_end
-		
-	JSR proc_suspend
-
-	;SET A, POP ; Pull A off of the stack
-	;IAQ 0 ; DEBUG CODE
-	;SET PC, POP ; DEBUG CODE
-:proc_suspend_interrupt_end
-	SET A, POP
-	;IAQ 0
-	IAS proc_suspend_interrupt
-	SET PC, POP
-
 ; proc_suspend
 ; Takes 260 - 360 cycles to complete which is 2.6ms to 3.6ms
 :proc_suspend
@@ -225,10 +206,10 @@
 	SET J, [proc_buffer_j]
 	SET SP, [proc_buffer_sp]
 	
-	JSR kernel_interrupt_handler_clock
+	;JSR kernel_interrupt_handler_clock
 	
 	;IAQ 0
-	IAS proc_suspend_interrupt
+	;IAS proc_suspend_interrupt
 	
 	SET PC, POP ; Jump into the Program
 
@@ -298,20 +279,30 @@
 	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
 	SET PUSH, [proc_current]   
 	SET [proc_current], [X]
+	
+	JSR page_alloc
+	IFE A, 0
+		SET PC, proc_load_error
+	SET PUSH, A
 
 	SET B, C
-	SET A, C
-	MOD B, 1024
-	SUB A, B
-	DIV A, 1024
-	SET Y, A ; Store the number of pages
-	JSR page_alloc_big
+	DIV B, 1024
+	ADD B, 1
+	SET Y, B ; Store the number of pages
+	IFE B, 1
+		SET PC, proc_load_alloc_extra_end
+:proc_load_alloc_extra
+	JSR page_alloc
+	IFE A, 0
+		SET PC, proc_load_error
+	SUB B, 1
+	IFN B, 0
+		SET PC, proc_load_alloc_extra
+:proc_load_alloc_extra_end
+	SET A, POP
 
 	SET [proc_current], POP
 
-	IFE A, 0
-		SET PC, proc_load_error
-		
 	; Copy the program to the newly allocated memory.
 	SET B, A ; Save the address of the new page
 	SET A, PEEK ; Get back our original source address
