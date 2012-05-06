@@ -1,23 +1,26 @@
 :files
 
 ; Primary file table
-; Flags: Bit 0 - read, Bit 1 - write, Bit 2 - hidden, Bit 3 - executable, Bit 4 - directory
+; Flags: Bit 1 - read, Bit 2 - write, Bit 3 - hidden, Bit 4 - executable, Bit 5 - directory
+;        Bit 6 - encrypted, Bit 7 - compressed
 ; Each entry must be 20 words long
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
+;   dat DirID , Flags , "File name goes here   ", Start , End			dat ModifiedTime		dat CreatedTime			dat SymLink
 :files_table
-	dat 0x000B ; Number of files in table
-	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000 ; root directory
-	dat 0x0000, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
+	dat 0x000C ; Number of files in table
+	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000
+	dat 0x0004, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
 	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
 	dat 0x0000, 0x0011, "Data", 0, "           ", 0x0004, 0x0000
-	dat 0x0002, 0x0011, "System", 0, "         ", 0x0003, 0x0000
-	dat 0x0000, 0x0011, "libs", 0, "           ", 0x0005, 0x0000
+	dat 0x0000, 0x0011, "System", 0, "         ", 0x0003, 0x0000
+	dat 0x0003, 0x0011, "libs", 0, "           ", 0x0005, 0x0000
 	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
 	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
 	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
 	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
 	dat 0x0002, 0x0009, "ball_game", 0, "      ", file05, file05_end
+	dat 0x0001, 0x0003, "file06", 0, "         ", file06, file06_end
 :files_table_end
 
 ; Basic flat text file
@@ -26,6 +29,12 @@
 	dat "Blah blah some more content     "
 	dat "Termination", 0x00
 :file01_end
+
+:file06
+	dat "Now some tests for output", 0xA0
+	dat "to see how we handle things", 0xA0
+	dat "I hope it works", 0x00
+:file06_end
 
 ; HelloWorld
 ; Description: Displays "Hello World"

@@ -1,134 +1,116 @@
 ; ################START BIOS#################
 
 :bios_boot
-HWN Z
-IFE Z, 0 ; Loop indefinitely until we have hardware connected
-	SET PC, bios_boot
+	HWN Z
+	IFE Z, 0 ; Loop indefinitely until we have hardware connected
+		SET PC, bios_boot
+	
+:bios_discover_hardware_loop
+	SUB Z, 1
+	HWQ Z
 
-:bios_display_initloop
-SUB Z, 1
-HWQ Z
+	IFE A, 0xF615 ; LEM1802 Monitor (lower 16 bits)
+		IFE B, 0x7349 ; LEM1802 Monitor (upper 16 bits)
+			JSR bios_display_init
+			
+	IFE A, 0x7406 ; Generic keyboard (lower 16 bits)
+		IFE B, 0x30CF ; Generic keyboard (upper 16 bits)
+			JSR bios_keyboard_init
+			
+	IFE A, 0xB402 ; Generic Clock (lower 16 bits)
+		IFE B, 0x12D0 ; Generic Clock (upper 16 bits)
+			JSR bios_clock_init
+			
+	;IFE A, 0x4CAE ; HMD2043 floppy disc drive (lower 16 bits)
+	;	IFE B, 0x74FA ; HMD2043 floppy disc drive (upper 16 bits)
+	;		JSR bios_floppy_init
+			
+	IFN Z, 0
+		SET PC, bios_discover_hardware_loop
 
-IFN A, 0xf615 ; LEM1802 Monitor
-	SET PC,bios_display_initloop
-IFN B, 0x7349 ; LEM1802 Monitor
-	SET PC,bios_display_initloop
+	SET PC, POP
 
-SET [display_address], Z
 
-;;map screen
-SET A, 0
-SET B, [video_mem]
-HWI Z
+:bios_display_init
+	SET [display_address], Z
 
-;; dump palette
-SET A, 5
-SET B, [video_palette]
-HWI Z
-;;map palette
-SET A, 2
-SET B, [video_palette]
-HWI Z
+	; map screen
+	SET A, 0
+	SET B, [video_mem]
+	HWI Z
 
-;; dump font
-SET A, 4
-SET B, [video_font]
-HWI Z
-;;map font
-SET A, 1
-SET B, [video_font]
-HWI Z
+	; dump palette
+	SET A, 5
+	SET B, [video_palette]
+	HWI Z
+	; map palette
+	SET A, 2
+	SET B, [video_palette]
+	HWI Z
 
-:bios_keyboard_start
-HWN Z
-:bios_keyboard_initloop
-IFE Z, 0 ; Check if the keyboard doesn't exist
-	SET PC, bios_clock_start
-SUB Z, 1
-HWQ Z
+	; dump font
+	SET A, 4
+	SET B, [video_font]
+	HWI Z
+	; map font
+	SET A, 1
+	SET B, [video_font]
+	HWI Z
 
-IFN A, 0x7406 ; Generic Keyboard (lower 8 bits)
-	SET PC, bios_keyboard_initloop
-IFN B, 0x30CF ; Generic Keyboard (upper 8 bits)
-	SET PC, bios_keyboard_initloop
+	SET PC, POP
 
-SET [keyboard_address], Z
+:bios_keyboard_init
+	SET [keyboard_address], Z
 
-SET A, 3
-SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
-ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
-HWI Z
+	SET A, 3
+	SET B, [keyboard_address] ; Our magic word to tell the handler we have a keyboard keypress
+	ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
+	HWI Z
 
-:bios_clock_start
-HWN Z
-:bios_clock_initloop
-IFE Z, 0 ; Check if the clock doesn't exist
-	SET PC, bios_floppy_start
-SUB Z, 1
-HWQ Z
+	SET PC, POP
 
-IFN A, 0xB402 ; Generic Clock (lower 8 bits)
-	SET PC, bios_clock_initloop
-IFN B, 0x12D0 ; Generic Clock (upper 8 bits)
-	SET PC, bios_clock_initloop 
+:bios_clock_init
+	SET [clock_address], Z
 
-SET [clock_address], Z
+	; Set clock tick rate (60/B = 5/sec)
+	SET A, 0
+	SET B, 12 ; 5/sec
+	HWI [clock_address]
 
-; Set clock tick rate (60/B = 5/sec)
-SET A, 0
-SET B, 12 ; 5/sec
-HWI [clock_address]
+	; Setup interrupts for clock
+	SET A, 2
+	SET B, [clock_address] ; Our magic word to tell the handler we have a clock tick
+	ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
+	HWI [clock_address]
 
-; Setup interrupts for clock
-SET A, 2
-SET B, [clock_address] ; Our magic word to tell the handler we have a clock tick
-ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
-HWI [clock_address]
+	SET PC, POP
 
-:bios_floppy_start
+:bios_floppy_init
+	SET [floppy_address], Z
 
-SET PC, bios_hardware_end ; Disable floppy code for now
+	;Set interrupts for floppy
+	SET A, 5 
+	SET B, [floppy_address] ; Our magic word to tell the handler we have a floppy event
+	ADD B, 1
+	HWI [floppy_address]
 
-HWN Z
-:bios_floppy_init_loop
-IFE Z, 0 ; Check if the flooppy drive doesn't exist
-	SET PC, bios_hardware_end
-SUB Z, 1
-HWQ Z
+	SET A, 0 ; check if media is present
+	HWI [floppy_address]
+	IFE B, 0
+		SET PC, bios_floppy_end
 
-IFN A, 0x4CAE
-	SET PC, bios_floppy_init_loop
-IFN B, 0x74FA
-	SET PC, bios_floppy_init_loop
+	SET A, 0x0001 ;check media parameters
+	HWI [floppy_address]
+	SET [floppy_words_per_sector], B
+	SET [floppy_sectors], C
+	SET [floppy_write_locked], X
 
-SET [floppy_address], Z
-
-;Set interrupts for floppy
-SET A, 5 
-SET B, [floppy_address] ; Our magic word to tell the handler we have a floppy event
-ADD B, 1
-HWI [floppy_address]
-
-SET A, 0 ; check if media is present
-HWI [floppy_address]
-IFE B, 0
-	SET PC, bios_floppy_end
-
-SET A, 0x001 ;check media parameters
-HWI [floppy_address]
-SET [floppy_words_per_sector], B
-SET [floppy_sectors], C
-SET [floppy_write_locked], X
-
-;check media quality
-SET A, 0xFFFF
-HWI [floppy_address]
-SET [floppy_quality], B
-
+	;check media quality
+	SET A, 0xFFFF
+	HWI [floppy_address]
+	SET [floppy_quality], B
 :bios_floppy_end
-
-:bios_hardware_end
-SET PC, POP
+	SET PC, POP
 
 :display_address
 dat 0x0000
@@ -149,7 +131,7 @@ dat 0x0000
 
 ; ################END BIOS#################
 
-; Driver functions
+; ############DRIVER FUNCTIONS#############
 
 ; START OF THE KEYBOARD DRIVER
 :driver_keyboard
@@ -286,3 +268,5 @@ dat 0x0000
 :keyboard_unregister_all_end
 	SET A, POP
 	SET PC, POP
+	
+; ########### END DRIVER FUNCTIONS##########

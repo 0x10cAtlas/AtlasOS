@@ -7,6 +7,8 @@
 		JSR kernel_interrupt_handler_keyboard
 	IFE A, [clock_address]
 		JSR kernel_interrupt_handler_clock
+	IFE A, [floppy_address]
+		JSR kernel_interrupt_handler_floppy
 		
 	SET EX, POP
 	RFI 0
@@ -30,3 +32,8 @@
 	SET B, POP
 	SET C, POP
 	SET PC, POP
+
+:kernel_interrupt_handler_floppy
+	; TODO
+	SET PC, POP
+	
