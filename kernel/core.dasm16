@@ -1,4 +1,4 @@
-#include "AtlasOS.dasm16"
+#include "AtlasOS 0.6.1"
 
 #include "../include/kernel.inc"
 
