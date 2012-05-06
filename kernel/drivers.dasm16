@@ -38,23 +38,25 @@
 	SET A, 0
 	SET B, [video_mem]
 	HWI Z
-
-	; dump palette
-	SET A, 5
-	SET B, [video_palette]
+	; map font
+	SET A, 1
+	SET B, [video_font]
 	HWI Z
 	; map palette
 	SET A, 2
 	SET B, [video_palette]
 	HWI Z
-
+	; set border color
+	SET A, 3
+	SET B, 0x01
+	HWI Z
 	; dump font
 	SET A, 4
 	SET B, [video_font]
 	HWI Z
-	; map font
-	SET A, 1
-	SET B, [video_font]
+	; dump palette
+	SET A, 5
+	SET B, [video_palette]
 	HWI Z
 
 	SET PC, POP

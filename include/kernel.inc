@@ -14,6 +14,8 @@ SET PC, data_end
 :video_col dat 0x7000
 :video_cur dat 0x8000
 :video_clear dat 0x7020
+:video_width dat 0x0020
+:video_height dat 0x000C
 
 :text_start dat "AtlasOS v0.6.1 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
