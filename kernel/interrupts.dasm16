@@ -18,6 +18,9 @@
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
+	;SET [proc_suspend_param], 1
+	;JSR proc_suspend
+
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
@@ -26,6 +29,22 @@
 	AND C, 0x007F ; Keep it in range: 0 - 127
 	BOR C, 0x5000 ; Give some color
 	SET A, 0 ; And stick it in the top left
+	SET B, 0
+	JSR char_put
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
+	
+:kernel_interrupt_handler_proc_suspend_clock
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	JSR rand
+	SET C, A
+	AND C, 0x007F ; Keep it in range: 0 - 127
+	BOR C, 0x4000 ; Give some color
+	SET A, 1 ; And stick it in the top left
 	SET B, 0
 	JSR char_put
 	SET A, POP

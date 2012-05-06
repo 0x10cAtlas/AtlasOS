@@ -19,29 +19,35 @@
 
 ; mem_copy
 ; Copies data from one location to another
-; Takes 8 cycles per loop for a copy speed of 12,500 words per second
+; Takes 4 cycles per loop for a copy speed of 25,000 words per second
 ; A -> source
 ; B -> dest
 ; C -> length
 :mem_copy
-      SET PUSH, A
-      SET PUSH, B
-      SET PUSH, C
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, I
+	SET PUSH, J
 
-      ; Calulate the last address
-      ADD C, A
+	; Calulate the last address
+	ADD C, A
+
+	; Some prep work so we can use STI
+	SET I, B
+	SET J, A
 
 :mem_copy_loop
-      SET [B], [A]
-      ADD A, 1
-      ADD B, 1
-      IFN A, C
-          SET PC, mem_copy_loop
+	STI [I], [J]
+	IFN J, C
+		SET PC, mem_copy_loop
 
-      SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET J, POP
+	SET I, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 	  
 ; A: Mem addr of the page
 :page_reserve

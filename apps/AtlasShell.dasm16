@@ -904,7 +904,7 @@
 	SET PC, POP
 
 ; Misc data
-:text_versionoutput dat "Atlas-Shell v0.4.0", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.1", 0xA0, 0x00
 :text_prompt dat " $> ", 0x00
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
 :input_text_buffer dat "                                ", 0x00

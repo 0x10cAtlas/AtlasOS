@@ -232,6 +232,7 @@
      SET PUSH, Z
      SET PUSH, I
      SET PUSH, J
+	 SET PUSH, EX
 
      SET PC, [pushpop_buffer] ; jump back
 
@@ -239,6 +240,7 @@
 :popa
      SET [pushpop_buffer], POP ; Save jump-back-address
 
+	 SET EX, POP
      SET J, POP
      SET I, POP
      SET Z, POP
