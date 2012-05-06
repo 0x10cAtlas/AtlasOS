@@ -1,4 +1,4 @@
-#include "AtlasOS 0.6.1"
+#include "AtlasOS 0.6.2"
 
 #include "../include/kernel.inc"
 

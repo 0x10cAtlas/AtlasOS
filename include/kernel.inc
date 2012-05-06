@@ -4,7 +4,7 @@ SET PC, data_end
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0006
-:os_version_fix dat 0x0001
+:os_version_fix dat 0x0002
 
 :preemptive_enabled dat 0x0000
 
@@ -17,7 +17,7 @@ SET PC, data_end
 :video_width dat 0x0020
 :video_height dat 0x000C
 
-:text_start dat "AtlasOS v0.6.1 starting... ", 0x00
+:text_start dat "AtlasOS v0.6.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo
 dat "      ___   __   __", 0xA0

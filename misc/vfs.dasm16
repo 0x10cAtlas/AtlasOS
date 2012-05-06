@@ -6,7 +6,7 @@
 ; Each entry must be 20 words long
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
-;   dat DirID , Flags , "File name goes here   ", Start , End			dat ModifiedTime		dat CreatedTime			dat SymLink
+;   dat DirID , Flags , "File name goes here   ", Start , End
 :files_table
 	dat 0x000C ; Number of files in table
 	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000
