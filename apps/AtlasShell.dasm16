@@ -776,6 +776,7 @@
 
 :command_catf_end
 	SET [ack_command], 1
+	JSR [0x101F] ; newline
 
 	SET C, POP
 	SET B, POP

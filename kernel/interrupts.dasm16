@@ -1,5 +1,6 @@
 :kernel_interrupt_handler
-	;IAQ 1
+	SET PUSH, EX ; Safety measure in case we trigger between lines that use EX
+
 	SUB A, 1 ; Go from HW+1 to HW
 
 	IFE A, [keyboard_address]
@@ -7,6 +8,7 @@
 	IFE A, [clock_address]
 		JSR kernel_interrupt_handler_clock
 		
+	SET EX, POP
 	RFI 0
 
 :kernel_interrupt_handler_keyboard
