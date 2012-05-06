@@ -279,27 +279,14 @@
 	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
 	SET PUSH, [proc_current]   
 	SET [proc_current], [X]
-	
-	JSR page_alloc
-	IFE A, 0
-		SET PC, proc_load_error
-	SET PUSH, A
 
 	SET B, C
-	DIV B, 1024
-	ADD B, 1
-	SET Y, B ; Store the number of pages
-	IFE B, 1
-		SET PC, proc_load_alloc_extra_end
-:proc_load_alloc_extra
-	JSR page_alloc
-	IFE A, 0
-		SET PC, proc_load_error
-	SUB B, 1
-	IFN B, 0
-		SET PC, proc_load_alloc_extra
-:proc_load_alloc_extra_end
-	SET A, POP
+	ADD B, 128 ; Give 128 words for stack space
+	DIV B, 1024 ; Figure up the number of blocks we need (-1)
+	ADD B, 1 ; Add one to our total to account for the rounding down in the above statement
+	SET Y, B ; Store the number of pages so we can calculate the SP start
+	SET A, B ; Set A to the number of pages to alloc to pass into page_alloc_big
+	JSR page_alloc_big ; Allocate the pages, A now contains the starting address
 
 	SET [proc_current], POP
 

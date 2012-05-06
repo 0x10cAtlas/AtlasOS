@@ -238,12 +238,14 @@
 :page_alloc_big
 	SET PUSH, C
 	SET PUSH, B
-	SET B, A
+	
+	SET B, A ; Store the number of pages
+	SUB B, 1
+
 	JSR page_alloc
+	SET PUSH, A
 	IFE A, 0
 		SET PC, page_alloc_big_error
-	SET C, A
-	SUB B, 1
 	IFE B, 0
 		SET PC, page_alloc_big_end
 :page_alloc_big_loop
@@ -253,18 +255,16 @@
 	SUB B, 1
 	IFN B, 0
 		SET PC, page_alloc_big_loop
-
-:page_alloc_big_error
-	SET A, 0
-	SET B, POP
-	SET C, POP
-	SET PC, POP
-
 :page_alloc_big_end
-	SET A, C
+	SET A, POP
 	SET B, POP
 	SET C, POP
 	SET PC, POP
+:page_alloc_big_error
+	SET A, POP
+	SET A, 0
+	SET PUSH, A
+	SET PC, page_alloc_big_end
 
 ; Frees the given page for the current application
 ; A: memory
