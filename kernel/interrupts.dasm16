@@ -1,21 +1,26 @@
 :kernel_interrupt_handler
-	IAS 0
+	SET PUSH, EX ; Safety measure in case we trigger between lines that use EX
+
 	SUB A, 1 ; Go from HW+1 to HW
 
 	IFE A, [keyboard_address]
 		JSR kernel_interrupt_handler_keyboard
 	IFE A, [clock_address]
-		SET PC, proc_suspend_interrupt
+		JSR kernel_interrupt_handler_clock
+	IFE A, [floppy_address]
+		JSR kernel_interrupt_handler_floppy
 		
-	SET A, POP
-	IAS kernel_interrupt_handler
-	SET PC, POP
+	SET EX, POP
+	RFI 0
 
 :kernel_interrupt_handler_keyboard
 	; TODO
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
+	;SET [proc_suspend_param], 1
+	;JSR proc_suspend
+
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
@@ -30,3 +35,24 @@
 	SET B, POP
 	SET C, POP
 	SET PC, POP
+	
+:kernel_interrupt_handler_proc_suspend_clock
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	JSR rand
+	SET C, A
+	AND C, 0x007F ; Keep it in range: 0 - 127
+	BOR C, 0x4000 ; Give some color
+	SET A, 1 ; And stick it in the top left
+	SET B, 0
+	JSR char_put
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
+
+:kernel_interrupt_handler_floppy
+	; TODO
+	SET PC, POP
+	

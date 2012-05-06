@@ -99,6 +99,13 @@
 	IFE C, 0
 		JSR command_cdf
 		
+	; Check for the 'cat' command
+	SET A, command_cat
+	SET B, command_parameter_buffer
+	JSR [0x101A]
+	IFE C, 0
+		JSR command_catf
+		
 	; Check if we're trying to run a file
 	IFN [ack_command], 1
 		JSR command_runfile
@@ -712,14 +719,75 @@
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	;JSR [0x1002]
+	SET PC, POP
+	
+:command_catf
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	
+	; Capture the param
+	SET A, input_text_buffer
+	SET B, 1
+	JSR shell_getparameter
+	JSR [0x101F] ; newline
+	; Get the file from the filename
+	SET A, command_parameter_buffer
+	JSR [0x1029] ; filesystem_getfile
+	IFE C, 0
+		SET PC, command_catf_end
+	
+	SET A, [C] ; Get the directory ID
+	IFN A, [present_working_directory] ; And make sure the file is in our directory
+		SET PC, command_catf_end
+	
+	ADD C, 1
+	SET A, [C] ; Get the file flags
+	AND A, 0x0008 ; Check if the file is executable
+	IFN A, 0
+		SET PC, command_catf_end
+		
+	ADD C, 17 ; skip over the filename to the file start pointer
+	SET A, [C] ; Store the file start in A
+	ADD C, 1 ; Move to the file end pointer
+	SET B, [C] ; Store the file end in B
+	SUB B, A ; Get the length into B
+	
+	SET PUSH, B
+	SET PUSH, A
+	JSR [0x100F] ; page_alloc
+	SET C, A
+	SET A, POP
+	SET B, C
+	SET C, POP
+	AND C, 0x03FF ; For now we are limiting cat to just 1024 words of output
+	JSR [0x1013] ; mem_copy
+	SET A, B
+:command_catf_sanitize
+	IFE [B], 0
+		SET [B], 32
+	ADD B, 1
+	SUB C, 1
+	IFN C, 0
+		SET PC, command_catf_sanitize
+	SET [B], 0
+
+	JSR [0x101E] ; text_out
+
+:command_catf_end
+	SET [ack_command], 1
+	JSR [0x101F] ; newline
+
+	SET C, POP
+	SET B, POP
+	SET A, POP
 	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
-	JSR [0x1027]
-	JSR [0x101F]
-	JSR [0x1005]
+	JSR [0x1027] ; unregister_keyboard
+	JSR [0x101F] ; newline
+	JSR [0x1005] ; proc_kill_me
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -835,44 +903,53 @@
 	SET A, POP
 	SET PC, POP
 
-; Data
+; Misc data
+:text_versionoutput dat "Atlas-Shell v0.4.1", 0xA0, 0x00
+:text_prompt dat " $> ", 0x00
+:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
 :input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
-:command_clear dat "clear", 0
-:command_version dat "version", 0
 :command_version_os dat "os", 0
 :command_version_separator dat ".", 0
-:command_load dat "load", 0
 :command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
 :command_load_unknown dat "Failed to load application", 0xA0, 0x00
-:command_kill dat "kill", 0
 :command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
 :command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
 :command_kill_last dat "last", 0
-:command_list dat "list", 0
 :command_list_info dat "Process list:", 0xA0, 0x00
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
-:command_ls dat "ls", 0
 :command_ls_row dat "                                ", 0x00
-:command_cd dat "cd", 0
 :command_cd_back dat "..", 0
 :command_cd_root dat "/", 0
 :command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
 :command_cd_unknown dat " doesnt exist", 0xA0, 0
 :command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
 
+; Command list
+:command_clear dat "clear", 0
+:command_version dat "version", 0
+:command_load dat "load", 0
+:command_kill dat "kill", 0
+:command_list dat "list", 0
+:command_ls dat "ls", 0
+:command_cd dat "cd", 0
+:command_cat dat "cat", 0
+:command_mkdir dat "mkdir", 0 ; UNFINISHED
+:command_rmdir dat "rmdir", 0 ; UNFINISHED
+:command_cp dat "cp", 0 ; UNFINISHED
+:command_ln dat "ln", 0 ; UNFINISHED
+:command_mv dat "mv", 0 ; UNFINISHED
+
+; Process list buffer. Used for the 'kill' command
 :proc_list_buffer
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :proc_list_buffer_end
 :last_proc dat 0x0000
 
-:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
-:text_versionoutput dat "Atlas-Shell v0.4.0", 0xA0, 0x00
-:text_prompt dat " $> ", 0x00
-
+; Filesystem data
 :present_working_directory dat 0x0000
 :present_working_directory_name dat "                ", 0x00
 :directory_stack

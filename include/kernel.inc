@@ -4,7 +4,7 @@ SET PC, data_end
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0006
-:os_version_fix dat 0x0001
+:os_version_fix dat 0x0002
 
 :preemptive_enabled dat 0x0000
 
@@ -14,8 +14,10 @@ SET PC, data_end
 :video_col dat 0x7000
 :video_cur dat 0x8000
 :video_clear dat 0x7020
+:video_width dat 0x0020
+:video_height dat 0x000C
 
-:text_start dat "AtlasOS v0.6.1 starting... ", 0x00
+:text_start dat "AtlasOS v0.6.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
 :text_logo
 dat "      ___   __   __", 0xA0
@@ -212,9 +214,9 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat keyboard_unregister ; 0x1027 Unregisters a specific memory location
 	dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
 
-	dat filesystem_getfile ; Returns the start of the matched filesystem entry in C, 0 otherwise
-	dat filesystem_getfile_table ; Returns the start of the filesystem file table. May be deprecated later
-	dat filesystem_getfile_bystart ; Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat filesystem_getfile ; 0x1029 Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat filesystem_getfile_table ; 0x102A Returns the start of the filesystem file table. May be deprecated later
+	dat filesystem_getfile_bystart ; 0x102B Returns the start of the matched filesystem entry in C, 0 otherwise
 :api_end
 
 

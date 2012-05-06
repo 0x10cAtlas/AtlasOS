@@ -4,10 +4,15 @@
       SET PUSH, A
       SET PUSH, B
       SET PUSH, C
+	  SET PUSH, X
       SET PUSH, I
 
       SET B, [video_col]
       SET I, [video_cur]
+
+	  SET X, [video_width]
+	  MUL X, [video_height]
+	  ADD X, [video_mem]
 
 :text_out_loop
       SET C, [A]
@@ -20,7 +25,7 @@
       SET [I], C
       ADD A, 1
       ADD I, 1
-      IFE I, 0x8180
+      IFE I, X
           SET PC, text_out_scroll
       SET PC, text_out_loop
 
@@ -40,6 +45,7 @@
 :text_out_end
       SET [video_cur], I
       SET I, POP
+	  SET X, POP
       SET C, POP
       SET B, POP
       SET A, POP
@@ -49,27 +55,38 @@
 :newline
       SET PUSH, A
       SET PUSH, B
+	  SET PUSH, X
+
+	  SET X, [video_width]
+	  MUL X, [video_height]
+	  ADD X, [video_mem]
 
       SET A, 0x0020
       SET B, [video_cur]
-     ; SUB B, 0x8000
       MOD B, A
       SUB A, B
       ADD [video_cur], A
-      IFE [video_cur], 0x8180
+      IFE [video_cur], X
           JSR scroll
 
+	  SET X, POP
       SET B, POP
       SET A, POP
       SET PC, POP
 
 ; Scrolls the screen one line
 :scroll
+	  SET PUSH, A
       SET PUSH, X
       SET PUSH, Y
 
-      SET X, 0x8000 ; Set X to the video memory
-      SET Y, 0x8020 ; Set Y to the second line in the video memory
+      SET X, [video_mem] ; Set X to the video memory
+      SET Y, [video_mem]
+	  ADD Y, 0x0020 ; Set Y to the second line in the video memory
+	  
+	  SET A, [video_width]
+	  MUL A, [video_height]
+	  ADD A, [video_mem]
 
 :scroll_loop1
       SET [X], [Y]
@@ -80,13 +97,13 @@
       ADD X, 4
       ADD Y, 4
 
-      IFN Y, 0x8180
+      IFN Y, A
 		SET PC, scroll_loop1
 
 :scroll_loop2
       SET [X], [video_clear]
       ADD X, 1
-      IFE X, 0x8180
+      IFE X, A
           SET PC, scroll_end
       SET PC, scroll_loop2
 
@@ -94,15 +111,20 @@
       SUB [video_cur], 0x20
       SET Y, POP
       SET X, POP
+	  SET A, POP
       SET PC, POP
 
 ; Clears the screen and sets the cursor to the first line (working)
 :clear
-      SET PUSH, A
-      SET PUSH, B
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
 
-      SET A, [video_mem]
-      SET B, [video_clear]
+	SET A, [video_mem]
+	SET B, [video_clear]
+	SET C, [video_width]
+	MUL C, [video_height]
+	ADD C, [video_mem]
 
 :clear_loop
       SET [A], B
@@ -111,46 +133,67 @@
       SET [3+A], B
       ADD A, 4
 
-      IFN A, 0x8180
+      IFN A, C
           SET PC, clear_loop
 
 :clear_end
       SET [video_cur], [video_mem]
+	  SET C, POP
       SET B, POP
       SET A, POP
       SET PC, POP
-
-:get_pos
-      SET PUSH, B
-
-      IFG A, 31
-          SET PC, get_pos_clip
-      IFG B, 15
-          SET PC, get_pos_clip
-
-      MUL B, 32
-      ADD B, 0x8000
-      ADD B, A
-
-      SET A, B
-
-:get_pos_skip
-      SET B, POP
-      SET PC, POP
-
-:get_pos_clip
-      SET A, 0x0000
-      SET PC, get_pos_skip
-
-
+	
+; Clamps the value to within the screen memory map
+; A -> Value input
+; A <- Clamped value	
+:clamp_to_screen
+	SET PUSH, B
+	
+	SET B, [video_width]
+	MUL B, [video_height]
+	ADD B, [video_mem]
+	
+	IFG A, B
+		SET A, B
+	
+	SET B, POP
+	SET PC, POP
+	
+; Puts a single character onto the screen
+; A -> X coordinate
+; B -> Y coordinate
+; C -> Character
 :char_put
-      SET PUSH, A
+	SET PUSH, A
+	SET PUSH, B
 
-      JSR get_pos
-      SET [A], C
+	MUL B, [video_width]
+	ADD A, B
+	ADD A, [video_mem]
+	JSR clamp_to_screen
+	SET [A], C
+:char_put_end
+	SET B, POP
+	SET A, POP
+	SET PC, POP
+	
+; Gets a single character from the screen
+; A -> X coordinate
+; B -> Y coordinate
+; C <- Character
+:char_get
+	SET PUSH, A
+	SET PUSH, B
 
-      SET A, POP
-      SET PC, POP
+	MUL B, [video_width]
+	ADD A, B
+	ADD A, [video_mem]
+	JSR clamp_to_screen
+	SET C, [A]
+:char_get_end
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 
 ; converts a number to a string in the given radix
@@ -232,6 +275,7 @@
      SET PUSH, Z
      SET PUSH, I
      SET PUSH, J
+	 SET PUSH, EX
 
      SET PC, [pushpop_buffer] ; jump back
 
@@ -239,6 +283,7 @@
 :popa
      SET [pushpop_buffer], POP ; Save jump-back-address
 
+	 SET EX, POP
      SET J, POP
      SET I, POP
      SET Z, POP
@@ -390,8 +435,9 @@ SET PC, POP
 	SET B, [video_cur]
 	SET [B], A
 	ADD [video_cur], 1
-	SET A, [video_mem]
-	ADD A, 0x180
+	SET A, [video_width]
+	MUL A, [video_height]
+	ADD A, [video_mem]
 	IFE [video_cur], A
 		JSR scroll
 	SET B, POP
@@ -400,9 +446,35 @@ SET PC, POP
 	ADD A, 1
 
 :read_line_skip
+	; Display the blinking cursor
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET A, [video_cur]
+	SUB A, [video_mem]
+	SET B, 0
+	SET C, 0x709F
+	JSR char_put
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	
 	SET PC, read_line_loop
 
 :read_line_backspace
+	; Remove the blinking cursor
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET A, [video_cur]
+	SUB A, [video_mem]
+	SET B, 0
+	SET C, [video_clear]
+	JSR char_put
+	SET C, POP
+	SET B, POP
+	SET A, POP
+
 	; Ensure we don't backspace past the beginning
 	IFE A, PEEK
 		SET PC, read_line_skip
@@ -418,6 +490,19 @@ SET PC, POP
 	SET PC, read_line_skip
 
 :read_line_end
+	; Remove the blinking cursor
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET A, [video_cur]
+	SUB A, [video_mem]
+	SET B, 0
+	SET C, [video_clear]
+	JSR char_put
+	SET C, POP
+	SET B, POP
+	SET A, POP
+
 	; Add the null terminator
 	SET [A], 0
 	; Pop everything back out
