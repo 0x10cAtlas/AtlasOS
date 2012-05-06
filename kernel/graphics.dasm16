@@ -7,7 +7,7 @@
 	SET PUSH, C
 	SET C, A
 	SET A, char_set
-	SET B, 0x8180
+	SET B, [video_font]
 :manage_charset_loop
 	IFE A, char_set_end
 		SET PC, manage_charset_end

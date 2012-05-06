@@ -282,6 +282,12 @@
 	; Finally load the Process - A is the source mem addr, B is length.
 	SET C, B
 	SET PUSH, A
+	
+	; If we're loading from a built-in app, no need to allocate extra memory
+	IFN Z, 0x4714
+		SET B, A
+	IFN Z, 0x4714
+		SET PC, proc_load_skip_alloc
 
 	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
 	SET PUSH, [proc_current]   
@@ -305,6 +311,7 @@
 	IFE Z, 0x4714
 		SET C, J ; If we are an ABI exe set the size to just the code length
 	JSR mem_copy
+:proc_load_skip_alloc
 	SET A, POP
 
 	; Get the flags back.

@@ -462,6 +462,19 @@ SET PC, POP
 	SET PC, read_line_loop
 
 :read_line_backspace
+	; Remove the blinking cursor
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET A, [video_cur]
+	SUB A, [video_mem]
+	SET B, 0
+	SET C, [video_clear]
+	JSR char_put
+	SET C, POP
+	SET B, POP
+	SET A, POP
+
 	; Ensure we don't backspace past the beginning
 	IFE A, PEEK
 		SET PC, read_line_skip
