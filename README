@@ -30,6 +30,7 @@ Below is detailed our feature list and planned features.
 * kill - halts a running process. Syntax: kill [list|procID]
 * cd - change directory
 * ls - list directory contents
+* cat - prints the file contents to the screen
 
 ## Building AtlasOS
 ### Windows
