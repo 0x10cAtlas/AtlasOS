@@ -33,6 +33,11 @@
 
 :bios_display_init
 	SET [display_address], Z
+	
+	SET [video_font], [video_mem]
+	ADD [video_font], 0x0180
+	SET [video_palette], [video_font]
+	ADD [video_palette], 0x0100
 
 	; map screen
 	SET A, 0
@@ -58,6 +63,13 @@
 	SET A, 5
 	SET B, [video_palette]
 	HWI Z
+	
+	; Reserve video-memory
+	SET A, [video_mem]
+	JSR page_reserve
+	
+	; Init the video cursor
+	SET [video_cur], [video_mem]
 
 	SET PC, POP
 
@@ -111,15 +123,44 @@
 	SET A, 0xFFFF
 	HWI [floppy_address]
 	SET [floppy_quality], B
+	
+	; Reserve disk paging space
+	SET X, [floppy_paging_address]
+	SET Y, X
+	ADD Y, [floppy_paging_size]
+:bios_floppy_page_reserve
+	JSR page_reserve
+	ADD X, 512
+	IFN X, Y
+		SET PC, bios_floppy_page_reserve
 :bios_floppy_end
 	SET PC, POP
 
 :display_address
 dat 0x0000
+:video_mem
+dat 0xF800
+:video_font
+dat 0x0000
+:video_palette
+dat 0x0000
+:video_col
+dat 0x7000
+:video_cur
+dat 0x0000
+:video_clear
+dat 0x7020
+:video_width
+dat 0x0020
+:video_height
+dat 0x000C
+
 :keyboard_address
 dat 0x0000
+
 :clock_address
 dat 0x0000
+
 :floppy_address
 dat 0x0000
 :floppy_words_per_sector
@@ -130,6 +171,13 @@ dat 0x0000
 dat 0x0000
 :floppy_quality
 dat 0x0000
+:floppy_paging_address
+dat 0xEB00
+:floppy_paging_size
+dat 0x1000 ; 8 sectors @ 512 words/sector
+:floppy_page_inuseflags
+dat 0x0000 ; Bit map of RAM pages in use along with flags (4 flag bits per sector)
+dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 
 ; ################END BIOS#################
 
@@ -181,6 +229,16 @@ dat 0x0000
 	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER
+
+; START OF THE FLOPPY DRIVER
+
+:driver_floppy
+	SET PC, POP
+	
+:driver_floppy_handle_interrupt
+	SET PC, POP
+
+; END OF THE FLOPPY DRIVER
 
 ; Registers a new keyboard buffer
 ; Takes:
@@ -246,8 +304,6 @@ dat 0x0000
 	; And clear the exclusive data
 	SET [keyboard_buffers_exclusive], 0
 	SET PC, POP
-
-
 
 ; Returns whether there is an exclusive keyboard buffer active
 :keyboard_is_exclusive_active

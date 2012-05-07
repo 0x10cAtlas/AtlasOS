@@ -714,6 +714,67 @@ Return:
 Side effects:
 	none
 	
+virtual_filesystem_getfile [0x1029]
+-------------
+
+Description:
+	Returns the start of the matched filesystem entry
+	
+Parameters:
+	
+	
+Return:
+	C - Pointer to start of FAT entry if found, 0 otherwise
+	
+Side effects:
+	none
+
+virtual_filesystem_getfile_table [0x102A]
+-------------
+
+Description:
+	Returns the start of the filesystem file table. May be deprecated later
+	
+Parameters:
+	
+	
+Return:
+	
+	
+Side effects:
+	none
+	
+virtual_filesystem_getfile_bystart [0x102B]
+-------------
+
+Description:
+	Returns the start of the matched filesystem entry
+	
+Parameters:
+	
+	
+Return:
+	C - Pointer to start of FAT entry if found, 0 otherwise
+	
+Side effects:
+	none
+	
+char_get [0x102C]
+-------------
+
+Description:
+	Returns the value at the A, B location on the screen
+	
+Parameters:
+	A - This is the X coordinate
+	B - This is the Y coordinate
+	
+Return:
+	A - Value of the screen character
+	
+Side effects:
+	none
+	
 // Ignore me!	
  [0x10]
 -------------

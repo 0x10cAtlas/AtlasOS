@@ -53,10 +53,6 @@ ADD X, 1024
 SET PC, os_content_mem
 :os_content_mem_end
 
-; Reserve video-memory
-SET A, [video_mem]
-JSR page_reserve
-
 ; Reserve stack-memory
 SET A, 0xFFFF
 JSR page_reserve
@@ -64,14 +60,6 @@ JSR page_reserve
 ; Reserve the API space
 SET A, 0x1000
 JSR page_reserve
-
-; Reserve disk paging space 8 sectors at 512 words
-SET X, 0x7000
-:disk_page_reserve
-JSR page_reserve
-ADD X, 512
-IFN X, 0x8000
-	SET PC, disk_page_reserve
 
 SET X, 0
 

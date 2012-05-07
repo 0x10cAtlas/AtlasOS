@@ -1,40 +1,40 @@
-; FILESYSTEM FUNCTIONS
+; ########VIRTUAL FILESYSTEM FUNCTIONS########
 	
 ; Return start of the filesystem
-:filesystem_getfile_table
+:virtual_filesystem_getfile_table
 	SET A, files_table
 	SET PC, POP
 	
 ; Returns pointer to start of file entry in file table in C, returns 0 if file not found
 ; A: buffer containing file name
-:filesystem_getfile
+:virtual_filesystem_getfile
 	SET PUSH, X
 	SET PUSH, B
 	SET PUSH, A
 	
 	SET B, A
 	
-	JSR filesystem_getfile_table
+	JSR virtual_filesystem_getfile_table
 	SET X, [A] ; Get the number of files in the table
 	ADD A, 1 ; Jump down to the start of the table
-:filesystem_getfile_loop
+:virtual_filesystem_getfile_loop
 	SET C, 0 ; Reset our return
 	IFE X, 0 ; Check if we've gone through all of the files
-		SET PC, filesystem_getfile_end
+		SET PC, virtual_filesystem_getfile_end
 	SUB X, 1
 	
 	ADD A, 2 ; Skip over the directory ID and flags
 	JSR strcmp ; Check if the current filename (A) matches the original filename (B)
 	IFE C, 0
-		SET PC, filesystem_getfile_found
+		SET PC, virtual_filesystem_getfile_found
 	ADD A, 18 ; Skip over the filename, start, and end
 	
-	SET PC, filesystem_getfile_loop
-:filesystem_getfile_found
+	SET PC, virtual_filesystem_getfile_loop
+:virtual_filesystem_getfile_found
 	SUB A, 2 ; Backs up the pointer to the start of the file entry
 	SET C, A ; Sets C to the start of the entry
 
-:filesystem_getfile_end
+:virtual_filesystem_getfile_end
 	SET A, POP
 	SET B, POP
 	SET X, POP
@@ -42,36 +42,58 @@
 	
 ; Returns pointer to start of file entry in file table in C, returns 0 if file not found
 ; A: Program start or directory ID
-:filesystem_getfile_bystart
+:virtual_filesystem_getfile_bystart
 	SET PUSH, X
 	SET PUSH, B
 	SET PUSH, A
 	
 	SET B, A
 	
-	JSR filesystem_getfile_table
+	JSR virtual_filesystem_getfile_table
 	SET X, [A] ; Get the number of files in the table
 	ADD A, 1 ; Jump down to the start of the table
-:filesystem_getfile_bystart_loop
+:virtual_filesystem_getfile_bystart_loop
 	SET C, 0 ; Reset our return
 	IFE X, 0 ; Check if we've gone through all of the files
-		SET PC, filesystem_getfile_bystart_end
+		SET PC, virtual_filesystem_getfile_bystart_end
 	SUB X, 1
 	
 	ADD A, 18 ; Skip over the directory ID, flags, and filename
 	IFE B, [A]
-		SET PC, filesystem_getfile_bystart_found
+		SET PC, virtual_filesystem_getfile_bystart_found
 	
 	ADD A, 2 ; Skip over end and jump to next entry
 	
-	SET PC, filesystem_getfile_bystart_loop
-:filesystem_getfile_bystart_found
+	SET PC, virtual_filesystem_getfile_bystart_loop
+:virtual_filesystem_getfile_bystart_found
 	SUB A, 18 ; Backs up the pointer to the start of the file entry
 	SET C, A ; Sets C to the start of the entry
 
-:filesystem_getfile_bystart_end
+:virtual_filesystem_getfile_bystart_end
 	SET A, POP
 	SET B, POP
 	SET X, POP
 	SET PC, POP
 	
+; ######END VIRTUAL FILESYSTEM FUNCTIONS######
+
+; ############PHYSICAL FILESYSTEM#############
+
+; *** Hardware Functions ***
+; Returns the sector size in words
+:filesystem_getsectorsize
+
+; Returns the total number of sectors
+:filesystem_getsectorcount
+
+; Returns the total disk size in words
+:filesystem_getdisksize
+
+; *** Software Functions ***
+; Returns the total FAT size in sectors
+:filesystem_getFATsize
+
+; Returns the total number of free sectors on the disk
+:filesystem_getfreespace
+
+; ##########END PHYSICAL FILESYSTEM###########

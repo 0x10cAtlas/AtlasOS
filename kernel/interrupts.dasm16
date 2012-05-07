@@ -53,6 +53,6 @@
 	SET PC, POP
 
 :kernel_interrupt_handler_floppy
-	; TODO
+	JSR driver_floppy_handle_interrupt
 	SET PC, POP
 	

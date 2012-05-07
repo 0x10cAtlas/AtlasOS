@@ -1,21 +1,23 @@
 :data
 SET PC, data_end
 
+; RAM Page Allocation
+; 4 - Kernel (0x0000 - 0x1000) (we have about 750 words left)
+; 1 - API (0x1000 - 0x1400)
+; 3 - OS content (0x1400 - 0x2000)
+;
+; 50 - Applications and other drivers (0x2000 - 0xEB00)
+;
+; 4 - Disk paging space (0xEB00 - 0xF800)
+; 1 - Video memory (0xF800 - 0xFB00)
+; 1 - OS stack space (0xFB00 - 0xFFFF)
+
 ; OS Variables
 :os_version_main dat 0x0000
 :os_version_sub dat 0x0006
 :os_version_fix dat 0x0002
 
 :preemptive_enabled dat 0x0000
-
-:video_mem dat 0x8000
-:video_font dat 0x8180
-:video_palette dat 0x8280
-:video_col dat 0x7000
-:video_cur dat 0x8000
-:video_clear dat 0x7020
-:video_width dat 0x0020
-:video_height dat 0x000C
 
 :text_start dat "AtlasOS v0.6.2 starting... ", 0x00
 :text_start_ok dat "OK", 0xA0, 0x00
@@ -214,9 +216,11 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 	dat keyboard_unregister ; 0x1027 Unregisters a specific memory location
 	dat keyboard_is_exclusive_active ; 0x1028 Unregisters a specific memory location
 
-	dat filesystem_getfile ; 0x1029 Returns the start of the matched filesystem entry in C, 0 otherwise
-	dat filesystem_getfile_table ; 0x102A Returns the start of the filesystem file table. May be deprecated later
-	dat filesystem_getfile_bystart ; 0x102B Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat virtual_filesystem_getfile ; 0x1029 Returns the start of the matched filesystem entry in C, 0 otherwise
+	dat virtual_filesystem_getfile_table ; 0x102A Returns the start of the filesystem file table. May be deprecated later
+	dat virtual_filesystem_getfile_bystart ; 0x102B Returns the start of the matched filesystem entry in C, 0 otherwise
+	
+	dat char_get ; 0x102C Returns the value at the A, B location on the screen
 :api_end
 
 
