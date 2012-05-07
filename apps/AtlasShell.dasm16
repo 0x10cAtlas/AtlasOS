@@ -314,6 +314,10 @@
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR [0x101D]	; A is source, C is result
+	
+	; Handle overflow
+	IFG C, 32
+		SET C, 32
 
 	; Selfkill?
 	SET PUSH, A
