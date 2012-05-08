@@ -89,8 +89,9 @@ JSR text_out
 	JSR kernel_watchdog_checkalone
 
 	; Release back to other running processes
-    JSR proc_suspend
-	;INT [clock_address]
+	INT 0xFEDC
+	;JSR proc_suspend
+	
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background

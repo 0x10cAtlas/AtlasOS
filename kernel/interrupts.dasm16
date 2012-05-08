@@ -9,50 +9,81 @@
 		JSR kernel_interrupt_handler_clock
 	IFE A, [floppy_address]
 		JSR kernel_interrupt_handler_floppy
+	IFE A, 0xFEDB
+		JSR kernel_interrupt_handler_manual
 		
 	SET EX, POP
 	RFI 0
+	
+:kernel_interrupt_handler_manual
+	IFN [proc_suspend_param], 0
+		SET PC, kernel_interrupt_handler_manual_skip_suspend
+
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+
+	SET A, 2
+	SET B, 0
+	SET C, 0x6000
+	JSR kernel_interrupt_debug_clock_ticker
+
+	SET A, POP
+	SET B, POP
+	SET C, POP
+
+	SET [proc_suspend_param], 1
+	JSR proc_suspend_interrupt
+:kernel_interrupt_handler_manual_skip_suspend
+	SET PC, POP ; This line should never be called
 
 :kernel_interrupt_handler_keyboard
 	; TODO
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
-	;SET [proc_suspend_param], 1
-	;JSR proc_suspend
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
 
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
-	JSR rand
-	SET C, A
-	AND C, 0x007F ; Keep it in range: 0 - 127
-	BOR C, 0x5000 ; Give some color
-	SET A, 0 ; And stick it in the top left
+	SET A, 0
 	SET B, 0
-	JSR char_put
+	SET C, 0x5000
+	JSR kernel_interrupt_debug_clock_ticker
+
 	SET A, POP
 	SET B, POP
 	SET C, POP
-	SET PC, POP
 	
-:kernel_interrupt_handler_proc_suspend_clock
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
-	JSR rand
-	SET C, A
-	AND C, 0x007F ; Keep it in range: 0 - 127
-	BOR C, 0x4000 ; Give some color
-	SET A, 1 ; And stick it in the top left
-	SET B, 0
-	JSR char_put
-	SET A, POP
-	SET B, POP
-	SET C, POP
+	IFN [proc_suspend_param], 0
+		SET PC, kernel_interrupt_handler_clock_skip_suspend
+		
+	;SET [proc_suspend_param], 1
+	;JSR proc_suspend_interrupt
+:kernel_interrupt_handler_clock_skip_suspend
 	SET PC, POP
 
 :kernel_interrupt_handler_floppy
 	JSR driver_floppy_handle_interrupt
+	SET PC, POP
+	
+; ##################################################
+	
+; A -> X coordinate
+; B -> Y coordinate
+; C -> Color
+:kernel_interrupt_debug_clock_ticker
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	JSR rand
+	AND A, 0x007F ; Keep it in range: 0 - 127
+	BOR A, C ; Give some color
+	SET C, A ; Save the character info
+	SET A, POP
+	SET B, POP
+	JSR char_put
+	SET C, POP
+	
 	SET PC, POP
 	

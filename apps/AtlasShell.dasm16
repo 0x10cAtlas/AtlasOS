@@ -115,7 +115,7 @@
 		JSR command_unknownf
 :AtlasShell_loop_wait
 	; Pause then loop back to start of process
-	JSR [0x1002]
+	;JSR [0x1002]
 	;INT [clock_address] ; FIX THIS ASAP!
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
