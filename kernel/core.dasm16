@@ -81,17 +81,16 @@ JSR text_out
 
 ; Main kernel loop
 :kernel_loop
-	; Call the keyboard driver to update the registered buffers
-	JSR driver_keyboard_update_buffers
+
+	; Call the keyboard driver
+	JSR driver_keyboard
 	
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
 	; Release back to other running processes
-	;JSR proc_suspend_queue
-	IAQ 0
 	INT 0xFEDC
-	IAQ 1
+	;JSR proc_suspend
 	
     SET PC, kernel_loop
 

@@ -86,9 +86,9 @@
 :bios_clock_init
 	SET [clock_address], Z
 
-	; Set clock tick rate (60/B = 60/sec)
+	; Set clock tick rate (60/B = 5/sec)
 	SET A, 0
-	SET B, 1 ; 60/sec
+	SET B, 12 ; 5/sec
 	HWI [clock_address]
 
 	; Setup interrupts for clock
@@ -157,14 +157,6 @@ dat 0x000C
 
 :keyboard_address
 dat 0x0000
-:keyboard_ring_buffer_last
-dat 0x0000
-:keyboard_ring_buffer_cursor
-dat 0x0000
-:keyboard_ring_buffer
-dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
-dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
-:keyboard_ring_buffer_end
 
 :clock_address
 dat 0x0000
@@ -196,98 +188,44 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-
-	; Capture the current keycode
+	
 	SET A, 1
     HWI [keyboard_address]
-	
-	; Skip updating the ring buffer if we get 0 again for the keycode
-	IFE C, 0
-		IFE C, [keyboard_ring_buffer_last]
-			SET PC, driver_keyboard_end
-	
-	; Handle the ring buffer
-	SET A, [keyboard_ring_buffer_cursor]
-	ADD A, keyboard_ring_buffer
-	SET [A], C ; Save the key value to the ring buffer
-	ADD [keyboard_ring_buffer_cursor], 1
-	AND [keyboard_ring_buffer_cursor], 0x000F
-	
-	SET [keyboard_ring_buffer_last], C
-	
-:driver_keyboard_end
-	; Clear the keyboard buffer
-	;SET A, 0
-    ;HWI [keyboard_address]
-
-	SET C, POP
-	SET B, POP
-    SET A, POP
-	SET PC, POP
-
-:driver_keyboard_update_buffers
-	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
-	
-	; Read the key from the ring buffer
-	SET A, keyboard_ring_buffer
-	SET C, 0
-:driver_keyboard_update_buffers_loop
-	IFN [A], 0
-		SET C, [A] ; Save the value if it's non-zero
-	SET [A], 0 ; Clear the buffer entry
-	ADD A, 1
-	IFN A, keyboard_ring_buffer_end
-		SET PC, driver_keyboard_update_buffers_loop
 
 	; Skip the driver if the key value hasn't changed
 	IFE C, [keyboard_oldvalue]
-		SET PC, driver_keyboard_update_buffers_end
-	SET [keyboard_oldvalue], C
-
-	SET PUSH, C
-	SET A, 4
-	SET B, 0
-	BOR C, 0x7000
-	JSR char_put
-	SET C, POP
+		SET PC, driver_keyboard_end
 
 	SET A, keyboard_buffers
-	SET B, keyboard_buffers_flags
 
 	IFN [keyboard_buffers_exclusive], 0
 		SET PC, driver_keyboard_exclusive
 
-:driver_keyboard_update_buffers_loop2
+:driver_keyboard_loop
 	; Check to see if we have a buffer registered at this spot
     IFN [A], 0
         JSR driver_keyboard_save_to_buffer
 	; Increment to the next buffer as long as we aren't at the end
     ADD A, 1
-	ADD B, 1
     IFN A, keyboard_buffers_end
-        SET PC, driver_keyboard_update_buffers_loop2
-:driver_keyboard_update_buffers_end
+        SET PC, driver_keyboard_loop
+:driver_keyboard_end
+	SET [keyboard_oldvalue], C
+	SET A, 0
+    HWI [keyboard_address]
 	SET C, POP
 	SET B, POP
     SET A, POP
     SET PC, POP
 
 :driver_keyboard_exclusive
-	BOR [keyboard_buffers_exclusive_flags], 0x0001
-	SET PUSH, B
 	SET B, [keyboard_buffers_exclusive]
 	SET [B], C
-	SET B, POP
-	SET PC, driver_keyboard_update_buffers_end
+	SET PC, driver_keyboard_end
 
 :driver_keyboard_save_to_buffer
-	BOR [B], 0x0001
-	SET PUSH, B
 	SET B, [A]
 	SET [B], C
-	SET B, POP
 	SET PC, POP
 
 ; END OF THE KEYBOARD DRIVER

@@ -2,10 +2,6 @@
 	SET PUSH, EX ; Safety measure in case we trigger between lines that use EX
 
 	SUB A, 1 ; Go from HW+1 to HW
-	
-	; Run the keyboard driver no matter what the interrupt is
-	; Maybe change this later but this is fast
-	JSR driver_keyboard
 
 	IFE A, [keyboard_address]
 		JSR kernel_interrupt_handler_keyboard
@@ -13,21 +9,16 @@
 		JSR kernel_interrupt_handler_clock
 	IFE A, [floppy_address]
 		JSR kernel_interrupt_handler_floppy
-		
-	; ... All other handlers go here
-	
-	; These handler(s) must be the last one in the list
-	; because it exits the kernel_interrupt_handler
-	IFE A, [clock_address]
-		IFN [preemptive_enabled], 0
-			SET PC, kernel_interrupt_handler_manual
 	IFE A, 0xFEDB
-		SET PC, kernel_interrupt_handler_manual
+		JSR kernel_interrupt_handler_manual
 		
 	SET EX, POP
 	RFI 0
 	
 :kernel_interrupt_handler_manual
+	IFN [proc_suspend_param], 0
+		SET PC, kernel_interrupt_handler_manual_skip_suspend
+
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
@@ -41,9 +32,13 @@
 	SET B, POP
 	SET C, POP
 
-	SET PC, proc_suspend_interrupt
+	SET [proc_suspend_param], 1
+	JSR proc_suspend_interrupt
+:kernel_interrupt_handler_manual_skip_suspend
+	SET PC, POP ; This line should never be called
 
 :kernel_interrupt_handler_keyboard
+	; TODO
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
@@ -55,11 +50,17 @@
 	SET B, 0
 	SET C, 0x5000
 	JSR kernel_interrupt_debug_clock_ticker
-	
+
 	SET A, POP
 	SET B, POP
 	SET C, POP
-
+	
+	IFN [proc_suspend_param], 0
+		SET PC, kernel_interrupt_handler_clock_skip_suspend
+		
+	;SET [proc_suspend_param], 1
+	;JSR proc_suspend_interrupt
+:kernel_interrupt_handler_clock_skip_suspend
 	SET PC, POP
 
 :kernel_interrupt_handler_floppy

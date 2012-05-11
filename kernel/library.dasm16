@@ -400,8 +400,6 @@ SET PC, POP
 ; B: Length
 ; C: Keybuffer
 :read_line
-	SET PUSH, Y
-	SET PUSH, X
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
@@ -409,56 +407,10 @@ SET PC, POP
 	JSR mem_clear ; Clear the buffer
 
 	ADD B, A
-	
-	; Find the location of the flags that match the buffer
-	IFN [keyboard_buffers_exclusive], 0
-		SET PC, read_line_get_buffer_flags_skip
-	SET Y, keyboard_buffers
-	SET X, 0
-:read_line_get_buffer_flags
-	IFE Y, C
-		SET X, Y
-	ADD Y, 1
-	IFN Y, keyboard_buffers_flags_end
-		SET PC, read_line_get_buffer_flags
-		
-	IFN X, 0
-		SUB X, keyboard_buffers
-	IFN X, 0
-		ADD X, keyboard_buffers_flags
-	SET Y, X
-:read_line_get_buffer_flags_skip
-	; If an exclusive buffer is active, use the flags from there
-	IFN [keyboard_buffers_exclusive], 0
-		SET Y, keyboard_buffers_exclusive_flags
 
 :read_line_loop
-	; Release back to other running processes
-	JSR proc_suspend_queue
-	
-	IFN Y, 0
-		IFE [Y], 0
-			SET PC, read_line_skip
-	IFN Y, 0
-		SET [Y], 0
-		;AND [Y], 0xFFFE ; Reset the flag
-		
-	SET PUSH, Y
-	SET PUSH, C
-	SET A, 3
-	SET B, 0
-	SET C, Y
-	SUB C, 
-	ADD C, 64
-	BOR C, 0x7000
-	JSR char_put
-	SET C, POP
-	SET Y, POP
-	
-	; Skip the character if the key value hasn't changed
-	;IFE [C], X
-	;	SET PC, read_line_skip
-	;SET X, [C]
+	INT 0xFEDC
+	;JSR proc_suspend
 	
 	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
 		SET PC, read_line_end
@@ -470,7 +422,7 @@ SET PC, POP
 		SET PC, read_line_skip
 	IFE A, B
 		SET PC, read_line_skip
-		
+
 	SET [A], [C]
 
 	; Put the character on-screen so the user can see what is being typed
@@ -506,8 +458,6 @@ SET PC, POP
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	
-	;SET [C], 0 ; Clear the key buffer
 	
 	SET PC, read_line_loop
 
@@ -559,11 +509,6 @@ SET PC, POP
 	SET A, POP
 	SET B, POP
 	SET C, POP
-	SET X, POP
-	SET Y, POP
-	
-	IAQ 0
-	
 	SET PC, POP
 	
 ; Sleeps for some cycles
