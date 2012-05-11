@@ -130,6 +130,7 @@ dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 dat 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 :keyboard_buffers_flags_end
 :keyboard_buffers_exclusive dat 0x0000 ; Contains buffer mem loc that has exclusive access
+:keyboard_buffers_exclusive_flags dat 0x0000
 :keyboard_oldvalue dat 0x0000
 
 ; Kernel watchdog variables
