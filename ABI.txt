@@ -29,8 +29,8 @@ File header
 |           | H              L                                |
 |           | 1111111111111111                                |
 |           | \____ ____/||||+- Has Assembler Relocation Table|
-|           |      V     |||+-- Realtime application*         |
-|           |      |     ||+--- Background application**      |
+|           |      V     |||+-- Realtime application *        |
+|           |      |     ||+--- Daemon **                     |
 |           |    unused  |+---- Driver                        |
 |           |            +----- Library                       |
 |           |                                                 |
@@ -43,25 +43,23 @@ File header
                                V
                          Code and data
 
-
 *  When AtlasOS starts a realtime application all other application are swaped out the memory.
    The application is not suspended (proc_suspend only runs driver). As soon as it calls 'proc_kill_me'
    the appication is terminated and all other applications are restored. This may be useful for loading
    control systems or other time critical apps.
   
-** Background applications are called without forcing the shell to pause until it finished. This may be useful
-   for non-time-critical tasks. Background applications are supposed to stay silent (write nothing on the
+** Deamons are called without forcing the shell to pause until it finished. This may be useful
+   for non-time-critical tasks. Daemons are supposed to stay silent (write nothing on the
    screen) though they CAN write on the screen.
+
 
 The code
 --------
-
 The code must be pure DCPU-16 code.
 
 
 The Assembler Relocation Table
 ------------------------------
-
 This data ensures the pointer in the code point to the right
 position by listing all the pointers the OS must modify.
 
@@ -75,12 +73,13 @@ Header:
 Entry:
 .           .                                                 .
 | 1         | Address of the pointer                          |
+.           .                                                 .
+.           .                                                 .
 +-----------+-------------------------------------------------+
 
 
 The Library Function Table
 --------------------------
-
 The LFT provides the public methods and their addresses so applications
 can make use of them without knowing their positions in memory. The function
 references are automaticaly relocated (without ART).

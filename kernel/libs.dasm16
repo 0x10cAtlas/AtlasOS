@@ -28,7 +28,7 @@
 	IFN B, lib_table_end
 		SET PC, lib_find_loop
 		
-	SET A, 0
+	JSR lib_load
 	
 :lib_find_end
 	SET C, POP
@@ -56,6 +56,84 @@
 		
 	SET A, 0
 	SET PC, POP
+	
+; Loads a library from a file
+; A -> Pointer to the name of the library
+; A <- Pointer to the entry in the lib table (or 0x0000 if failed)
+:lib_load
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	
+	JSR virtual_filesystem_getfile
+	SET A, C
+	IFE A, 0
+		SET PC, lib_load_end		; Could not find library
+		
+	ADD A, 18
+	SET B, [A] ; Start of the file
+	
+	ADD A, 1
+	SET C, [A] ; Read end of the file
+	SUB C, B   ; Calculate the lenght of the file
+	
+	; Check magic number
+	IFN [B], 0x4714
+		SET PC, lib_load_err
+	
+	; Todo: Once the big mem pages are implemented: remove this block!
+	IFG C, 1024
+		SET PC, lib_load_err
+	; End of block
+	
+	JSR page_alloc ; Allocate memory for the library
+	IFE A, 0
+		SET PC, lib_load_end
+	SET Z, A
+	
+	SET A, B
+	SET B, Z
+	JSR mem_copy ; Copy the library into its page
+	
+	ADD B, 1
+	IFG [B], 1
+		SET PC, lib_load_err_free ; The Library header is too new
+	
+	ADD B, 2
+	SET X, [B] ; Save the length of the header
+	
+	ADD B, 1 ; Jump to the flags
+	SET Y, [B]
+	SET Z, Y
+	AND Z, 0x000F
+	IFE Z, 0
+		SET PC, lib_load_err_free
+		
+	SET Z, Y
+	AND Z, 0x0001 ; ART
+	IFN Z, 0
+		SET PC, lib_load_art
+	
+	; Todo: Implement unified ART parster
+	; Todo: Add entry to the lib table
+	; Todo: Relocate the LFT
+	; Todo: Test!
+	
+:lib_load_end
+	SET X, POP
+	SET C, POP
+	SET B, POP
+	SET PC, POP
+
+:lib_load_err_free
+	SET A, B
+	JSR page_free
+	
+:lib_load_err
+	SET A, 0
+	SET PC, lib_load_end
 	
 ; Adds a new entry into library table and return address of it
 ; A -> Pointer to library name 
