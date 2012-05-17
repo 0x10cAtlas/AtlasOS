@@ -8,7 +8,7 @@ SET PC, data_end
 ;
 ; 50 - Applications and other drivers (0x2000 - 0xEB00)
 ;
-; 4 - Disk paging space (0xEB00 - 0xF800)
+; 3 - Disk paging space (0xEB00 - 0xF800)
 ; 1 - Video memory (0xF800 - 0xFB00)
 ; 1 - OS stack space (0xFB00 - 0xFFFF)
 
