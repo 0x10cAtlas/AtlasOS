@@ -33,11 +33,12 @@ Below is detailed our feature list and planned features.
 * cat - prints the file contents to the screen
 
 ## Building AtlasOS
-### Windows
-Run the shell script of your choice.
-### Linux / Mac
-Install the Mono framework software. Then ensure that all of
-the .sh files are executable. All you need to do now is to
-run the shell script of your choice.
+From the AtlasOS directory, run:
+	python atlasbuild.py
+For build options, run:
+	python atlasbuild.py -h
+Locations of various files and tools can be changed by modifying capitalised
+variables in the script. Linux and Mac users should have the Mono framework
+installed in order to use the assembler, Organic.
 
 If anyone has any issues please submit to the tracker. Thanks!
