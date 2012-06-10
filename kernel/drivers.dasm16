@@ -188,7 +188,7 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	SET A, 1
     HWI [keyboard_address]
 

@@ -1,4 +1,5 @@
 :kernel_interrupt_handler
+
 	SET PUSH, EX ; Safety measure in case we trigger between lines that use EX
 
 	SUB A, 1 ; Go from HW+1 to HW
@@ -58,8 +59,8 @@
 	IFN [proc_suspend_param], 0
 		SET PC, kernel_interrupt_handler_clock_skip_suspend
 		
-	;SET [proc_suspend_param], 1
-	;JSR proc_suspend_interrupt
+	SET [proc_suspend_param], 1
+	JSR proc_suspend_interrupt
 :kernel_interrupt_handler_clock_skip_suspend
 	SET PC, POP
 

@@ -154,17 +154,19 @@
       SET PC, POP
 	  
 ; Trigger a manual process suspend interrupt
-; THIS IS WEIRDLY BROKEN! WHY!?
-; Tried added dummy ops, still broken
+; spoofs the clock
 :proc_suspend
-	SET A, 42 ; dummy op
-	INT 0xFEDC
-	SET A, 42 ; dummy op
+    SET PUSH, A
+	SET A, [clock_address]
+	ADD A, 1
+	INT A
+	SET A, POP
 	SET PC, POP
 	  
 ; proc_suspend_interrupt
 ; Takes 164 - 264 cycles to complete which is 1.6ms to 2.6ms
 :proc_suspend_interrupt
+
 	IFE [preemptive_enabled], 0
 		SET PC, proc_suspend_interrupt_skipstart
 	IFE [proc_suspend_param], 0
@@ -187,9 +189,6 @@
 	SET [proc_buffer_i], I
 	SET [proc_buffer_j], J
 	SET [proc_buffer_sp], SP
-
-	; Restore the Stackpointer so we can call subroutines
-	SET SP, [proc_table10]
 
 	; Copy the buffered state to the table
 	JSR proc_get_info
@@ -234,11 +233,10 @@
 	SET J, [proc_buffer_j]	
 	SET SP, [proc_buffer_sp]
 	
-	IFN [preemptive_enabled], 0
-		IAQ 0
-		
-	SET PC, POP ; Jump into the Program
-	
+	SET PUSH, A
+
+	RFI A ; Jump into the Program
+
 :proc_suspend_param dat 0x0000
 
 ; Loads a new process into memory

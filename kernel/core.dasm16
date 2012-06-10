@@ -1,6 +1,6 @@
-#include "AtlasOS 0.6.2"
+#include "AtlasOS 0.6.2.dasm16"
 
-#include "../include/kernel.inc"
+#include "../include/kernel.dasm16"
 
 SET PC, kernel_boot
 
@@ -17,8 +17,6 @@ SET PC, kernel_boot
 :kernel_boot
 JSR bios_boot
 
-; Set the interrupt handler first
-IAS kernel_interrupt_handler
 
 ; clear screen (for emulator)
 JSR clear
@@ -77,7 +75,11 @@ JSR keyboard_unregister_all
 
 ; OS ready message
 SET A, text_start_ok
+
 JSR text_out
+
+; Set the interrupt handler last since booting has finished
+IAS kernel_interrupt_handler
 
 ; Main kernel loop
 :kernel_loop
@@ -89,13 +91,13 @@ JSR text_out
 	JSR kernel_watchdog_checkalone
 
 	; Release back to other running processes
-	INT 0xFEDC
-	;JSR proc_suspend
+	JSR proc_suspend
 	
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background
 :kernel_watchdog_checkalone
+
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
@@ -117,6 +119,7 @@ JSR text_out
 	SET A, POP
 	SET B, POP
 	SET C, POP
+
 	SET PC, POP
 :kernel_watchdog_helper
 	IFE C, kernel_watchdog_proc_list_buffer_end
