@@ -86,9 +86,10 @@
 :bios_clock_init
 	SET [clock_address], Z
 
+
 	; Set clock tick rate (60/B = 5/sec)
 	SET A, 0
-	SET B, 12 ; 5/sec
+	SET B, 1 ; 5/sec
 	HWI [clock_address]
 
 	; Setup interrupts for clock
@@ -96,7 +97,7 @@
 	SET B, [clock_address] ; Our magic word to tell the handler we have a clock tick
 	ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
 	HWI [clock_address]
-
+	SET [proc_suspend_int], B
 	SET PC, POP
 
 :bios_floppy_init
@@ -193,8 +194,8 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
     HWI [keyboard_address]
 
 	; Skip the driver if the key value hasn't changed
-	IFE C, [keyboard_oldvalue]
-		SET PC, driver_keyboard_end
+	;IFE C, [keyboard_oldvalue]
+	;	SET PC, driver_keyboard_end
 
 	SET A, keyboard_buffers
 

@@ -1,10 +1,10 @@
-#include "AtlasOS 0.6.2.dasm16"
-
-#include "../include/kernel.dasm16"
-
-SET PC, kernel_boot
-
-; Kernel
+; --------------------------------------------
+; Title:   core
+; Author:  russell
+; Date:    13/06/2012
+; Version: 
+; --------------------------------------------
+#include "../include/kernel.dasm16" 
 #include "drivers.dasm16"
 #include "filesystem.dasm16"
 #include "graphics.dasm16"
@@ -32,7 +32,7 @@ JSR text_out
 ; Reserve kernel-memory
 SET X, 0
 :kernel_mem
-IFG X, kernel_end
+IFG X, os_content_end ; kernel_end
     SET PC, kernel_mem_end
 SET A, X
 JSR page_reserve
@@ -41,23 +41,23 @@ SET PC, kernel_mem
 :kernel_mem_end
 
 ; Reserve misc-memory
-SET X, os_content
-:os_content_mem
-IFG X, os_content_end
-    SET PC, os_content_mem_end
-SET A, X
-JSR page_reserve
-ADD X, 1024
-SET PC, os_content_mem
-:os_content_mem_end
+;SET X, os_content
+;:os_content_mem
+;IFG X, os_content_end
+;    SET PC, os_content_mem_end
+;SET A, X
+;JSR page_reserve
+;ADD X, 1024
+;SET PC, os_content_mem
+;:os_content_mem_end
 
 ; Reserve stack-memory
-SET A, 0xFFFF
-JSR page_reserve
+;SET A, 0xFFFF
+;JSR page_reserve
 
 ; Reserve the API space
-SET A, 0x1000
-JSR page_reserve
+;SET A, 0x1000
+;JSR page_reserve
 
 SET X, 0
 
@@ -84,49 +84,22 @@ IAS kernel_interrupt_handler
 ; Main kernel loop
 :kernel_loop
 
-	; Call the keyboard driver
-	JSR driver_keyboard
 	
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
 	; Release back to other running processes
-	JSR proc_suspend
+	INT [proc_suspend_int]
 	
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background
 :kernel_watchdog_checkalone
-
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
-
-	SET C, kernel_watchdog_proc_list_buffer
-	SET A, kernel_watchdog_helper
-	JSR proc_callback_list
-	SET C, kernel_watchdog_proc_list_buffer
-	ADD C, 1
-	IFE [C], 0
-		JSR kernel_watchdog_loadshell
-
-	; Clear the proc buffer
-	SET C, kernel_watchdog_proc_list_buffer
-	SET [C], 0
-	ADD C, 1
-	SET [C], 0
-
-	SET A, POP
-	SET B, POP
-	SET C, POP
+	IFN [proc_table+4], 2
+	SET PC, kernel_watchdog_loadshell
 
 	SET PC, POP
-:kernel_watchdog_helper
-	IFE C, kernel_watchdog_proc_list_buffer_end
-		SET PC, POP
-	SET [C], A
-	ADD C, 1
-	SET PC, POP
+
 :kernel_watchdog_loadshell
 	; This is a workaround so the shell doesn't freak out
 	; when there is no data in the keyboard buffer
@@ -164,8 +137,7 @@ dat "                                                                           
 #include "../apps/AtlasShell.dasm16"
 #include "../apps/AtlasText.dasm16"
 #include "../apps/apps.dasm16"
-
 ; Virtual Filesystem
 #include "../misc/vfs.dasm16"
+
 :os_content_end
-	

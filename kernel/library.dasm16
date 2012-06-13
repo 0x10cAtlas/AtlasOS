@@ -385,9 +385,10 @@ SET PC, POP
 
 	SET B, 0
 :strlen_loop
+	IFE [A], 0
+		SET PC, strlen_end
 	ADD A, 1
-	IFN [A], 0
-		SET PC, strlen_loop
+	set PC, strlen_loop
 :strlen_end
 	SET B, A
 	SUB B, PEEK
@@ -409,8 +410,7 @@ SET PC, POP
 	ADD B, A
 
 :read_line_loop
-	INT 0xFEDC
-	;JSR proc_suspend
+	;INT [proc_suspend_int]
 	
 	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
 		SET PC, read_line_end
@@ -442,7 +442,7 @@ SET PC, POP
 		JSR scroll
 	SET B, POP
 	SET A, POP
-
+	SET [C], 0
 	ADD A, 1
 
 :read_line_skip
@@ -458,7 +458,8 @@ SET PC, POP
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	
+
+
 	SET PC, read_line_loop
 
 :read_line_backspace
@@ -487,6 +488,7 @@ SET PC, POP
 	SET B, POP
 	SET A, POP
 	SUB A, 1
+	SET [C], 0
 	SET PC, read_line_skip
 
 :read_line_end
@@ -502,7 +504,7 @@ SET PC, POP
 	SET C, POP
 	SET B, POP
 	SET A, POP
-
+	SET [C], 0
 	; Add the null terminator
 	SET [A], 0
 	; Pop everything back out
