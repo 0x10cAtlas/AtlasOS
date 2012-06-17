@@ -175,7 +175,7 @@ dat 0x0000
 :floppy_paging_address
 dat 0xEB00
 :floppy_paging_size
-dat 0x1000 ; 8 sectors @ 512 words/sector
+dat 0x0C000 ; 6 sectors @ 512 words/sector
 :floppy_page_inuseflags
 dat 0x0000 ; Bit map of RAM pages in use along with flags (4 flag bits per sector)
 dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??

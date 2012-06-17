@@ -4,15 +4,6 @@
 ; Date:    13/06/2012
 ; Version: 
 ; --------------------------------------------
-#include "../include/kernel.dasm16" 
-#include "drivers.dasm16"
-#include "filesystem.dasm16"
-#include "graphics.dasm16"
-#include "interrupts.dasm16"
-#include "library.dasm16"
-#include "memory.dasm16"
-#include "messages.dasm16"
-#include "process.dasm16"
 
 :kernel_boot
 JSR bios_boot
@@ -29,35 +20,23 @@ JSR text_out
 SET A, text_start
 JSR text_out
 
-; Reserve kernel-memory
+; Reserve all operating system code including api space
 SET X, 0
-:kernel_mem
-IFG X, os_content_end ; kernel_end
-    SET PC, kernel_mem_end
+:code_mem
+IFG X, os_content_end 
+    SET PC, code_mem_end
 SET A, X
 JSR page_reserve
 ADD X, 1024
-SET PC, kernel_mem
-:kernel_mem_end
+SET PC, code_mem
+:code_mem_end
 
-; Reserve misc-memory
-;SET X, os_content
-;:os_content_mem
-;IFG X, os_content_end
-;    SET PC, os_content_mem_end
-;SET A, X
-;JSR page_reserve
-;ADD X, 1024
-;SET PC, os_content_mem
-;:os_content_mem_end
 
-; Reserve stack-memory
-;SET A, 0xFFFF
-;JSR page_reserve
+; Reserve stack-memory 
+SET A, 0xFFFF
+JSR page_reserve
 
-; Reserve the API space
-;SET A, 0x1000
-;JSR page_reserve
+
 
 SET X, 0
 
@@ -134,10 +113,4 @@ dat "                                                                           
 	
 ; Apps
 :os_content
-#include "../apps/AtlasShell.dasm16"
-#include "../apps/AtlasText.dasm16"
-#include "../apps/apps.dasm16"
-; Virtual Filesystem
-#include "../misc/vfs.dasm16"
 
-:os_content_end

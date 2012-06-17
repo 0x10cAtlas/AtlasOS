@@ -18,7 +18,7 @@
       SET C, [A]
       IFE C, 0x0000
           SET PC, text_out_end
-      IFE C, 0x00A0
+      IFE C, 0x00A
           SET PC, text_out_nl
       AND C, 0x00FF
       BOR C, B
@@ -410,7 +410,6 @@ SET PC, POP
 	ADD B, A
 
 :read_line_loop
-	;INT [proc_suspend_int]
 	
 	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
 		SET PC, read_line_end

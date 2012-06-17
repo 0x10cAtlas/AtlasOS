@@ -39,17 +39,7 @@ jsr driver_keyboard
 	SET PC, POP
 	
 :kernel_interrupt_handler_clock
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
 
-	SET A, 0
-	SET B, 0
-	SET C, 0x5000
-	JSR kernel_interrupt_debug_clock_ticker
-	SET A, POP
-	SET B, POP
-	SET C, POP
 	
 	JSR proc_suspend_interrupt
 :kernel_interrupt_handler_clock_skip_suspend

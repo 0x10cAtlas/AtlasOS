@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<project version="1.7.5" type="code">
+  <name>atlas</name>
+  <properties>
+    <property name="code.generateBinaryOutput">true</property>
+    <property name="code.binaryOutputFilename">atlas.bin</property>
+    <property name="code.generateHexOutput">false</property>
+    <property name="code.hexOutputFilename">atlas.hex</property>
+    <property name="code.setFirstFile">false</property>
+  </properties>
+  <references />
+  <files>
+    <file path="include\kernel.dasm16" />
+    <file path="kernel\drivers.dasm16" />
+    <file path="kernel\filesystem.dasm16" />
+    <file path="kernel\graphics.dasm16" />
+    <file path="kernel\interrupts.dasm16" />
+    <file path="kernel\library.dasm16" />
+    <file path="kernel\memory.dasm16" />
+    <file path="kernel\messages.dasm16" />
+    <file path="kernel\process.dasm16" />
+    <file path="kernel\core.dasm16" />
+    <file path="apps\AtlasShell.dasm16" />
+    <file path="apps\AtlasText.dasm16" />
+    <file path="apps\apps.dasm16" />
+    <file path="misc\vfs.dasm16" />
+  </files>
+</project>
