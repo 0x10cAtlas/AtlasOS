@@ -105,6 +105,13 @@
 	JSR [0x101A]
 	IFE C, 0
 		JSR command_catf
+
+	; Check for the 'echo' command
+	SET A, command_echo
+	SET B, command_parameter_buffer
+	JSR [0x101A]
+	IFE C, 0
+		JSR command_echof
 		
 	; Check if we're trying to run a file
 	IFN [ack_command], 1
@@ -786,6 +793,25 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
+	
+:command_echof
+	SET [ack_command], 1
+	SET PUSH, A
+	SET PUSH, B
+	
+	SET A, input_text_buffer
+	ADD A, 5
+	SET B, command_parameter_buffer
+	JSR [0x1018]
+	
+	SET A, command_parameter_buffer
+	JSR [0x101C]
+	
+	JSR [0x101E]
+
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 :AtlasShell_die
 	SET A, input_buffer
@@ -945,6 +971,7 @@
 :command_cp dat "cp", 0 ; UNFINISHED
 :command_ln dat "ln", 0 ; UNFINISHED
 :command_mv dat "mv", 0 ; UNFINISHED
+:command_echo dat "echo", 0
 
 ; Process list buffer. Used for the 'kill' command
 :proc_list_buffer
