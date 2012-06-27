@@ -802,12 +802,12 @@
 	SET A, input_text_buffer
 	ADD A, 5
 	SET B, command_parameter_buffer
-	JSR [0x1018]
+	JSR [0x1017]
 	
 	SET A, command_parameter_buffer
-	JSR [0x101C]
-	
+	JSR [0x101F] ; Newline (hack!)
 	JSR [0x101E]
+	JSR [0x101F] ; Newline
 
 	SET B, POP
 	SET A, POP
@@ -934,7 +934,7 @@
 	SET PC, POP
 
 ; Misc data
-:text_versionoutput dat "Atlas-Shell v0.4.1", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.2", 0xA0, 0x00
 :text_prompt dat " $> ", 0x00
 :text_unrecognized dat "Unrecognized command", 0xA0, 0x00
 :input_text_buffer dat "                                ", 0x00
