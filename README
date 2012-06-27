@@ -23,14 +23,15 @@ Below is detailed our feature list and planned features.
 
 ## AtlasShell Commands
 
-* clear - clears the screen and shows the prompt
+* clear - clears the screen and shows the prompt.
 * version - displays the AtlasShell version. Syntax: version [os]
-* list - displays the list of process IDs
-* load - loads a new process into memory (loads demo process right now)
+* list - displays the list of process IDs.
+* load - loads a new process into memory. (loads demo process right now)
 * kill - halts a running process. Syntax: kill [list|procID]
-* cd - change directory
-* ls - list directory contents
-* cat - prints the file contents to the screen
+* cd - change directory.
+* ls - list directory contents.
+* cat - prints the file contents to the screen.
+* echo - prints an user-defined message to the screen. Syntax: echo [message]
 
 ## Building AtlasOS
 ### Windows
