@@ -1,4 +1,5 @@
 :files
+dat 0x0261 ; Number of words in the whole file system
 
 ; Primary file table
 ; Flags: Bit 1 - read, Bit 2 - write, Bit 3 - hidden, Bit 4 - executable, Bit 5 - directory
@@ -6,39 +7,37 @@
 ; Each entry must be 20 words long
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused
-;   dat DirID , Flags , "File name goes here   ", Start , End
+;   dat DirID , Flags , "File name goes here   ", Start , Lenght (in words)
 :files_table
-	dat 0x000C ; Number of files in table
+	dat 0x00F0 ; Number of words in table
+	dat 0x000C ; Number of elements in table
 	dat 0xFFFF, 0x0011, "/", 0, "              ", 0x0000, 0x0000
 	dat 0x0004, 0x0011, "TextFiles", 0, "      ", 0x0001, 0x0000
 	dat 0x0000, 0x0011, "Programs", 0, "       ", 0x0002, 0x0000
 	dat 0x0000, 0x0011, "Data", 0, "           ", 0x0004, 0x0000
 	dat 0x0000, 0x0011, "System", 0, "         ", 0x0003, 0x0000
 	dat 0x0003, 0x0011, "libs", 0, "           ", 0x0005, 0x0000
-	dat 0x0001, 0x0003, "file01", 0, "         ", file01, file01_end
-	dat 0x0002, 0x0009, "hello_world", 0, "    ", file02, file02_end
-	dat 0x0003, 0x0009, "free_mem", 0, "       ", file03, file03_end
-	dat 0x0001, 0x0005, "file04", 0, "         ", file04, file04_end
-	dat 0x0002, 0x0009, "ball_game", 0, "      ", file05, file05_end
-	dat 0x0001, 0x0003, "file06", 0, "         ", file06, file06_end
-:files_table_end
-
+	dat 0x0001, 0x0003, "file01", 0, "         ", 0x0006, 0x004C
+	dat 0x0002, 0x0009, "hello_world", 0, "    ", 0x0007, 0x001C
+	dat 0x0003, 0x0009, "free_mem", 0, "       ", 0x0008, 0x004F
+	dat 0x0001, 0x0005, "file04", 0, "         ", 0x0009, 0x0016
+	dat 0x0002, 0x0009, "ball_game", 0, "      ", 0x000A, 0x0054
+	dat 0x0001, 0x0003, "file06", 0, "         ", 0x000B, 0x0046
+	
 ; Basic flat text file
-:file01
+dat 0x0006
 	dat "This is some text from a file   "
 	dat "Blah blah some more content     "
 	dat "Termination", 0x00
-:file01_end
 
-:file06
+dat 0x000B
 	dat "Now some tests for output", 0xA0
 	dat "to see how we handle things", 0xA0
 	dat "I hope it works", 0x00
-:file06_end
 
 ; HelloWorld
 ; Description: Displays "Hello World"
-:file02 ; AtlasOS ABI-compliant executable file
+dat 0x0007 ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x0007 ; Length of header (5 base + 2 for ART)
@@ -50,11 +49,10 @@
 	dat 0x7C01, 0x0008, 0x7820, 0x101E, 0x7820, 0x1002, 0x7820, 0x1005
 	; Data
 	dat 0x0048, 0x0065, 0x006c, 0x006c, 0x006f, 0x0020, 0x0057, 0x006f, 0x0072, 0x006c, 0x0064, 0x00a0, 0x0000
-:file02_end
 
 ; Free
 ; Description: Displays the amount of free memory in RAM
-:file03 ; AtlasOS ABI-compliant executable file
+dat 0x0008 ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x000B ; Length of header (5 base + 6 for ART)
@@ -71,15 +69,13 @@
 	; Data (29 words)
 	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0077, 0x006f, 0x0072, 0x0064, 0x0073, 0x0020, 0x0066, 0x0072, 0x0065, 0x0065, 0x0020, 0x0028
 	dat 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x0020, 0x004b, 0x0042, 0x0029, 0x00a0, 0x0000
-:file03_end
 
-:file04
+dat 0x0009
 	dat "I am hidden, muahaha!", 0x00
-:file04_end
 
 ; Ball
 ; Description: Runs a "ball" around on the screen and bounces off of walls
-:file05 ; AtlasOS ABI-compliant executable file
+dat 0x000A ; AtlasOS ABI-compliant executable file
 	dat 0x4714 ; Magic number indicating an AtlasOS ABI-comliant binary
 	dat 0x0001 ; Revision 1 of the ABI
 	dat 0x0005 ; Length of header (5 base + 0 for ART)
@@ -96,6 +92,5 @@
 	dat 0x1b01, 0x7cc1, 0x004a, 0x7cc3, 0x003f, 0x7ce1, 0x0008, 0x7c41
 	dat 0x7440, 0x7820, 0x1022, 0x7820, 0x1002, 0x7ce3, 0x0001, 0x7cf3
 	dat 0x0000, 0x1b83, 0x60c1, 0x60e1, 0x7820, 0x1002, 0x1b83
-:file05_end
 
 :files_end
