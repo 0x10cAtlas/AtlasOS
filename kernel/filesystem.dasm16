@@ -130,8 +130,8 @@ SET A, 0x0003
 HWI [floppy_address]
 
 SET A, 0x0010 ; read sector interrupt
-SET B, POP ; start at sector given by A
-SET C, POP ; read a number of sectors given by B
+SET B, PEEK ; start at sector given by A
+SET C, PICK 1 ; read a number of sectors given by B
 SET X, [floppy_paging_address]
 HWI [floppy_address]
 
@@ -142,6 +142,8 @@ SET B, Y ;retrieve flags
 SET A, 0x3 ; reset flags
 HWI [floppy_address]
 
+SET A, POP
+SET B, POP
 SET Y, POP
 SET X, POP
 SET C, POP

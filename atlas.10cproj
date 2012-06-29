@@ -20,6 +20,7 @@
     <file path="kernel\messages.dasm16" />
     <file path="kernel\process.dasm16" />
     <file path="kernel\core.dasm16" />
+    <file path="kernel\math.dasm16" />
     <file path="apps\AtlasShell.dasm16" />
     <file path="apps\AtlasText.dasm16" />
     <file path="apps\apps.dasm16" />

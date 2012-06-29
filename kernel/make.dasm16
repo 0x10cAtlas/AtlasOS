@@ -8,6 +8,7 @@
 #include "messages.dasm16"
 #include "process.dasm16"
 #include "core.dasm16"
+#include "math.dasm16"
 #include "../apps/AtlasShell.dasm16"
 #include "../apps/AtlasText.dasm16"
 #include "../apps/apps.dasm16"

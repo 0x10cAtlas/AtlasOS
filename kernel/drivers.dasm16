@@ -193,9 +193,9 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 	SET A, 1
     HWI [keyboard_address]
 
-	; Skip the driver if the key value hasn't changed
-	;IFE C, [keyboard_oldvalue]
-	;	SET PC, driver_keyboard_end
+	; Skip the driver if the key value is 0
+	IFE C, 0
+	SET PC, driver_keyboard_end
 
 	SET A, keyboard_buffers
 
@@ -211,7 +211,6 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
     IFN A, keyboard_buffers_end
         SET PC, driver_keyboard_loop
 :driver_keyboard_end
-	SET [keyboard_oldvalue], C
 	SET A, 0
     HWI [keyboard_address]
 	SET C, POP
