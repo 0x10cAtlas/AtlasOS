@@ -41,6 +41,67 @@
 	SET X, POP
 	SET PC, POP
 	
+; Returns pointer to start of file data in A, returns 0 if file data not found
+; A: file ID
+:virtual_filesystem_getfiledatastart
+SET PUSH, B
+SET PUSH, C
+SET PUSH, I
+SET PUSH, X
+SET B, files_table
+ADD B, [files_table]
+SET C, files_table
+ADD C, 20
+SET I, 0 ;21
+
+:virtual_filesystem_getfiledatastart_loop
+	SET PUSH, C
+		SET C, files
+		ADD C, [files]
+		IFE C, B
+			SET PC, virtual_filesystem_getfiledatastart_failed
+	SET C, POP
+	
+	IFE [B], A
+		SET PC, virtual_filesystem_getfiledatastart_file_found
+	:virtual_filesystem_getfiledatastart_loop_loop
+		IFE [B], [C + I]
+			SET PC, virtual_filesystem_getfiledatastart_skip_file
+		
+		ADD I, 21
+		
+		SET X, I
+		DIV X, 21
+		IFE X, [files_table + 1]
+			SET PC, virtual_filesystem_getfiledatastart_skip_word
+		
+		SET PC, virtual_filesystem_getfiledatastart_loop_loop
+
+:virtual_filesystem_getfiledatastart_skip_file
+	SET PUSH, C
+	ADD C, I
+	ADD B, [C + 1]
+	SET C, POP
+	SET PC, :virtual_filesystem_getfiledatastart_loop
+
+:virtual_filesystem_getfiledatastart_skip_word
+	ADD B, 1
+	SET PC, :virtual_filesystem_getfiledatastart_loop
+
+:virtual_filesystem_getfiledatastart_file_found
+	SET A, B
+	SET PC, virtual_filesystem_getfiledatastart_end
+
+:virtual_filesystem_getfiledatastart_failed
+	SET A, 0
+
+:virtual_filesystem_getfiledatastart_end
+SET X, POP
+SET I, POP
+SET C, POP
+SET B, POP
+SET PC, POP
+
 ; Returns pointer to start of file entry in file table in C, returns 0 if file not found
 ; A: Program start or directory ID
 :virtual_filesystem_getfile_bystart
