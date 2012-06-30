@@ -795,6 +795,8 @@
 	SET PC, POP
 	
 :command_echof
+	JSR comand_clear_parameter_buffer
+	
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
@@ -808,7 +810,7 @@
 	JSR [0x101C]
 	
 	JSR [0x101E]
-
+	
 	SET B, POP
 	SET A, POP
 	SET PC, POP
