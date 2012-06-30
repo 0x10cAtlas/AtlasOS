@@ -540,7 +540,7 @@ text_out [0x101E]
 -----------------
 
 Description:
-	Prints the text on the screen. It takes 0x00A0 as line feed.
+	Prints the text on the screen. It takes 0x000A as line feed.
 	
 Parameters:
 	A - start address of the text

@@ -11,7 +11,7 @@
 	JSR [0x1028]
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
-	
+
 	; Load the pwd name
 	JSR command_clear_present_working_directory_name
 	SET A, [present_working_directory]
@@ -43,7 +43,7 @@
 	SET A, input_text_buffer
 	JSR [0x1019]
 	IFE B, 0
-		SET PC, AtlasShell_loop_wait
+		SET PC, AtlasShell_newline
 
 	; Parse out the primary command
 	SET A, input_text_buffer
@@ -84,21 +84,21 @@
 	JSR [0x101A]
 	IFE c, 0
 	JSR command_listf
-	
+
 	; Check for the 'ls' command
 	SET A, command_ls
 	SET B, command_parameter_buffer
 	JSR [0x101A]
 	IFE C, 0
 		JSR command_lsf
-		
+
 	; Check for the 'cd' command
 	SET A, command_cd
 	SET B, command_parameter_buffer
 	JSR [0x101A]
 	IFE C, 0
 		JSR command_cdf
-		
+
 	; Check for the 'cat' command
 	SET A, command_cat
 	SET B, command_parameter_buffer
@@ -112,7 +112,7 @@
 	JSR [0x101A]
 	IFE C, 0
 		JSR command_echof
-		
+
 	; Check if we're trying to run a file
 	IFN [ack_command], 1
 		JSR command_runfile
@@ -120,19 +120,20 @@
 	; If we don't have an acknowledged command, display the generic response
 	IFN [ack_command], 1
 		JSR command_unknownf
+
 :AtlasShell_loop_wait
-	; Pause then loop back to start of process
-	;JSR [0x1002]
-	;INT [clock_address] ; FIX THIS ASAP!
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
+:AtlasShell_newline
+	JSR [0x101f]
+	SET PC, AtlasShell_loop_wait
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-	JSR [0x101F]
 	SET a, text_unrecognized
 	JSR [0x101E]
+	JSR [0x101F]
 	SET pc, pop
 
 ; Command function to display version info
@@ -321,7 +322,7 @@
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
 	JSR [0x101D]	; A is source, C is result
-	
+
 	; Handle overflow
 	IFG C, 32
 		SET C, 32
@@ -428,7 +429,7 @@
 	JSR [0x101F]
 
 	SET PC, POP
-	
+
 ; Command to list all files in current directory
 :command_lsf
 	SET [ack_command], 1
@@ -446,14 +447,14 @@
 	IFE Y, X
 		SET PC, command_lsf_end
 	ADD Y, 1
-	
+
 	SET PUSH, A
 	SET C, [A] ; Ignore the directory value for now, will be finished later
 	SET A, [present_working_directory]
 	IFN C, A
 		SET PC, command_lsf_skip_file
 	SET A, POP
-	
+
 	; Clear out the row buffer
 	SET C, command_ls_row
 	ADD C, 32
@@ -464,30 +465,30 @@
 	IFN B, C
 		SET PC, command_lsf_clearrow
 	SET B, command_ls_row
-	
+
 	ADD A, 1 ; Move on to flags
-	
+
 	; Store if this file can be read
 	SET C, [A]
 	AND C, 0x0001
 	IFE C, 1
 		SET [B], 0x52 ; 'R'
 	ADD B, 1
-	
+
 	; Store if this file can be written to
 	SET C, [A]
 	AND C, 0x0002
 	IFE C, 2
 		SET [B], 0x57 ; 'W'
 	ADD B, 1
-	
+
 	; Store if this file is executable
 	SET C, [A]
 	AND C, 0x0008
 	IFE C, 8
 		SET [B], 0x45 ; 'E'
 	ADD B, 1
-	
+
 	; Check if the file is hidden
 	SET C, [A]
 	AND C, 0x0004
@@ -505,20 +506,20 @@
 	SET [B], 0x7C ; '|'
 	ADD B, 1
 	ADD A, 1
-	
+
 	; Store the file name
 	JSR [0x1017]
 	ADD B, 16
 	ADD A, 16
-	
+
 	; Add separator
 	SET [B], 0x7C ; '|'
 	ADD B, 1
 	;ADD A, 1
-	
+
 	IFE C, 16
 		SET PC, command_lsf_skip_filesize
-	
+
 	; Display file size
 	SET PUSH, C
 	SET C, [A] ; Get the file start
@@ -542,11 +543,11 @@
 	SET B, PEEK
 	SET C, 5
 	JSR [0x1018] ; strncpy
-	
+
 	SET B, POP
 	SET A, POP
 	SET C, POP
-:command_lsf_skip_filesize	
+:command_lsf_skip_filesize
 	IFE C, 16
 		ADD A, 1
 	; Output the file info
@@ -559,7 +560,7 @@
 	SET A, POP
 	ADD A, 19
 :command_lsf_skip_file_end
-	
+
 	; Move on to the next entry
 	ADD A, 1
 	SET PC, command_lsf_loop
@@ -571,7 +572,7 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	
+
 :command_runfile
 	SET PUSH, A
 	SET PUSH, B
@@ -583,19 +584,19 @@
 	JSR [0x1029]
 	IFE C, 0
 		SET PC, command_runfile_end
-		
+
 	SET A, [C] ; Skip over the directory ID, will finish later
 	IFN A, [present_working_directory]
 		SET PC, command_runfile_end
-	
+
 	ADD C, 1
 	SET A, [C] ; Get the file flags
 	AND A, 0x0008 ; Check if the file is executable
 	IFE A, 0
 		SET PC, command_runfile_notexe
-		
+
 	ADD C, 1
-	
+
 	ADD C, 16
 	SET A, [C]
 	ADD C, 1
@@ -609,12 +610,12 @@
 	SET A, command_runfile_notexe_text
 	JSR [0x101E]
 	SET [ack_command], 1
-:command_runfile_end	
+:command_runfile_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	
+
 :command_cdf
 	SET [ack_command], 1 ; acknowledge recognized command
 	SET PUSH, A
@@ -709,9 +710,9 @@
 		SET PC, command_cdf_unknown
 	ADD C, 1 ; Move to the name
 	SET A, C
-	
+
 	ADD C, 16 ; Move past the name
-	
+
 	SET B, directory_stack
 :command_cdf_cd_addtodirectorystack
 	IFE B, directory_stack_end
@@ -731,12 +732,12 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	
+
 :command_catf
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
-	
+
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -747,23 +748,23 @@
 	JSR [0x1029] ; filesystem_getfile
 	IFE C, 0
 		SET PC, command_catf_end
-	
+
 	SET A, [C] ; Get the directory ID
 	IFN A, [present_working_directory] ; And make sure the file is in our directory
 		SET PC, command_catf_end
-	
+
 	ADD C, 1
 	SET A, [C] ; Get the file flags
 	AND A, 0x0008 ; Check if the file is executable
 	IFN A, 0
 		SET PC, command_catf_end
-		
+
 	ADD C, 17 ; skip over the filename to the file start pointer
 	SET A, [C] ; Store the file start in A
 	ADD C, 1 ; Move to the file end pointer
 	SET B, [C] ; Store the file end in B
 	SUB B, A ; Get the length into B
-	
+
 	SET PUSH, B
 	SET PUSH, A
 	JSR [0x100F] ; page_alloc
@@ -793,17 +794,17 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	
+
 :command_echof
 	SET [ack_command], 1
 	SET PUSH, A
 	SET PUSH, B
-	
+
 	SET A, input_text_buffer
 	ADD A, 5
 	SET B, command_parameter_buffer
 	JSR [0x1017]
-	
+
 	SET A, command_parameter_buffer
 	JSR [0x101F] ; Newline (hack!)
 	JSR [0x101E]
@@ -934,28 +935,28 @@
 	SET PC, POP
 
 ; Misc data
-:text_versionoutput dat "Atlas-Shell v0.4.2", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.2", 0x0A, 0x00
 :text_prompt dat " $> ", 0x00
-:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
+:text_unrecognized dat "Unrecognized command", 0x00
 :input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
 :command_version_os dat "os", 0
 :command_version_separator dat ".", 0
-:command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
-:command_load_unknown dat "Failed to load application", 0xA0, 0x00
-:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
-:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_load_help dat "Syntax: load [appID]", 0x0a, 0x00
+:command_load_unknown dat "Failed to load application", 0x0a, 0x00
+:command_kill_forbidden dat "Cannot kill process: Forbidden", 0x0a, 0x00
+:command_kill_help dat "Syntax: kill [last|procID]", 0x0a, 0x00
 :command_kill_last dat "last", 0
-:command_list_info dat "Process list:", 0xA0, 0x00
+:command_list_info dat "Process list:", 0x0a, 0x00
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
 :command_ls_row dat "                                ", 0x00
 :command_cd_back dat "..", 0
 :command_cd_root dat "/", 0
-:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
-:command_cd_unknown dat " doesnt exist", 0xA0, 0
-:command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0x0a, 0x00
+:command_cd_unknown dat " doesnt exist", 0x0a, 0
+:command_runfile_notexe_text dat "File is not executable", 0x0a, 0x00
 
 ; Command list
 :command_clear dat "clear", 0

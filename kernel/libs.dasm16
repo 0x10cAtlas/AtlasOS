@@ -113,8 +113,8 @@
 		
 	SET Z, Y
 	AND Z, 0x0001 ; ART
-	IFN Z, 0
-		SET PC, lib_load_art
+;	IFN Z, 0
+;		SET PC, lib_load_art
 	
 	; Todo: Implement unified ART parster
 	; Todo: Add entry to the lib table
@@ -213,7 +213,7 @@
 	SET PC, POP
 	
 :lib_unload_function
-	db "lib_unload", 0
+;	db "lib_unload", 0
 	
 ; Finds a library in the library list
 ; A -> Pointer to the name of the library

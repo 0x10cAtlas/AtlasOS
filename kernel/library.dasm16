@@ -18,7 +18,7 @@
       SET C, [A]
       IFE C, 0x0000
           SET PC, text_out_end
-      IFE C, 0x00A0
+      IFE C, 0x00A
           SET PC, text_out_nl
       AND C, 0x00FF
       BOR C, B
@@ -45,6 +45,69 @@
 :text_out_end
       SET [video_cur], I
       SET I, POP
+	  SET X, POP
+      SET C, POP
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+; prints a text to stdout with a length limitation
+; A: start address of the text
+; B: number of a characters
+:text_out_length
+      SET PUSH, A
+      SET PUSH, B
+      SET PUSH, C
+	  SET PUSH, X
+	  SET PUSH, Y
+      SET PUSH, I
+
+	  SET Y, B
+
+      SET B, [video_col]
+      SET I, [video_cur]
+
+	  SET X, [video_width]
+	  MUL X, [video_height]
+	  ADD X, [video_mem]
+
+
+:text_out_length_loop
+	  IFE Y, 1
+		SET PC, text_out_length_end
+      SET C, [A]
+      IFE C, 0x0000
+          SET PC, text_out_length_end
+      IFE C, 0x00A
+          SET PC, text_out_length_nl
+      AND C, 0x00FF
+      BOR C, B
+      SET [I], C
+      ADD A, 1
+	  SUB Y, 1
+      ADD I, 1
+      IFE I, X
+          SET PC, text_out_length_scroll
+      SET PC, text_out_length_loop
+
+:text_out_length_scroll
+      SET [video_cur], I
+      JSR scroll
+      SET I, [video_cur]
+      SET PC, text_out_length_loop
+
+:text_out_length_nl
+      SET [video_cur], I
+      JSR newline
+      SET I, [video_cur]
+      ADD A, 1
+	  SUB Y, 1
+      SET PC, text_out_length_loop
+
+:text_out_length_end
+      SET [video_cur], I
+      SET I, POP
+	  SET Y, POP
 	  SET X, POP
       SET C, POP
       SET B, POP
@@ -83,7 +146,7 @@
       SET X, [video_mem] ; Set X to the video memory
       SET Y, [video_mem]
 	  ADD Y, 0x0020 ; Set Y to the second line in the video memory
-	  
+
 	  SET A, [video_width]
 	  MUL A, [video_height]
 	  ADD A, [video_mem]
@@ -142,23 +205,23 @@
       SET B, POP
       SET A, POP
       SET PC, POP
-	
+
 ; Clamps the value to within the screen memory map
 ; A -> Value input
-; A <- Clamped value	
+; A <- Clamped value
 :clamp_to_screen
 	SET PUSH, B
-	
+
 	SET B, [video_width]
 	MUL B, [video_height]
 	ADD B, [video_mem]
-	
+
 	IFG A, B
 		SET A, B
-	
+
 	SET B, POP
 	SET PC, POP
-	
+
 ; Puts a single character onto the screen
 ; A -> X coordinate
 ; B -> Y coordinate
@@ -176,7 +239,7 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	
+
 ; Gets a single character from the screen
 ; A -> X coordinate
 ; B -> Y coordinate
@@ -262,7 +325,7 @@
      SET B, POP
      SET A, POP
      SET PC, POP
-	 
+
 ; PUSHes all registers to the stack
 :pusha
      SET [pushpop_buffer], POP ; Save jump-back-address
@@ -375,7 +438,7 @@ SET PC, POP
     SUB C, [B]
     SET B, POP
     SET A, POP
-    SET PC, POP 
+    SET PC, POP
 
 ; strlen
 ; A -> Address of the string buffer
@@ -385,16 +448,17 @@ SET PC, POP
 
 	SET B, 0
 :strlen_loop
+	IFE [A], 0
+		SET PC, strlen_end
 	ADD A, 1
-	IFN [A], 0
-		SET PC, strlen_loop
+	set PC, strlen_loop
 :strlen_end
 	SET B, A
 	SUB B, PEEK
 
 	SET A, POP
 	SET PC, POP
-	
+
 ; Reads a line of chars from the keyboard
 ; A: String buffer address
 ; B: Length
@@ -409,9 +473,7 @@ SET PC, POP
 	ADD B, A
 
 :read_line_loop
-	INT 0xFEDC
-	;JSR proc_suspend
-	
+
 	IFE [C], 0x11 ; 13 -> 17 per keyboard HW (enter)
 		SET PC, read_line_end
 	IFE [C], 0x10 ; 8 -> 16 per keyboard HW (backspace)
@@ -442,7 +504,7 @@ SET PC, POP
 		JSR scroll
 	SET B, POP
 	SET A, POP
-
+	SET [C], 0
 	ADD A, 1
 
 :read_line_skip
@@ -458,7 +520,8 @@ SET PC, POP
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	
+
+
 	SET PC, read_line_loop
 
 :read_line_backspace
@@ -487,6 +550,7 @@ SET PC, POP
 	SET B, POP
 	SET A, POP
 	SUB A, 1
+	SET [C], 0
 	SET PC, read_line_skip
 
 :read_line_end
@@ -502,7 +566,7 @@ SET PC, POP
 	SET C, POP
 	SET B, POP
 	SET A, POP
-
+	SET [C], 0
 	; Add the null terminator
 	SET [A], 0
 	; Pop everything back out
@@ -510,7 +574,7 @@ SET PC, POP
 	SET B, POP
 	SET C, POP
 	SET PC, POP
-	
+
 ; Sleeps for some cycles
 ; Max of 3000 ms otherwise B will overflow
 ; CAUTION! This sleep is blocking. It does not release to other processes during the sleep
@@ -537,4 +601,61 @@ SET PC, POP
 	XOR A, 1273
 	SET [entropy], A
 	SET PC, POP
-	
+
+;copies data from a memory location to the stack ie in reverse
+;A -> memory location
+;B -> number of words
+:stackpush
+SET [stackpush_pc], PEEK
+SUB SP, B
+ADD SP, 1
+SET PUSH, A
+SET PUSH, B
+ADD SP, B
+ADD SP, 2
+:stackpush_loop
+IFE B, 0
+	SET PC, stackpush_end
+SET PUSH, [A]
+ADD A, 1
+SUB B, 1
+SET PC, stackpush_loop
+
+:stackpush_end
+SUB SP, 2
+SET B, POP
+SET A, POP
+SET PC, [stackpush_pc]
+
+:stackpush_pc
+dat 0
+
+;copies data from the stack to a memory location
+;A -> memory location
+;B -> number of words
+:stackpull
+SET [stackpull_pc], peek
+SET [stackpull_A], A
+SET [stackpull_B], B
+ADD A, B
+SUB A, 1
+ADD SP, 1
+:stackpull_loop
+IFE B, 0
+SET PC, stackpull_end
+SET [A], POP
+SUB A, 1
+SUB B, 1
+SET PC, stackpull_loop
+
+:stackpull_end
+SET B, [stackpull_A]
+SET A, [stackpull_B]
+SET PC, [stackpull_pc]
+
+:stackpull_pc
+dat 0
+:stackpull_A
+dat 0
+:stackpull_B
+dat 0
