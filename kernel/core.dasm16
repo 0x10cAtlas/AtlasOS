@@ -13,6 +13,7 @@ SET PC, kernel_boot
 #include "memory.dasm16"
 #include "messages.dasm16"
 #include "process.dasm16"
+#include "math.dasm16"
 
 :kernel_boot
 JSR bios_boot
