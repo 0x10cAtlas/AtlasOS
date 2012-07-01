@@ -2,6 +2,9 @@
 ; A: From Addr
 ; B: Length
 :mem_clear
+      IFE B, 0
+      SET PC, POP
+
       SET PUSH, A
       SET PUSH, B
 
@@ -24,6 +27,8 @@
 ; B -> dest
 ; C -> length
 :mem_copy
+	IFE C, 0
+	SET PC, POP
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C

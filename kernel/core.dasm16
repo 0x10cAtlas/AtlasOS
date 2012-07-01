@@ -17,8 +17,6 @@ SET PC, kernel_boot
 :kernel_boot
 JSR bios_boot
 
-; Set the interrupt handler first
-IAS kernel_interrupt_handler
 
 ; clear screen (for emulator)
 JSR clear
@@ -31,35 +29,23 @@ JSR text_out
 SET A, text_start
 JSR text_out
 
-; Reserve kernel-memory
+; Reserve all operating system code including api space
 SET X, 0
-:kernel_mem
-IFG X, kernel_end
-    SET PC, kernel_mem_end
-SET A, X
-JSR page_reserve
-ADD X, 1024
-SET PC, kernel_mem
-:kernel_mem_end
-
-; Reserve misc-memory
-SET X, os_content
-:os_content_mem
+:code_mem
 IFG X, os_content_end
-    SET PC, os_content_mem_end
+    SET PC, code_mem_end
 SET A, X
 JSR page_reserve
 ADD X, 1024
-SET PC, os_content_mem
-:os_content_mem_end
+SET PC, code_mem
+:code_mem_end
+
 
 ; Reserve stack-memory
 SET A, 0xFFFF
 JSR page_reserve
 
-; Reserve the API space
-SET A, 0x1000
-JSR page_reserve
+
 
 SET X, 0
 
@@ -72,63 +58,34 @@ JSR mem_copy
 
 ; Clear out a few things
 SET [keyboard_buffers_exclusive], 0
-SET [keyboard_oldvalue], 0
 JSR keyboard_unregister_all
 
 ; OS ready message
 SET A, text_start_ok
 JSR text_out
 
+; Set the interrupt handler last since booting has finished
+IAS kernel_interrupt_handler
 ; Main kernel loop
 :kernel_loop
 
-	; Call the keyboard driver
-	JSR driver_keyboard
-	
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
 
 	; Release back to other running processes
-	INT 0xFEDC
-	;JSR proc_suspend
-	
+	INT [proc_suspend_int]
+
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background
 :kernel_watchdog_checkalone
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
+	SET A, proc_table
+	ADD A, 4
+	IFN [A], 2
+	SET PC, kernel_watchdog_loadshell
 
-	SET C, kernel_watchdog_proc_list_buffer
-	SET A, kernel_watchdog_helper
-	JSR proc_callback_list
-	SET C, kernel_watchdog_proc_list_buffer
-	ADD C, 1
-	IFE [C], 0
-		JSR kernel_watchdog_loadshell
-
-	; Clear the proc buffer
-	SET C, kernel_watchdog_proc_list_buffer
-	SET [C], 0
-	ADD C, 1
-	SET [C], 0
-
-	SET A, POP
-	SET B, POP
-	SET C, POP
-	SET PC, POP
-:kernel_watchdog_helper
-	IFE C, kernel_watchdog_proc_list_buffer_end
-		SET PC, POP
-	SET [C], A
-	ADD C, 1
 	SET PC, POP
 :kernel_watchdog_loadshell
-	; This is a workaround so the shell doesn't freak out
-	; when there is no data in the keyboard buffer
-	SET [keyboard_oldvalue], 0xFFFF
-	; Now start the shell
 	SET A, AtlasShell
 	SET B, AtlasShell_end
 	SUB B, AtlasShell

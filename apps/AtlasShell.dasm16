@@ -43,7 +43,7 @@
 	SET A, input_text_buffer
 	JSR [0x1019]
 	IFE B, 0
-		SET PC, AtlasShell_loop_wait
+		SET PC, AtlasShell_newline
 
 	; Parse out the primary command
 	SET A, input_text_buffer
@@ -121,18 +121,18 @@
 	IFN [ack_command], 1
 		JSR command_unknownf
 :AtlasShell_loop_wait
-	; Pause then loop back to start of process
-	;JSR [0x1002]
-	;INT [clock_address] ; FIX THIS ASAP!
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
+:AtlasShell_newline
+	JSR [0x101f]
+	SET PC, AtlasShell_loop_wait
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
-	JSR [0x101F]
 	SET a, text_unrecognized
 	JSR [0x101E]
+	JSR [0x101F]
 	SET pc, pop
 
 ; Command function to display version info
