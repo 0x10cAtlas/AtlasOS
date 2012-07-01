@@ -18,7 +18,7 @@
       SET C, [A]
       IFE C, 0x0000
           SET PC, text_out_end
-      IFE C, 0x00A0
+      IFE C, 0xA
           SET PC, text_out_nl
       AND C, 0x00FF
       BOR C, B
@@ -45,6 +45,69 @@
 :text_out_end
       SET [video_cur], I
       SET I, POP
+	  SET X, POP
+      SET C, POP
+      SET B, POP
+      SET A, POP
+      SET PC, POP
+
+; prints a text to stdout with a length limitation
+; A: start address of the text
+; B: number of a characters
+:text_out_length
+      SET PUSH, A
+      SET PUSH, B
+      SET PUSH, C
+	  SET PUSH, X
+	  SET PUSH, Y
+      SET PUSH, I
+
+	  SET Y, B
+
+      SET B, [video_col]
+      SET I, [video_cur]
+
+	  SET X, [video_width]
+	  MUL X, [video_height]
+	  ADD X, [video_mem]
+
+
+:text_out_length_loop
+	  IFE Y, 1
+		SET PC, text_out_length_end
+      SET C, [A]
+      IFE C, 0x0000
+          SET PC, text_out_length_end
+      IFE C, 0xA
+          SET PC, text_out_length_nl
+      AND C, 0x00FF
+      BOR C, B
+      SET [I], C
+      ADD A, 1
+	  SUB Y, 1
+      ADD I, 1
+      IFE I, X
+          SET PC, text_out_length_scroll
+      SET PC, text_out_length_loop
+
+:text_out_length_scroll
+      SET [video_cur], I
+      JSR scroll
+      SET I, [video_cur]
+      SET PC, text_out_length_loop
+
+:text_out_length_nl
+      SET [video_cur], I
+      JSR newline
+      SET I, [video_cur]
+      ADD A, 1
+	  SUB Y, 1
+      SET PC, text_out_length_loop
+
+:text_out_length_end
+      SET [video_cur], I
+      SET I, POP
+	  SET Y, POP
 	  SET X, POP
       SET C, POP
       SET B, POP
@@ -388,8 +451,7 @@ SET PC, POP
 	IFE [A], 0
 		SET PC, strlen_end
 	ADD A, 1
-	IFN [A], 0
-		SET PC, strlen_loop
+	set PC, strlen_loop
 :strlen_end
 	SET B, A
 	SUB B, PEEK

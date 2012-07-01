@@ -934,28 +934,28 @@
 	SET PC, POP
 
 ; Misc data
-:text_versionoutput dat "Atlas-Shell v0.4.2", 0xA0, 0x00
+:text_versionoutput dat "Atlas-Shell v0.4.2", 0xA, 0x00
 :text_prompt dat " $> ", 0x00
-:text_unrecognized dat "Unrecognized command", 0xA0, 0x00
+:text_unrecognized dat "Unrecognized command", 0xA, 0x00
 :input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
 :command_version_os dat "os", 0
 :command_version_separator dat ".", 0
-:command_load_help dat "Syntax: load [appID]", 0xA0, 0x00
-:command_load_unknown dat "Failed to load application", 0xA0, 0x00
-:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA0, 0x00
-:command_kill_help dat "Syntax: kill [last|procID]", 0xA0, 0x00
+:command_load_help dat "Syntax: load [appID]", 0xA, 0x00
+:command_load_unknown dat "Failed to load application", 0xA, 0x00
+:command_kill_forbidden dat "Cannot kill process: Forbidden", 0xA, 0x00
+:command_kill_help dat "Syntax: kill [last|procID]", 0xA, 0x00
 :command_kill_last dat "last", 0
-:command_list_info dat "Process list:", 0xA0, 0x00
+:command_list_info dat "Process list:", 0xA, 0x00
 :command_parameter_buffer dat "                                ", 0x00
 :command_number_buffer dat "     ", 0x00
 :command_ls_row dat "                                ", 0x00
 :command_cd_back dat "..", 0
 :command_cd_root dat "/", 0
-:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA0, 0x00
-:command_cd_unknown dat " doesnt exist", 0xA0, 0
-:command_runfile_notexe_text dat "File is not executable", 0xA0, 0x00
+:command_cd_help dat "Syntax : cd [directory|..|/]", 0xA, 0x00
+:command_cd_unknown dat " doesnt exist", 0xA, 0
+:command_runfile_notexe_text dat "File is not executable", 0xA, 0x00
 
 ; Command list
 :command_clear dat "clear", 0

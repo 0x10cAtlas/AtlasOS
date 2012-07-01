@@ -20,17 +20,17 @@ SET PC, data_end
 :preemptive_enabled dat 0x0000
 
 :text_start dat "AtlasOS v0.6.2 starting... ", 0x00
-:text_start_ok dat "OK", 0xA0, 0x00
+:text_start_ok dat "OK", 0xA, 0x00
 :text_logo
-dat "      ___   __   __", 0xA0
-dat "     /   | / /_ / /____ ______", 0xA0
-dat "    / /| |/ __// // __ `/ ___/", 0xA0
-dat "   / ___ / /  / // /_/ (__  )", 0xA0
-dat "  /_/  |_\\_/_/_/ \\__,_/____/", 0xA0
-dat "         / __ \\/ ___/", 0xA0
-dat "        / / / /\\__ \\", 0xA0
-dat "       / /_/ /___/ /", 0xA0
-dat "       \\____//____/", 0xA0, 0x00
+dat "      ___   __   __", 0xA
+dat "     /   | / /_ / /____ ______", 0xA
+dat "    / /| |/ __// // __ `/ ___/", 0xA
+dat "   / ___ / /  / // /_/ (__  )", 0xA
+dat "  /_/  |_\\_/_/_/ \\__,_/____/", 0xA
+dat "         / __ \\/ ___/", 0xA
+dat "        / / / /\\__ \\", 0xA
+dat "       / /_/ /___/ /", 0xA
+dat "       \\____//____/", 0xA, 0x00
 :text_logo_end
 ; Bitmap of the OS-managed memory, occupied pages are marked by 1's.
 ; Total of 64kB of memory supported here - each word covers 16kB.
