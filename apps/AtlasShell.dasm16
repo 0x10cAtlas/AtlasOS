@@ -112,6 +112,13 @@
 	JSR [0x101A]
 	IFE C, 0
 		JSR command_echof
+	
+	; Check for the 'help' command
+	SET A, command_help
+	SET B, command_parameter_buffer
+	JSR [0x101A]
+	IFE C, 0
+		JSR command_helpf
 		
 	; Check if we're trying to run a file
 	IFN [ack_command], 1
@@ -812,6 +819,16 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
+	
+:command_helpf
+	SET [ack_command], 1
+	SET PUSH, A
+	SET A, command_help_list
+	JSR [0x101E]
+	
+	SET A, POP
+	SET PC, POP
+	
 
 :AtlasShell_die
 	SET A, input_buffer
@@ -936,7 +953,7 @@
 ; Misc data
 :text_versionoutput dat "Atlas-Shell v0.4.2", 0xA, 0x00
 :text_prompt dat " $> ", 0x00
-:text_unrecognized dat "Unrecognized command", 0xA, 0x00
+:text_unrecognized dat "Unrecognized command", 0x00
 :input_text_buffer dat "                                ", 0x00
 :input_buffer dat 0x0000
 :ack_command dat 0x00
@@ -956,6 +973,7 @@
 :command_cd_help dat "Syntax : cd [directory|..|/]", 0xA, 0x00
 :command_cd_unknown dat " doesnt exist", 0xA, 0
 :command_runfile_notexe_text dat "File is not executable", 0xA, 0x00
+:command_help_list dat "Available commands:", 0xA, "For command syntax and usage:", 0xA, "[command] help", 0xA, "clear", 0xa, "version", 0xA, "load", 0xa, "kill", 0xA, "list", 0xA, "ls", 0xA, "cd", 0xA, "cat", 0xA, "echo", 0xA, 0x0
 
 ; Command list
 :command_clear dat "clear", 0
@@ -972,6 +990,8 @@
 :command_ln dat "ln", 0 ; UNFINISHED
 :command_mv dat "mv", 0 ; UNFINISHED
 :command_echo dat "echo", 0
+:command_help dat "help", 0
+
 
 ; Process list buffer. Used for the 'kill' command
 :proc_list_buffer
