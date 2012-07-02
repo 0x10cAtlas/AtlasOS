@@ -1,3 +1,4 @@
+SET PC, kernel_boot
 :data
 SET PC, data_end
 

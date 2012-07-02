@@ -1,3 +1,3 @@
 #!/bin/sh
 
-mono organic.exe --working-directory kernel/ --input-file kernel/core.dasm16  --output-file AtlasOS.bin --listing Atlas_listing.txt
+mono organic.exe --input-file make.dasm16 --output-file AtlasOS.bin --listing Atlas_listing.txt

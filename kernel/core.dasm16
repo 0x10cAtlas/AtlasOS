@@ -1,23 +1,7 @@
-#include "AtlasOS 0.6.2"
-
-#include "../include/kernel.inc"
-
-SET PC, kernel_boot
-
 ; Kernel
-#include "drivers.dasm16"
-#include "filesystem.dasm16"
-#include "graphics.dasm16"
-#include "interrupts.dasm16"
-#include "library.dasm16"
-#include "memory.dasm16"
-#include "messages.dasm16"
-#include "process.dasm16"
-#include "math.dasm16"
 
 :kernel_boot
 JSR bios_boot
-
 
 ; clear screen (for emulator)
 JSR clear
@@ -112,15 +96,4 @@ dat "                                                                           
 dat "                                                                                                                                "
 dat "                                                                                                                                "
 dat "                                                                                                                                "
-:api_padding_end
-	
-; Apps
-:os_content
-#include "../apps/AtlasShell.dasm16"
-#include "../apps/AtlasText.dasm16"
-#include "../apps/apps.dasm16"
-
-; Virtual Filesystem
-#include "../misc/vfs.dasm16"
-:os_content_end
-	
+:api_padding_end	

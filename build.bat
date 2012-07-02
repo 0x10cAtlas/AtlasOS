@@ -1,2 +1,2 @@
-@organic --working-directory kernel/ --input-file kernel/core.dasm16 --output-file AtlasOS.bin
+@organic --input-file make.dasm16 --output-file AtlasOS.bin
 @pause
