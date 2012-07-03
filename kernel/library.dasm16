@@ -699,3 +699,84 @@ SET PC, POP
 
 :gui_box_corners
 dat 0,0 , 0,0
+
+;copies data from a memory location to the stack ie in reverse
+;A -> memory location
+;B -> number of words
+:stackpush
+SET [stackpush_pc], PEEK
+SUB SP, B
+ADD SP, 1
+SET PUSH, A
+SET PUSH, B
+ADD SP, B
+ADD SP, 2
+:stackpush_loop
+IFE B, 0
+	SET PC, stackpush_end
+SET PUSH, [A]
+ADD A, 1
+SUB B, 1
+SET PC, stackpush_loop
+
+:stackpush_end
+SUB SP, 2
+SET B, POP
+SET A, POP
+SET PC, [stackpush_pc]
+
+:stackpush_pc
+dat 0
+
+;copies data from the stack to a memory location
+;A -> memory location
+;B -> number of words
+:stackpull
+SET [stackpull_pc], peek
+SET [stackpull_A], A
+SET [stackpull_B], B
+ADD A, B
+SUB A, 1
+ADD SP, 1
+:stackpull_loop
+IFE B, 0
+SET PC, stackpull_end
+SET [A], POP
+SUB A, 1
+SUB B, 1
+SET PC, stackpull_loop
+
+:stackpull_end
+SET B, [stackpull_A]
+SET A, [stackpull_B]
+SET PC, [stackpull_pc]
+
+:stackpull_pc
+dat 0
+:stackpull_A
+dat 0
+:stackpull_B
+dat 0
+
+; press any key to
+; A -> string to finish the sentence
+; B -> memory address to continue program
+; C -> keyboard input buffer
+:pakto
+ADD SP, 1
+SET PUSH, A
+SET [C], 0
+
+jsr newline
+SET A, pakto_text1
+JSR text_out
+
+SET A, POP
+jsr text_out
+
+:pakto_loop
+IFE [C], 0
+SET PC, pakto_loop
+SET PC, B
+
+:pakto_text1 dat "Press any key to ", 0

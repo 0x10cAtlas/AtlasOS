@@ -21,9 +21,9 @@
 		IFE B, 0x12D0 ; Generic Clock (upper 16 bits)
 			JSR bios_clock_init
 			
-	;IFE A, 0x4CAE ; HMD2043 floppy disc drive (lower 16 bits)
-	;	IFE B, 0x74FA ; HMD2043 floppy disc drive (upper 16 bits)
-	;		JSR bios_floppy_init
+	IFE A, 0x4CAE ; HMD2043 floppy disc drive (lower 16 bits)
+		IFE B, 0x74FA ; HMD2043 floppy disc drive (upper 16 bits)
+			JSR bios_floppy_init
 			
 	IFN Z, 0
 		SET PC, bios_discover_hardware_loop
