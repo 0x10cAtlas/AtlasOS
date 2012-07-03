@@ -600,4 +600,102 @@ SET PC, POP
 	XOR A, 1273
 	SET [entropy], A
 	SET PC, POP
-	
+
+; draws a box limited to 32x12 resolution using default box charaters
+; A, B -> coordinates of first corner
+; X, Y -> coordinates of second corner ie on a diagonal
+; Z-> colour
+:gui_box
+IFG A, 0x1f
+SET PC, POP
+IFG B, 0xB
+SET PC, POP
+IFG X, 0x1f
+SET PC, POP
+IFG Y, 0xB
+SET PC, POP
+IFE A, X
+SET PC, POP
+IFE B, Y
+SET PC, POP
+
+jsr pusha
+
+IFG A, X
+SET PC, gui_box_l1
+SET [gui_box_corners], A
+SET [gui_box_corners+2], X
+SET PC, gui_box_l2
+
+:gui_box_l1
+SET [gui_box_corners], X
+SET [gui_box_corners+2], A
+:gui_box_l2
+IFG B, Y
+SET PC, gui_box_l3
+SET [gui_box_corners+1], B
+SET [gui_box_corners+3], Y
+SET PC, gui_box_l4
+:gui_box_l3
+SET [gui_box_corners+1], Y
+SET [gui_box_corners+3], B
+:gui_box_l4
+
+SET A, [gui_box_corners]
+SET B, [gui_box_corners+1]
+SET C, 0x9
+BOR C, Z
+jsr char_put
+
+ADD A, 1
+SET C, 0x7
+BOR C, Z
+:gui_box_l5
+jsr char_put
+ADD A, 1
+IFN A, [gui_box_corners+2]
+SET PC, gui_box_l5
+
+SET C, 0xA
+BOR C, Z
+jsr char_put
+
+ADD B, 1
+SET C, 0x8
+BOR C, Z
+:gui_box_l6
+jsr char_put
+ADD B, 1
+IFN B, [gui_box_corners+3]
+SET PC, gui_box_l6
+
+SET C, 0xB
+BOR C, Z
+jsr char_put
+
+SUB A, 1
+SET C, 0x7
+BOR C, Z
+:gui_box_l7
+jsr char_put
+SUB A, 1
+IFN A, [gui_box_corners]
+SET PC, gui_box_l7
+
+SET C, 0xC
+BOR C, Z
+JSR char_put
+SUB B, 1
+SET C, 0x8
+BOR C, Z
+:gui_box_l8
+jsr char_put
+SUB B, 1
+IFN B, [gui_box_corners+1]
+SET PC, gui_box_l8
+
+jsr popa
+SET PC, POP
+
+:gui_box_corners
+dat 0,0 , 0,0
