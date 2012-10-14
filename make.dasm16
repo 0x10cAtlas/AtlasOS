@@ -16,6 +16,7 @@
 ; Apps
 .include "apps/AtlasShell.dasm16"
 .include "apps/AtlasText.dasm16"
+.include "apps/asm.dasm16
 .include "apps/apps.dasm16"
 
 ; Virtual Filesystem

@@ -732,7 +732,6 @@ DIV B, [floppy_words_per_sector] ; divide position of hat sector in words by num
 SET C, EX
 DIV A, [floppy_words_per_sector]
 ADD A, C
-SUB A, 1 ; returns to A the floppy sector that the hat sector lies in
 SET C, POP
 SET B, POP
 SET PC, POP
@@ -743,7 +742,6 @@ SET PC, POP
 SET PUSH, B
 SET PUSH, A
 JSR HAT_sector_position
-ADD A, 1
 SET B, A
 SET A, POP
 MUL A, [HAT_sector_size]
