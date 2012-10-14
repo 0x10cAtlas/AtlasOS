@@ -73,7 +73,7 @@
 
 
 :text_out_length_loop
-	  IFE Y, 1
+	  IFE Y, 0
 		SET PC, text_out_length_end
       SET C, [A]
       IFE C, 0x0000
@@ -298,6 +298,7 @@
 
 ; Takes a text buffer containing an integer and converts it to an integer
 ; A: Address of text buffer
+; C <- value 
 :atoi
      SET PUSH, A
      SET PUSH, B
@@ -699,6 +700,73 @@ SET PC, POP
 
 :gui_box_corners
 dat 0,0 , 0,0
+
+:gui_box_text ; creates a box using the given coordinates and prints a string inside the box. 
+; A, B -> coordinates of first corner
+; X, Y -> coordinates of second corner ie on a diagonal
+; I -> text string. 
+; Z-> colour of box
+IFG A, 0x1f
+SET PC, POP
+IFG B, 0xB
+SET PC, POP
+IFG X, 0x1f
+SET PC, POP
+IFG Y, 0xB
+SET PC, POP
+IFE A, X
+SET PC, POP
+IFE B, Y
+SET PC, POP
+
+jsr gui_box
+jsr pusha
+
+SET A, [gui_box_corners]
+SET B, [gui_box_corners+1]
+SET X, [gui_box_corners+2]
+SET Y, [gui_box_corners+3]
+
+SUB X, A
+IFE X, 1
+	SET PC, gui_box_text_end
+SUB Y, B
+IFE Y, 1
+	SET PC, gui_box_text_end
+SUB X, 1
+SUB Y, 1
+SET Z, X
+MUL Z, B ; maximum number of characters that can be places in box. 
+SET PUSH, X ; width 
+SET PUSH, Y ; rows
+SET A, [gui_box_corners]
+ADD A, 1
+SET B, [gui_box_corners+1]
+ADD B, 1
+MUL B, [video_width]
+ADD A, B
+ADD A, [video_mem]
+SET [video_cur], A
+SET J, A ; start of first row
+:gui_box_text_loop1
+IFE PEEK, 0
+	SET PC, gui_box_text_end
+SET [video_cur], J
+SET A, I
+SET B, PICK 1
+JSR text_out_length
+SUB PEEK, 1
+ADD J, [video_width]
+ADD I, PICK 1
+SET PC, gui_box_text_loop1
+
+
+
+:gui_box_text_end
+ADD SP, 2
+jsr popa
+set pc, pop
+
 
 ;copies data from a memory location to the stack ie in reverse
 ;A -> memory location
