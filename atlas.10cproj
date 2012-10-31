@@ -25,6 +25,8 @@
     <file path="kernel\math.dasm16" />
     <file path="apps\AtlasShell.dasm16" />
     <file path="apps\AtlasText.dasm16" />
+    <file path="misc\dcpu-vm.dasm16" />
+    <file path="misc\hello_world.dasm16" />
     <file path="apps\apps.dasm16" />
     <file path="misc\vfs.dasm16" />
   </files>

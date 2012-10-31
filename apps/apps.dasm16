@@ -5,4 +5,5 @@
 :application_table
 :app1 dat "AtlasText", 0, AtlasText, AtlasText_end
 :app2 dat "AtlasShell", 0, AtlasShell, AtlasShell_end
+:app3 dat "dcpu_vm", 0, dcpu_vm, dcpu_vm_end
 :application_table_end

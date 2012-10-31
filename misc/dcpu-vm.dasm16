@@ -1,0 +1,408 @@
+; --------------------------------------------
+; Title:   virtual
+; Author:  bungao
+; Date:    28/10/2012
+; Version: 
+; --------------------------------------------
+
+;dcpu virtual machine
+
+;memory based registers
+;no hardware interupts
+:dcpu_vm
+set [reg_pc], [code_start]
+JSR [0x100f] ; page allocate for stack
+add a, 1024
+set [reg_sp], a
+
+; Register our buffer with the driver, to remove kernel screen access
+IAQ 1
+	SET A, dcpu_vm_input
+	; And ask for exclusive keyboard access
+	SET B, 1
+	JSR [0x1026] ; keyboard_register
+IAQ 0
+
+:virtual_machine_start
+add [cyclecounter], 1
+ife [reg_pc], [code_end]
+	set pc, virtual_machine_end
+set a, [reg_PC]
+set [val_word], [a]
+set a , [val_word]
+and a, 0x1f
+set [val_op], a
+set a, [val_word]
+and a, 0x3e0
+set [val_B], a
+set a, [val_word]
+and a, 0xfc00
+set [val_A], a
+
+:decode_val_A
+	set a, [val_A]
+	shr a, 10
+	ifl a, 8
+		set pc, decode_val_A_1
+	ifl a, 0x10
+		set pc, decode_val_A_2
+	ifl a, 0x18
+		set pc, decode_val_A_3
+	ife a, 0x1f
+		set pc, decode_val_A_nw
+	ife a, 0x1e
+		set pc, decode_val_A_nwr
+	ifg a, 0x1a
+	ifl a, 0x1e
+		set pc, decode_val_A_SPPCEX
+	ife a, 0x1a
+		set pc, decode_val_A_pick
+	ife a, 0x19
+		set pc, decode_val_A_peek
+	ife a, 0x18
+		set pc, decode_val_A_pop
+	ifg a, 0x1f
+		set pc, decode_val_A_lit
+
+:decode_val_A_1		
+	set b, regs_AJ 
+	add b, a
+	set [addr_source], b
+	set pc, decode_val_B
+
+:decode_val_A_2
+	set b, regs_AJ
+	sub a, 0x8
+	add b, a
+	set [addr_source], [b]
+	set pc, decode_val_b
+	
+:decode_val_A_3
+	set b, [reg_PC]
+	set b, [b+1] ; next word value
+	sub a, 0x10
+	set c, [a + regs_AJ] ; c = register value
+	add b, c
+	set [addr_source], b
+	add [reg_PC], 1
+	set pc, decode_val_B
+	
+:decode_val_A_SPPCEX
+	set b, reg_SP
+	sub a, 0x1b
+	add b, a
+	set [addr_source], b
+	set pc, decode_val_B
+	
+:decode_val_A_nw
+	set b, [reg_PC]
+	add b, 1
+	set [addr_source], b
+	add [reg_PC], 1
+	set pc, decode_val_B
+	
+:decode_val_A_nwr
+	set b, [reg_PC]
+	set [addr_source], [b + 1]
+	add [reg_PC], 1
+	set pc, decode_val_B
+	
+:decode_val_A_pop
+	set b, [reg_sp]
+	set [addr_source], b
+	add [reg_sp], 1
+	set pc, decode_val_B
+	
+:decode_val_A_peek
+	set [addr_source], [reg_sp]
+	set pc, decode_val_B
+	
+:decode_val_A_pick
+	set c, [reg_PC]
+	set c, [c+1]
+	set b, [reg_sp]
+	add b, c
+	set [addr_source], b
+	set pc, decode_val_B
+		
+:decode_val_A_lit
+	sub a, 0x20
+	add a, lit_table
+	set [addr_source], a
+	set pc, decode_val_B
+
+
+
+
+
+
+
+
+:decode_val_B
+	set a, [val_B]
+	shr a, 5
+
+	ifl a, 8
+		set pc, decode_val_B_1
+	ifl a, 0x10
+		set pc, decode_val_B_2
+	ifl a, 0x18
+		set pc, decode_val_B_3
+	ife a, 0x1f
+		set pc, op_end
+	ife a, 0x1e
+		set pc, decode_val_B_nwr
+	ifg a, 0x1a
+	ifl a, 0x1e
+		set pc, decode_val_B_SPPCEX
+	ife a, 0x1a
+		set pc, decode_val_B_pick
+	ife a, 0x19
+		set pc, decode_val_B_peek
+	ife a, 0x18
+		set pc, decode_val_B_push
+	ifg a, 0x1f
+		set pc, op_end
+	
+:decode_val_B_1		
+	set b, regs_AJ 
+	add b, a
+	set [addr_dest], b
+	set pc, decode_val_op
+	
+:decode_val_B_2
+	set b, regs_AJ
+	sub a, 0x8
+	add b, a
+	set [addr_dest], [b]
+	set pc, decode_val_op
+	
+:decode_val_B_3
+	set b, [reg_PC]
+	set b, [b+1] ; next word value
+	sub a, 0x10
+	set c, [a + regs_AJ] ; c = register value
+	add b, c
+	set [addr_dest], b
+	add [reg_PC], 1
+	set pc, decode_val_op
+	
+:decode_val_B_nwr
+	set b, [reg_PC]
+	set [addr_dest], [b+1]
+	add [reg_PC], 1
+	set pc, decode_val_op
+	
+:decode_val_B_SPPCEX
+	set b, reg_SP
+	sub a, 0x1b
+	add b, a
+	set [addr_dest], b
+	set pc, decode_val_op
+
+:decode_val_B_push
+	sub [reg_sp], 1
+	set [addr_dest], [reg_sp]
+	set pc, decode_val_op
+	
+:decode_val_B_peek
+	set [addr_dest], [reg_sp]
+	set pc, decode_val_op
+	
+:decode_val_B_pick
+	set c, [reg_PC]
+	set c, [c+1]
+	set b, [reg_sp]
+	add b, c
+	set [addr_dest], b
+	set pc, decode_val_op
+
+
+:decode_val_op
+	ife [skipflag], 1
+		set pc, op_end_skipped
+	
+	set b, [addr_dest]
+	set c, [addr_source]
+	set a, [val_op]
+ 
+	ife a, 0
+	set pc, decode_val_op_special
+	
+	ifg a, 0xf
+	ifl a, 0x18
+		set pc, decode_val_op_if
+	ife a, 0x1a
+		set pc, decode_val_op_adx
+	ife a, 0x1b
+		set pc, decode_val_op_sbx
+	ife a, 0x1e
+		set pc, decode_val_op_sti
+	ife a, 0x1e
+		set pc, decode_val_op_std
+		
+sub a, 1
+mul a, 3
+add a, decode_val_op_table
+set ex, [reg_EX]
+set pc, a
+
+:decode_val_op_adx
+	set ex, [reg_EX]
+	adx [b], [c]
+	set pc, op_end
+	
+:decode_val_op_sbx
+	set ex, [reg_EX]
+	adx [b], [c]
+	set pc, op_end
+	
+:decode_val_op_sti
+	sti [b], [c]
+	add [regs_AJ + 7], 1
+	add [regs_AJ + 8], 1
+	set pc, op_end
+
+:decode_val_op_std
+	sti [b], [c]
+	sub [regs_AJ + 7], 1
+	sub [regs_AJ + 8], 1
+	set pc, op_end
+	
+:decode_val_op_special
+	ifn [val_b], 0x20
+		set pc, op_end
+	sub [reg_sp], 1
+	set a, [reg_sp]
+	set c, [reg_PC]
+	add c, 1
+	set [a], c
+	set b,  [addr_source]
+	set b, [b]
+	sub b, 1
+	set [reg_pc], b
+	set pc, op_end
+	
+
+:decode_val_op_if
+sub a, 0x10
+mul a, 5
+add a, decode_val_op_table_if
+set ex, [reg_EX]
+set pc, a
+
+:decode_val_op_if_false
+	set [skipflag], 1
+	set pc, op_end
+	
+:decode_val_op_if_true
+
+:op_end
+
+set [reg_EX], EX
+ife [skipflag], 0
+ifn [addr_dest], reg_PC
+add [reg_PC], 1
+
+ife [skipflag], 1
+add [reg_pc], 1
+
+set pc, virtual_machine_start
+
+:op_end_skipped
+set [reg_EX], EX
+
+add [reg_pc], 1
+set [skipflag], 0
+set pc, virtual_machine_start
+
+:decode_val_op_table
+	SET [b], [c]
+	set pc, op_end
+	ADD [b], [c]
+	set pc, op_end
+	SUB [b], [c]
+	set pc, op_end
+	MUL [b], [c]
+	set pc, op_end
+	MLI [b], [c]
+	set pc, op_end
+	DIV [b], [c]
+	set pc, op_end
+	DVI [b], [c]
+	set pc, op_end
+	MOD [b], [c]
+	set pc, op_end
+	MDI [b], [c]
+	set pc, op_end
+	AND [b], [c]
+	set pc, op_end
+	BOR [b], [c]
+	set pc, op_end
+	XOR [b], [c]
+	set pc, op_end
+	SHR [b], [c]
+	set pc, op_end
+	ASR [b], [c]
+	set pc, op_end
+	SHL [b], [c]
+	set pc, op_end
+	
+:decode_val_op_table_if
+	IFB [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFC [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFE [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFN [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFG [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFA [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFL [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	IFU [b], [c]
+		set pc, decode_val_op_if_true
+		set pc, decode_val_op_if_false
+	
+:lit_table
+dat 0xffff, 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E
+
+
+:regs_AJ dat 0, 0, 0, 0, 0, 0, 0, 0 
+:reg_SP dat 0
+:reg_PC dat 0
+:reg_EX dat 0
+
+:val_nw dat 0
+:val_A dat 0
+:val_B dat 0
+:val_op dat 0
+:val_word dat 0
+:addr_source dat 0
+:addr_dest dat 0
+:code_start dat hello
+:code_end dat hello_world
+:cyclecounter dat 0
+:skipflag dat 0
+:dcpu_vm_input dat 0, 0
+
+:virtual_machine_end
+IAQ 1
+set a, dcpu_vm_input
+JSR [0x1027] ; keyboard_unregister
+IAQ 0
+JSR [0x1005] ; proc_kill_me
+
+
+:dcpu_vm_end
+
