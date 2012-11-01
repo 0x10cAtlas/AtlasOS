@@ -22,7 +22,7 @@ SET [HAT_header_in_paging], 1
 
 SET A, 0
 SET B, 6
-JSR filesystem_read_disk_sectors
+JSR pfloppy_read_sectors
 SET I, [floppy_paging_address]
 SET J, HAT_header
 STI [J], [I]
@@ -50,7 +50,7 @@ SET PUSH, B
 
 SET A, 0
 SET B, 6
-JSR filesystem_write_disk_sectors
+JSR pfloppy_write_sectors
 SET [HAT_header_in_paging], 0
 SET B, POP
 SET A, POP
@@ -60,7 +60,7 @@ SET PC, POP
 ;with a 256 sector size
 :HAT_format_disk_256
 
-JSR filesystem_clear_floppy_paging
+JSR pfloppy_clear_paging
 
 SET PUSH, A
 SET PUSH, B
@@ -90,7 +90,7 @@ SET PC, POP
 ;with a 1024 sector size
 :HAT_format_disk_1024
 
-JSR filesystem_clear_floppy_paging
+JSR pfloppy_clear_paging
 
 SET PUSH, A
 SET PUSH, B
@@ -300,19 +300,7 @@ SET A, POP
 SET B, POP
 SET PC, POP
 
-; clears the floppy paging space
-;currently located in Atlas before the
-:filesystem_clear_floppy_paging
-SET PUSH, A
-SET PUSH, B
 
-SET A, [floppy_paging_address]
-SET B, 0xD00
-JSR mem_clear
-
-SET B, POP
-SET A, POP
-SET PC, POP
 
 
 :HAT_error
@@ -452,7 +440,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1 ; number of sectors to read, atleast 1
-JSR filesystem_read_disk_sectors
+JSR pfloppy_read_sectors
 
 JSR HAT_sector_offset
 
@@ -518,7 +506,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1  ; number of sectors to read, atleast 1
-JSR filesystem_read_disk_sectors
+JSR pfloppy_read_sectors
 
 :HAT_write_sector_read_skip
 SET [HAT_header_in_paging], 0
@@ -548,7 +536,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1  ; number of sectors to read, atleast 1
-JSR filesystem_write_disk_sectors
+JSR pfloppy_write_sectors
 
 
 SET X, POP
@@ -774,7 +762,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1  ; number of sectors to read, atleast 1
-JSR filesystem_read_disk_sectors
+JSR pfloppy_read_sectors
 
 SET B, POP
 
@@ -803,7 +791,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1  ; number of sectors to read, atleast 1
-JSR filesystem_write_disk_sectors
+JSR pfloppy_write_sectors
 
 SET B, POP
 SET A, [HAT_write_sector_stack_A]
@@ -835,7 +823,7 @@ SET B, [HAT_sector_size]
 DIV B, [floppy_words_per_sector]
 IFE B, 0
 	ADD B, 1  ; number of sectors to read, atleast 1
-JSR filesystem_read_disk_sectors
+JSR pfloppy_read_sectors
 
 SET [HAT_header_in_paging], 0
 SET A, [HAT_read_sector_stack_A]

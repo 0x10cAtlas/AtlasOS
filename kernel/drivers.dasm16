@@ -21,8 +21,8 @@
 		IFE B, 0x12D0 ; Generic Clock (upper 16 bits)
 			JSR bios_clock_init
 			
-	IFE A, 0x4CAE ; HMD2043 floppy disc drive (lower 16 bits)
-		IFE B, 0x74FA ; HMD2043 floppy disc drive (upper 16 bits)
+	IFE A, 0x4fd5 ; M35FD floppy disc drive (lower 16 bits)
+		IFE B, 0x24c5 ; M35FD floppy disc drive (upper 16 bits)
 			JSR bios_floppy_init
 			
 	IFN Z, 0
@@ -103,35 +103,30 @@
 	SET [floppy_address], Z
 
 	;Set interrupts for floppy
-	SET A, 5 
-	SET B, [floppy_address] ; Our magic word to tell the handler we have a floppy event
-	ADD B, 1
+	SET A, 1 
+	SET X, [floppy_address] ; Our magic word to tell the handler we have a floppy event
+	ADD X, 1
 	HWI [floppy_address]
 
 	SET A, 0 ; check if media is present
 	HWI [floppy_address]
 	IFE B, 0
+		SET [floppy_inserted], 1
+	IFE B, 0
 		SET PC, bios_floppy_end
-
-	SET A, 0x0001 ;check media parameters
-	HWI [floppy_address]
-	SET [floppy_words_per_sector], B
-	SET [floppy_sectors], C
-	SET [floppy_write_locked], X
-
-	;check media quality
-	SET A, 0xFFFF
-	HWI [floppy_address]
-	SET [floppy_quality], B
+	
+	SET 
+	IFE B, 2
+	SET [floppy_write_locked], 1
 	
 	; Reserve disk paging space
-	SET X, [floppy_paging_address]
-	SET Y, X
-	ADD Y, [floppy_paging_size]
+	SET A, [floppy_paging_address]
+	SET B, A
+	ADD B, [floppy_paging_size]
 :bios_floppy_page_reserve
 	JSR page_reserve
-	ADD X, 512
-	IFN X, Y
+	ADD A, 1024
+	IFN B, A
 		SET PC, bios_floppy_page_reserve
 :bios_floppy_end
 	SET PC, POP
@@ -163,18 +158,18 @@ dat 0x0000
 
 :floppy_address
 dat 0x0000
+:floppy_media_inserted
+dat 0
 :floppy_words_per_sector
-dat 0x0000
+dat 512
 :floppy_sectors
-dat 0x0000
+dat 1440
 :floppy_write_locked
-dat 0x0000
-:floppy_quality
 dat 0x0000
 :floppy_paging_address
 dat 0xEB00
 :floppy_paging_size
-dat 0x1000 ; 8 sectors @ 512 words/sector
+dat 0x0008 ; 8 sectors 
 :floppy_page_inuseflags
 dat 0x0000 ; Bit map of RAM pages in use along with flags (4 flag bits per sector)
 dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
