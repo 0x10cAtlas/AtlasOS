@@ -45,9 +45,14 @@ JSR mem_copy
 SET [keyboard_buffers_exclusive], 0
 JSR keyboard_unregister_all
 
+;Format Disk and Create root directory
+JSR HAT_format_disk_256
+JSR HAT_inode_directory_create
+
 ; OS ready message
 SET A, text_start_ok
 JSR text_out
+
 
 ; Set the interrupt handler last since booting has finished
 IAS kernel_interrupt_handler
@@ -96,4 +101,4 @@ dat "                                                                           
 dat "                                                                                                                                "
 dat "                                                                                                                                "
 dat "                                                                                                                                "
-:api_padding_end	
+:api_padding_end	 

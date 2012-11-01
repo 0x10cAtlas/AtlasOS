@@ -77,23 +77,5 @@
 	
 ; ######END VIRTUAL FILESYSTEM FUNCTIONS######
 
-; ############PHYSICAL FILESYSTEM#############
 
-; *** Hardware Functions ***
-; Returns the sector size in words
-:filesystem_getsectorsize
 
-; Returns the total number of sectors
-:filesystem_getsectorcount
-
-; Returns the total disk size in words
-:filesystem_getdisksize
-
-; *** Software Functions ***
-; Returns the total FAT size in sectors
-:filesystem_getFATsize
-
-; Returns the total number of free sectors on the disk
-:filesystem_getfreespace
-
-; ##########END PHYSICAL FILESYSTEM###########

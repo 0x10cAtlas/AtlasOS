@@ -1,0 +1,1174 @@
+;--------------------------------------------
+; Title:   compiler
+; Author:  Nils Ole Timm
+; Date:    11.07.2012
+; Version: 1.0
+; --------------------------------------------
+:asm
+
+	; Register our buffer with the driver
+	SET A, asm_input_buffer
+	; And ask for exclusive keyboard access
+	SET B, 1
+	JSR [0x1026] ; keyboard_register
+	
+	SET [AtlasText_input_buffer], 0
+	
+:asm_inputfile ; display prompt for file position
+
+	JSR [0x1021] ; clear
+
+	SET A, asm_intro
+	JSR text_out
+	jsr newline 
+	SET A, text_prompt
+	jsr text_out
+
+	SET A, asm_file_buffer
+	SET B, 5
+	JSR mem_clear
+
+	SET A, asm_file_buffer
+	SET B, 5
+	SET C, asm_input_buffer
+	JSR [0x1023] ; readline
+
+	SET A, asm_file_buffer
+	jsr atoi
+	SET Z, C
+	IFE C, 0
+		SET PC, asm_die
+	JSR page_alloc
+	SET Y, A
+	SET [asm_output_location], A
+	
+	JSR page_alloc
+	SET [asm_label_storage], A
+
+
+
+:asm_parse_start
+	set [asm_program_counter], Y	; start of memory space to assemble to
+	set [asm_char_counter], Z 		; start of txt file of code to assemble.
+	set [asm_labels_to_fill_count], 0
+
+; --------------------------------------------
+; Title:   compiler
+; Author:  Nils Ole Timm
+; Date:    11.07.2012
+; Version: 1.0
+; --------------------------------------------
+;This compiler uses an asm_atoi and print routine
+;from my AlmOSt, so you'll need to replace
+;those with your own
+
+;note that asm_atoi returns the length 
+;of the read number in X
+
+;This compiler does currently not use the
+;0x20-0x3f semantics for small values
+;and is therefore a bit slower
+
+:asm_parse_op
+	set	A, [asm_program_counter]
+	ifg 0x2fff, A
+		set PC, asm_err_addr
+	set B, [asm_char_counter]
+	jsr asm_skip_whites;
+	set C, [B]
+	ife C, 0; Done
+		set X, 0
+	ife C, 0
+		jsr asm_fill_labels
+	ife C, 0; Done
+		set Y, [asm_program_counter]
+	ife C, 0; Done
+		set PC, asm_die
+	ife C, 0x3A; : add label
+		set PC, asm_add_label
+	ife C, 0x41 ;A
+		set PC, asm_parse_op_A
+	ife C, 0x42 ;B
+		set PC, asm_parse_op_B
+	ife C, 0x44 ;D
+		set PC, asm_parse_op_D
+	ife C, 0x48 ;H
+		set PC, asm_parse_op_H
+	ife C, 0x49 ;I
+		set PC, asm_parse_op_I
+	ife C, 0x4a ;J
+		set PC, asm_parse_op_J
+	ife C, 0x4d ;M
+		set PC, asm_parse_op_M
+	ife C, 0x52 ;R
+		set PC, asm_parse_op_R
+	ife C, 0x53;S
+		set PC, asm_parse_op_S
+	ife C, 0x58;X
+		set PC, asm_parse_op_X
+	set PC, asm_error
+:asm_parse_op_A
+	add B, 1
+	set C, [B]
+	ife C, 0x53 ;S
+		set PC, asm_parse_op_AS
+	ife C, 0x44 ;D
+		set PC, asm_parse_op_AD
+	ife C, 0x4e ;N
+		set PC, asm_parse_op_AN
+	set PC, asm_error
+:asm_parse_op_AS
+	add B, 1
+	set C, [B]
+	ife C, 0x52;R
+		set [asm_rop], [asm_oASR]
+	ife C, 0x52
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_AD
+	add B, 1
+	set C, [B]
+	ife C, 0x44;D
+		set [asm_rop], [asm_oADD]
+	ife C, 0x44
+		set PC, asm_parse_val
+	ife C, 0x58;X
+		set [asm_rop], [asm_oADX]
+	ife C, 0x58
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_AN
+	add B, 1
+	set C, [B]
+	ife C, 0x44;D
+		set [asm_rop], [asm_oAND]
+	ife C, 0x44
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_B
+	add B, 1
+	set C, [B]
+	ife C, 0x4F
+		set PC, asm_parse_op_BO
+	set PC, asm_error
+:asm_parse_op_BO
+	add B, 1
+	set C, [B]
+	ife C, 0x52;R
+		set [asm_rop], [asm_oBOR]
+	ife C, 0x52
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_D
+	add B, 1
+	set C, [B]
+	ife C, 0x40;A
+		set PC, asm_parse_op_DA
+	ife C, 0x49;I
+		set PC, asm_parse_op_DI
+	ife C, 0x56;V
+		set PC, asm_parse_op_DV
+:asm_parse_op_DA
+	add B, 1
+	set C, [B]
+	ife C, 0x54;T
+		set PC, asm_parse_dat
+	set PC, asm_error
+:asm_parse_op_DI
+	add B, 1
+	set C, [B]
+	ife C, 0x56;V
+		set [asm_rop], [asm_oDIV]
+	set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_DV
+	add B, 1
+	set C, [B]
+	ife C, 0x49;I
+		set [asm_rop], [asm_oDVI]
+	set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_H
+	add B, 1
+	set C, [B]
+	ife C, 0x57;W
+		set PC, asm_parse_op_HW
+	set PC, asm_error
+:asm_parse_op_HW
+	add B, 1
+	set C, [B]
+	ife C, 0x49;I
+		set [asm_rop], [asm_sHWI]
+	ife C, 0x49
+		set PC, asm_parse_val_s
+	ife C, 0x4e;N
+		set [asm_rop], [asm_sHWN]
+	ife C, 0x4e
+		set PC, asm_parse_val_s
+	ife C, 0x51;Q
+		set [asm_rop], [asm_sHWQ]
+	ife C, 0x51
+		set PC, asm_parse_val_s
+	set PC, asm_error
+:asm_parse_op_I
+	add B, 1
+	set C, [B]
+	ife C, 0x41;A
+		set PC, asm_parse_op_IA
+	ife C, 0x46;F
+		set PC, asm_parse_op_IF
+	ife C, 0x4e;N
+		set PC, asm_parse_op_IN
+:asm_parse_op_IA
+	add B, 1
+	set C, [B]
+	ife C, 0x47;G
+		set [asm_rop], [asm_sIAG]
+	ife C, 0x47
+		set PC, asm_parse_val_s
+	ife C, 0x51;Q
+		set [asm_rop], [asm_sIAQ]
+	ife C, 0x51
+		set PC, asm_parse_val_s
+	ife C, 0x53;G
+		set [asm_rop], [asm_sIAS]
+	ife C, 0x53
+		set PC, asm_parse_val_s
+:asm_parse_op_IF
+	add B, 1
+	set C, [B]
+	ife C, 0x41;A
+		set [asm_rop], [asm_oIFA]
+	ife C, 0x41
+		set PC, asm_parse_val
+	ife C, 0x42;B
+		set [asm_rop], [asm_oIFB]
+	ife C, 0x42
+		set PC, asm_parse_val
+	ife C, 0x43;C
+		set [asm_rop], [asm_oIFC]
+	ife C, 0x43
+		set PC, asm_parse_val
+	ife C, 0x45;E
+		set [asm_rop], [asm_oIFE]
+	ife C, 0x45
+		set PC, asm_parse_val
+	ife C, 0x47;G
+		set [asm_rop], [asm_oIFG]
+	ife C, 0x47
+		set PC, asm_parse_val
+	ife C, 0x4c;L
+		set [asm_rop], [asm_oIFL]
+	ife C, 0x4c
+		set PC, asm_parse_val
+	ife C, 0x4e;N
+		set [asm_rop], [asm_oIFN]
+	ife C, 0x4e
+		set PC, asm_parse_val
+	ife C, 0x55;U
+		set [asm_rop], [asm_oIFU]
+	ife C, 0x55
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_IN
+	add B, 1
+	set C, [B]
+	ife C, 0x54;T
+		set [asm_rop], [asm_sINT]
+	ife C, 0x54
+		set PC, asm_parse_val_s
+	set PC, asm_error
+:asm_parse_op_J
+	add B, 1
+	set C, [B]
+	ife C, 0x53;S
+		set PC, asm_parse_op_JS
+	set PC, asm_error
+:asm_parse_op_JS
+	add B, 1
+	set C, [B]
+	ife C, 0x52;R
+		set [asm_rop], [asm_sJSR]
+	ife C, 0x52
+		set PC, asm_parse_val_s
+	set PC, asm_error
+:asm_parse_op_M
+	add B, 1
+	set C, [B]
+	ife C, 0x44;D
+		set PC, asm_parse_op_MD
+	ife C, 0x4c;L
+		set PC, asm_parse_op_ML
+	ife C, 0x4f;O
+		set PC, asm_parse_op_MO
+	ife C, 0x55;U
+		set PC, asm_parse_op_MU
+	set PC, asm_error
+:asm_parse_op_MD
+	add B, 1
+	set C, [B]
+	ife C, 0x49;I
+		set [asm_rop], [asm_oMDI]
+	ife C, 0x49
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_ML
+	add B, 1
+	set C, [B]
+	ife C, 0x49;I
+		set [asm_rop], [asm_oMLI]
+	ife C, 0x49
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_MO
+	add B, 1
+	set C, [B]
+	ife C, 0x44;I
+		set [asm_rop], [asm_oMOD]
+	ife C, 0x44
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_MU
+	add B, 1
+	set C, [B]
+	ife C, 0x4c;I
+		set [asm_rop], [asm_oMUL]
+	ife C, 0x4c
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_R
+	add B, 1
+	set C, [B]
+	ife C, 0x46;F
+		set PC, asm_parse_op_RF
+	set PC, asm_error
+:asm_parse_op_RF
+	add B, 1
+	set C, [B]
+	ife C, 0x4c;I
+		set [asm_rop], [asm_sRFI]
+	ife C, 0x4c
+		set PC, asm_parse_val_s
+	set PC, asm_error
+:asm_parse_op_S
+	add B, 1
+	set C, [B]
+	ife C, 0x42;B
+		set PC, asm_parse_op_SB
+	ife C, 0x45;E
+		set PC, asm_parse_op_SE
+	ife C, 0x48;H
+		set PC, asm_parse_op_SH
+	ife C, 0x54;T
+		set PC, asm_parse_op_ST
+	ife C, 0x55;U
+		set PC, asm_parse_op_SU
+	set PC, asm_error
+:asm_parse_op_SB
+	add B, 1
+	set C, [B]
+	ife C, 0x58;X
+		set [asm_rop], [asm_oSBX]
+	ife C, 0x58
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_SE
+	add B, 1
+	set C, [B]
+	ife C, 0x54;
+		set [asm_rop], [asm_oSET]
+	ife C, 0x54
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_SH
+	add B, 1
+	set C, [B]
+	ife C, 0x4c;L
+		set [asm_rop], [asm_oSHL]
+	ife C, 0x4c
+		set PC, asm_parse_val
+	ife C, 0x52;R
+		set [asm_rop], [asm_oSHR]
+	ife C, 0x52
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_ST
+	add B, 1
+	set C, [B]
+	ife C, 0x44;D
+		set [asm_rop], [asm_oSTD]
+	ife C, 0x44
+		set PC, asm_parse_val
+	ife C, 0x49;I
+		set [asm_rop], [asm_oSTI]
+	ife C, 0x49
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_SU
+	add B, 1
+	set C, [B]
+	ife C, 0x42;B
+		set [asm_rop], [asm_oSUB]
+	ife C, 0x42
+		set PC, asm_parse_val
+	set PC, asm_error
+:asm_parse_op_X
+	add B, 1
+	set C, [B]
+	ife C, 0x51
+		set PC, asm_parse_op_XO
+	set PC, asm_error
+:asm_parse_op_XO
+	add B, 1
+	set C, [B]
+	ife C, 0x52
+		set [asm_rop], [asm_oXOR]
+	ife C, 0x52
+		set PC, asm_parse_val
+	set PC, asm_error
+	
+:asm_parse_val;normal instructions
+	add B, 1
+	jsr asm_skip_whites
+	set X, 0
+	jsr asm_read_val
+	add B, 1
+	jsr asm_skip_whites
+	set X, 1
+	jsr asm_read_val
+	set Z, [asm_program_counter]
+	set [Z], [asm_rop]
+	and [Z], [asm_opCodeMask]
+	set Y, [asm_rB]
+	shl Y, 5
+	and Y, [asm_BValueMask]
+	bor [Z], Y
+	set Y, [asm_rA]
+	shl Y, 10
+	and Y, [asm_AValueMask]
+	bor [Z], Y
+	ife [asm_param_counter], 2
+		jsr asm_swap_params
+	add [asm_program_counter] ,1
+	add [asm_program_counter] ,[asm_param_counter]
+	set [asm_param_counter], 0
+	add B, 1
+	set [asm_char_counter], B
+	set PC, asm_parse_op
+:asm_parse_val_s;special instructions
+	add B, 1
+	jsr asm_skip_whites
+	set X, 1
+	jsr asm_read_val
+	set Z, [asm_program_counter]
+	set [Z], 0
+	and [Z], [asm_opCodeMask]
+	set Y, [asm_rop]
+	shl Y, 5
+	and Y, [asm_BValueMask]
+	bor [Z], Y
+	set Y, [asm_rA]
+	shl Y, 10
+	and Y, [asm_AValueMask]
+	bor [Z], Y
+	add [asm_program_counter] ,1
+	add [asm_program_counter] ,[asm_param_counter]
+	set [asm_param_counter], 0
+	add B, 1
+	set [asm_char_counter], B
+	set PC, asm_parse_op
+	
+:asm_swap_params
+	set J,[asm_program_counter]
+	set Z,[J+1]
+	set [J+1], [J+2]
+	set [J+2], Z
+	set PC, POP
+:asm_read_val
+	set C, [B]
+	ife C, 0x5B;[
+		set PC, asm_read_val_ob
+	ife C, 0x68;h
+		set PC, asm_read_val_n
+	ifg C, 0x2f; '0'-'9'
+		ifg 0x3a, C
+			set PC, asm_read_val_n
+	ife C, 0x4c; 'l' used to identify labels
+		set PC, asm_read_val_n
+	ife C, 0x41; 'A'
+		set PC, asm_read_val_A
+	ife C, 0x42; 'B'
+		set PC, asm_read_val_B
+	ife C, 0x43; 'C'
+		set PC, asm_read_val_C
+	ife C, 0x58; 'X'
+		set PC, asm_read_val_X
+	ife C, 0x59; 'Y'
+		set PC, asm_read_val_Y
+	ife C, 0x5a; 'Z'
+		set PC, asm_read_val_Z
+	ife C, 0x49; 'I'
+		set PC, asm_read_val_I
+	ife C, 0x4a; 'J'
+		set PC, asm_read_val_J
+	ife C, 0x50; 'P'
+		set PC, asm_read_val_P
+	ife C, 0x53; 'S'
+		set PC, asm_read_val_S
+	ife C, 0x45; 'E'
+		set PC, asm_read_val_E
+:asm_read_val_ob
+	add B, 1
+	set C, [B]	
+	ife C, 0x68;h
+		set PC, asm_read_val_obn
+	ifg C, 0x2f; '0'-'9'
+		ifg 0x3a, C
+			set PC, asm_read_val_obn
+	ifg C, 0x4c; 'l' used to identify labels
+		set PC, asm_read_val_obn
+	ife C, 0x41; 'A'
+		set PC, asm_read_val_obA
+	ife C, 0x42; 'B'
+		set PC, asm_read_val_obB
+	ife C, 0x43; 'C'
+		set PC, asm_read_val_obC
+	ife C, 0x58; 'X'
+		set PC, asm_read_val_obX
+	ife C, 0x59; 'Y'
+		set PC, asm_read_val_obY
+	ife C, 0x5a; 'Z'
+		set PC, asm_read_val_obZ
+	ife C, 0x49; 'I'
+		set PC, asm_read_val_obI
+	ife C, 0x4a; 'J'
+		set PC, asm_read_val_obJ
+	ife C, 0x53; 'S'
+		set PC, asm_read_val_obS
+:asm_read_val_obn
+	set I, 0
+	ife C, 0x4C
+		set I, 1
+	ife C, 0x4c
+		add B, 1
+	set PUSH, X
+	set PUSH, B
+	set PUSH, B
+	jsr asm_atoi 
+	set B, POP
+	add B, X
+	set X, POP
+	set PUSH, C
+	jsr asm_skip_whites;
+	set C, [B]
+	ifn C, 0x5D;']'
+		set PC, asm_error
+	set C, POP
+	add [asm_param_counter], 1
+	set Z, [asm_param_counter]
+	add Z, [asm_program_counter]
+	ife I, 1
+		jsr asm_add_f_label
+	set [Z], C
+	set Y, [asm_vbn]
+	set PC, asm_write_val
+:asm_read_val_obA
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbApn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obApn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbA]
+	set PC, asm_write_val
+:asm_read_val_obB
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbBpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obBpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbB]
+	set PC, asm_write_val
+:asm_read_val_obC
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbCpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obCpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbC]
+	set PC, asm_write_val
+:asm_read_val_obX
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbXpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obApn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbX]
+	set PC, asm_write_val
+:asm_read_val_obY
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbYpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obYpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbY]
+	set PC, asm_write_val
+:asm_read_val_obZ
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbZpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obZpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbZ]
+	set PC, asm_write_val
+:asm_read_val_obI
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbIpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obIpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbI]
+	set PC, asm_write_val
+:asm_read_val_obJ
+	add B, 1
+	jsr asm_skip_whites
+	set C, [B]
+	ife C, 0x2B;+
+		set Y, [asm_vbJpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obJpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbJ]
+	set PC, asm_write_val
+:asm_read_val_obS
+	add B, 1
+	set C, [B]
+	ifn C, 0x50;P
+		set PC, asm_error
+	add B, 1
+	jsr asm_skip_whites
+	ife C, 0x2B;+
+		set Y, [asm_vbSPpn]
+	ife C, 0x2B;+
+		set PC, asm_read_val_obSPpn
+	ifn C, 0x5D;]
+		set PC, asm_error
+	;If we get here we are done
+	set Y, [asm_vbSP]
+	set PC, asm_write_val
+:asm_read_val_obApn
+:asm_read_val_obBpn
+:asm_read_val_obCpn
+:asm_read_val_obXpn
+:asm_read_val_obYpn
+:asm_read_val_obZpn
+:asm_read_val_obIpn
+:asm_read_val_obJpn
+:asm_read_val_obSPpn
+;parse numerical value here
+	add B, 1
+	set C, [B]
+	set I, 0
+	ife C, 0x4c
+		set I, 1
+	ife C, 0x4c
+		add B, 1
+	set PUSH, Y
+	set PUSH, X
+	set PUSH, B
+	
+	set PUSH, B
+	jsr asm_atoi 
+	
+	set B, POP
+	add B, X
+	sub B, 1
+	set X, POP
+	set Y, POP
+
+	add [asm_param_counter], 1
+	set Z, [asm_param_counter]
+	add Z, [asm_program_counter]
+	ife I, 1
+		jsr asm_add_f_label
+	
+	set [Z], C
+	set PC, asm_write_val
+:asm_read_val_A
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vA]
+	set PC, asm_write_val
+:asm_read_val_B
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vB]
+	set PC, asm_write_val
+:asm_read_val_C
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vC]
+	set PC, asm_write_val
+:asm_read_val_X
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vX]
+	set PC, asm_write_val
+:asm_read_val_Y
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vY]
+	set PC, asm_write_val
+:asm_read_val_Z
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vZ]
+	set PC, asm_write_val
+:asm_read_val_I
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vI]
+	set PC, asm_write_val
+:asm_read_val_J
+	add B, 1
+	set C, [B]
+	ifn C, 0x20;space
+		set PC, asm_error
+	sub B, 1
+	set Y, [asm_vJ]
+	set PC, asm_write_val
+:asm_read_val_P
+	add B, 1
+	set C, [B]
+	ife C, 0x4F;O
+		set PC, asm_read_val_PO
+	ife C, 0x43;C
+		set Y, [asm_vPC]
+	ife C, 0x43;C
+		set PC, asm_write_val
+	ife C, 0x55;U
+		set PC, asm_read_val_PU
+	set PC, asm_error
+:asm_read_val_PO
+	add B, 1
+	set C, [B]
+	ife C, 0x50;P
+		set Y, [asm_vPOP]
+	ife C, 0x50
+		set PC, asm_write_val
+	set PC, asm_error
+:asm_read_val_PU
+	add B, 1
+	set C, [B]
+	ifn C, 0x53;S
+		set PC, asm_error
+	add B, 1
+	set C, [B]
+	ifn C, 0x48;H
+		set PC, asm_error
+	set Y, [asm_vPUSH]
+	set PC, asm_write_val
+
+:asm_read_val_S
+	add B, 1
+	set C, [B]
+	ife C, 0x50;P
+		set Y, [asm_vSP]
+	ife C, 0x50
+		set PC, asm_write_val
+	set PC, asm_error
+:asm_read_val_E
+	add B, 1
+	set C, [B]
+	ife C, 0x58;X
+		set Y, [asm_vEX]
+	ife C, 0x58
+		set PC, asm_write_val
+	set PC, asm_error
+:asm_read_val_n
+	set I, 0
+	ife C, 0x4c
+		set I, 1
+	ife C, 0x4c
+		add B, 1
+	set PUSH, X
+	set PUSH, B
+	set PUSH, B
+	jsr asm_atoi 
+	set B, POP
+	add B, X
+	sub B, 2
+	set X, POP
+	add [asm_param_counter], 1
+	set Z, [asm_param_counter]
+	add Z, [asm_program_counter]
+	ife I, 1
+		jsr asm_add_f_label
+	set [Z], C
+	set Y, [asm_vn]
+	set PC, asm_write_val
+
+:asm_write_val
+	ife X, 0
+		set [asm_rb], Y
+	ife X, 1
+		set [asm_ra], Y
+	add B, 1
+	set PC, POP
+:asm_skip_whites
+	set C, [B]
+	ife C, 0x20
+		set PC, asm_skip_whites_loop
+	ife C, 10
+		set PC, asm_skip_whites_loop
+	set PC, POP
+:asm_skip_whites_loop
+	add B, 1
+	set C, [B]
+	ife C, 0x20; Space
+		set PC, asm_skip_whites_loop
+	ife C, 10; New Line
+		set PC, asm_skip_whites_loop
+	set PC, POP
+:asm_error
+	set a, asm_err_comp
+	jsr text_out
+	set X, 1
+	set PC, POP
+:asm_err_addr
+	set a, asm_err_saddr
+	jsr text_out
+	set PC, POP
+:asm_add_label
+	add B, 1
+	set PUSH, B
+	set PUSH, B
+	jsr asm_atoi
+	set B, POP
+	add B, X
+	ifg C, [asm_label_storage_size]
+		set PC, asm_parse_op
+	set X, [asm_label_storage]
+	add C, X
+	set X, [asm_program_counter]
+	set [C], X
+	set [asm_char_counter], B
+	set PC, asm_parse_op
+:asm_add_f_label
+	set PUSH, A
+	set PUSH, B
+	set PUSH, C
+	set PUSH, Z
+	set PUSH, Z
+	set PUSH, C
+	jsr asm_add_label_to_fill
+	set Z, POP
+	set C, POP
+	set B, POP
+	set A, POP
+	set PC, POP
+:asm_add_label_to_fill
+	set A, [asm_labels_to_fill_count]
+	shl A, 1
+	add A, [asm_labels_to_fill]
+	set Z, POP
+	set B, POP
+	set C, POP
+	set PUSH, Z
+	set [A], C ;addr
+	set [A+1], B ;lbl
+	add [asm_labels_to_fill_count], 1
+	set PC, POP
+:asm_fill_labels
+	set I, 0xffff
+	sub [asm_labels_to_fill_count], 1
+	set PUSH, C
+:asm_fill_labels_loop
+	add I, 1
+	set A, I
+	shl A, 1
+	add A, [asm_labels_to_fill]
+	set X, [asm_label_storage]
+	set B, [A]
+	set C, [A+1]
+	add X, C
+	set [B], [X]
+	ifg [asm_labels_to_fill_count], I
+		set PC, asm_fill_labels_loop
+	set C, POP
+	set PC, POP
+:asm_parse_dat
+	add B, 1
+	jsr asm_skip_whites
+	set I, 0
+	ife [B], 0x4C
+		set I, 1
+	ife [B], 0x4C
+		add B, 1
+	set PUSH, B
+	set PUSH, I
+	set PUSH, B
+	jsr asm_atoi
+	set I, POP
+	set B, POP
+	add B, X
+	ife I, 1
+		set Z, [asm_label_storage]
+	ife I, 1
+		add Z, C
+	ife I, 1
+		set C, [Z]
+	set X, [asm_program_counter]
+	set [X], C
+	add [asm_program_counter], 1
+	set [asm_char_counter], B
+	set PC, asm_parse_op
+;SHL 10
+:asm_AValueMask
+dat 0xfc00
+;SHL 5
+:asm_BValueMask
+dat 0x03e0
+:asm_OpCodeMask
+dat 0x001f
+;Values
+:asm_vA dat  0x0000
+:asm_vB dat  0x0001
+:asm_vC dat  0x0002
+:asm_vX dat  0x0003
+:asm_vY dat  0x0004
+:asm_vZ dat  0x0005
+:asm_vI dat  0x0006
+:asm_vJ dat  0x0007
+:asm_vbA dat  0x0008
+:asm_vbB dat  0x0009
+:asm_vbC dat  0x000a
+:asm_vbX dat  0x000b
+:asm_vbY dat  0x000c
+:asm_vbZ dat  0x000d
+:asm_vbI dat  0x000e
+:asm_vbJ dat  0x000f
+:asm_vbApn dat  0x0010
+:asm_vbBpn dat  0x0011
+:asm_vbCpn dat  0x0012
+:asm_vbXpn dat  0x0013
+:asm_vbYpn dat  0x0014
+:asm_vbZpn dat  0x0015
+:asm_vbIpn dat  0x0016
+:asm_vbJpn dat  0x0017
+:asm_vPOP dat 0x0018
+:asm_vPUSH dat 0x0018
+:asm_vbSP dat 0x0019
+:asm_vPEEK dat 0x0019
+:asm_vbSPpn dat 0x001a
+:asm_vPICK dat 0x001a
+:asm_vSP dat 0x001b
+:asm_vPC dat 0x001c
+:asm_vEX dat 0x001d
+:asm_vbn dat 0x001e
+:asm_vn dat 0x001f
+
+:asm_oSET dat 0x01
+:asm_oADD dat 0x02
+:asm_oSUB dat 0x03
+:asm_oMUL dat 0x04
+:asm_oMLI dat 0x05
+:asm_oDIV dat 0x06
+:asm_oDVI dat 0x07
+:asm_oMOD dat 0x08
+:asm_oMDI dat 0x09
+:asm_oAND dat 0x0a
+:asm_oBOR dat 0x0b
+:asm_oXOR dat 0x0c
+:asm_oSHR dat 0x0d
+:asm_oASR dat 0x0e
+:asm_oSHL dat 0x0f
+:asm_oIFB dat 0x10
+:asm_oIFC dat 0x11
+:asm_oIFE dat 0x12
+:asm_oIFN dat 0x13
+:asm_oIFG dat 0x14
+:asm_oIFA dat 0x15
+:asm_oIFL dat 0x16
+:asm_oIFU dat 0x17
+:asm_oADX dat 0x1a
+:asm_oSBX dat 0x1b
+:asm_oSTI dat 0x1e
+:asm_oSTD dat 0x1f
+
+;special Instructions
+:asm_sJSR dat 0x01
+:asm_sINT dat 0x08
+:asm_sIAG dat 0x09
+:asm_sIAS dat 0x0a
+:asm_sRFI dat 0x0b
+:asm_sIAQ dat 0x0c
+:asm_sHWN dat 0x10
+:asm_sHWQ dat 0x11
+:asm_sHWI dat 0x12
+
+;label token
+:asm_rop
+dat 0x0000
+:asm_rA
+dat 0x0000
+:asm_rB
+dat 0x0000
+
+:asm_intro
+dat "Welcome to the inbuilt assembler of AtlasOS", 0xA, "This assembler is a port of that found in AlmOSt by Nils Ole Timm", 0xA, "To start input the decimal location of the file to assemble", 0
+:asm_done
+dat "Done", 0xa, 0
+:asm_output_location
+dat 0
+:asm_input_buffer
+dat 0
+:asm_file_buffer
+dat 0, 0, 0, 0, 0, 0
+:asm_label_storage_size
+dat 0x0500
+:asm_label_storage
+dat 0x9100
+:asm_labels_to_fill
+dat 0x9600
+:asm_labels_to_fill_count
+dat 0x0000
+:asm_program_counter
+dat 0x0000
+:asm_char_counter
+dat 0x0000
+:asm_param_counter
+dat 0x0000
+:asm_err_comp
+dat "Could not compile",10,0
+:asm_err_saddr
+dat "Can not write to that address",10,0
+:asm_test
+dat "SET A h0000 "
+dat ":0 "
+dat "SET [A+h8000] h4570 "
+dat "ADD A 1 "
+dat "IFG h0200 A "
+dat "SET PC L0 "
+dat "SET PC POP ", 0
+
+;included A
+;returns result in C
+;returns length in X
+;(ret, val*)
+:asm_atoi
+	set Z, POP
+	set A, POP
+	set PUSH, Z
+    set C, 0
+    set X, 0
+:asm_atoi10_loop
+	set J, [A]
+	and J, 0x00ff
+	ife J, 104
+		set PC, asm_atoi16_loopstart
+    ifg J, 0x3a
+    	set PC, POP
+    ifg 0x30, J
+    	set PC, POP
+    mul C, 10
+    set B, [A]
+    and B, 0x00ff
+    sub B, 48
+    add C, B
+    add A, 1
+    add X, 1
+    set PC, asm_atoi10_loop
+:asm_atoi16_loopstart
+	add A, 1
+	add X, 1
+:asm_atoi16_loop
+	set J, [A]
+	and J, 0x00ff
+    set B, [A]
+    and B, 0x00ff
+    sub B, 48
+    ifg 10, B
+    	set PC, asm_atoi16_skip
+    ifg B, 9;If it's not between 0 and 9 assume capital letter -17+10='A'-'0'+10
+    	sub B, 7
+    ifg B, 15; maybe small letter
+    	sub B, 32
+    ifg 10, B
+    	set PC, POP
+    ifg B, 15
+    	set PC, POP
+:asm_atoi16_skip
+    shl C, 4
+    add C, B
+    add A, 1
+    add X, 1
+    set PC, asm_atoi16_loop
+
+:asm_die
+	SET A, asm_input_buffer
+	IAQ 1
+	JSR [0x1027] ; keyboard_unregister
+	IAQ 0
+	jsr newline
+	set a, asm_done
+	jsr text_out
+	JSR [0x1005] ; proc_kill_me
+:asm_end

@@ -1,7 +1,6 @@
 ; AtlasText - A simple, dummy text editor
 :AtlasText
 	IAQ 1
-	JSR [0x1021] ; clear
 
 	SET I, AtlasText_loop_end ; Calculate the length of the back-jump
 	SUB I, AtlasText_loop
@@ -27,13 +26,38 @@
 	JSR mem_clear ; Clear the buffer
 
 	ADD B, A
-
+	IAQ 0
 	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+
+:AtlasText_getfilename
+	JSR [0x1021] ; clear
+
 	SET A, AtlasText_intro
 	JSR text_out
+
+	SET A, AtlasText_filename_buffer
+	SET B, 16
+	JSR mem_clear
+
+	SET A, AtlasText_filename
+	JSR text_out
+
+	SET A, AtlasText_filename_buffer
+	SET B, 15
+	SET C, AtlasText_input_buffer
+	JSR [0x1023] ; readline
+
+	SET A, AtlasText_filename_buffer
+	JSR [0x1019] ; strlen
+	IFE B, 0
+		SET PC, AtlasText_getfilename ; loopback on blank filename
+	JSR [0x1021] ; clear
+	SET C, POP
+	SET B, POP
 	SET A, POP
 
-	IAQ 0
 :AtlasText_loop
 	IFE [AtlasText_input_buffer], 0
 		SET PC, AtlasText_skip
@@ -46,6 +70,8 @@
 		SET PC, AtlasText_return
 	IFE [C], 0x10 ; 8 -> 16 per keyboard HW (backspace)
 		SET PC, AtlasText_backspace
+	IFE [C], 0x13 ; delete key for save, since control doesn't work in devkit at the moment.
+		SET PC, AtlasText_save
 	IFG 0x20, [C]
 		SET PC, AtlasText_skip
 	IFG [C], 0x7F
@@ -214,6 +240,24 @@ SET PC, POP
 	JSR [0x1002] ; proc_suspend
 	SUB PC, I
 :AtlasText_loop_end
+
+:AtlasText_save
+	SET C, A
+	SET A, 0
+	SET B, [AtlasText_page]
+	SET X, AtlasText_filename_buffer
+	JSR HAT_inode_directory_add_file
+	JSR [0x1021] ; clear
+	SET A, AtlasText_saved
+	jsr text_out
+	SET A, AtlasText_filename_buffer
+	JSR text_out
+
+	SET A, AtlasText_exit
+	SET B, AtlasText_die
+	SET C, AtlasText_input_buffer
+	JSR pakto
+
 :AtlasText_die
 	SET A, AtlasText_input_buffer
 	IAQ 1
@@ -226,4 +270,8 @@ SET PC, POP
 	:AtlasText_page dat 0x0000
 	:AtlasText_intro dat " AtlasText Version 0.1", 0xA, 0x0
 	:AtlasText_newlinefound dat 0
+	:AtlasText_filename_buffer dat "123456789abcedf", 0
+	:AtlasText_filename dat "Filename:", 0
+	:AtlasText_saved dat "File saved to: ", 0
+	:AtlasText_exit dat "exit.", 0
 :AtlasText_end

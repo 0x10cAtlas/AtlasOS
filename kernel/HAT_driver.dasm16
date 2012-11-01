@@ -1,0 +1,1454 @@
+;MIT Open License
+;
+;Copyright (c) 2012 Russell Oliver
+
+;Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+;The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+;THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+;
+;
+
+:HAT_driver_start
+; reads first 6 sectors of floppy disk, and updates current media info
+:HAT_read_header
+SET PUSH, A
+SET PUSH, B
+SET PUSH, I
+SET PUSH, J
+
+SET [HAT_header_in_paging], 1
+
+SET A, 0
+SET B, 6
+JSR pfloppy_read_sectors
+SET I, [floppy_paging_address]
+SET J, HAT_header
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+STI [J], [I]
+SET J, POP
+SET I, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;Writes first 6 sectors of floppy disk
+:HAT_write_header
+SET PUSH, A
+SET PUSH, B
+
+
+
+SET A, 0
+SET B, 6
+JSR pfloppy_write_sectors
+SET [HAT_header_in_paging], 0
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;copies a disk header to floppy and sets floppy up as empty
+;with a 256 sector size
+:HAT_format_disk_256
+
+JSR pfloppy_clear_paging
+
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+
+SET A, HAT_header_256
+SET B, [floppy_paging_address]
+SET C, 10
+JSR mem_copy
+
+SET A, [floppy_paging_address]
+ADD A, [HAT_header_256 + 10]
+SET [A], [HAT_header_256 + 11]
+
+JSR HAT_write_header
+SET A, HAT_header_256
+SET B, HAT_header
+SET C, 10
+JSR mem_copy
+
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+;copies a disk header to floppy and sets floppy up as empty
+;with a 1024 sector size
+:HAT_format_disk_1024
+
+JSR pfloppy_clear_paging
+
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+
+SET A, HAT_header_1024
+SET B, [floppy_paging_address]
+SET C, 10
+JSR mem_copy
+
+SET A, [floppy_paging_address]
+ADD A, [HAT_header_1024+10]
+SET [A], [HAT_header_1024+11]
+
+JSR HAT_write_header
+SET A, HAT_header_1024
+SET B, HAT_header
+SET C, 10
+JSR mem_copy
+
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+; Finds a free sector and returns ID to A, or 0xFFFF to A if none
+:HAT_find_free_sector
+SET PUSH, B
+SET PUSH, I
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+
+SET A, [floppy_paging_address]
+ADD A, 9
+SET [HAT_sectors_used], [A]
+
+IFE [HAT_num_sectors], [HAT_sectors_used]
+	SET PC, HAT_find_free_sector_none
+
+IFN [HAT_sector_map_start], 0
+	SET PC, HAT_error
+
+SET A, [floppy_paging_address]
+ADD A, [HAT_sector_map_start+1]
+SET B, 0
+SET I, [HAT_num_sectors]
+
+:HAT_find_free_sector_loop
+IFN [A], 0xFFFF
+          SET PC, HAT_find_free_sector_found
+ADD A, 1
+ADD B, 1
+SUB I, 1
+IFE I, 0
+	SET PC, HAT_find_free_sector_none
+SET PC, HAT_find_free_sector_loop
+
+:HAT_find_free_sector_found
+SET PUSH, [A]
+MUL B, 16
+SET A, B
+
+:HAT_find_free_sector_found_loop
+      SHL PEEK, 1
+      IFN EX, 0x0000
+          SET PC, HAT_find_free_sector_skip
+
+      ADD SP, 1
+      SET PC, HAT_find_free_sector_end
+
+:HAT_find_free_sector_skip
+      ADD A, 1
+      SET PC, HAT_find_free_sector_found_loop
+
+:HAT_find_free_sector_none
+	SET A, 0xFFFF
+	SET I, POP
+	SET B, POP
+	SET PC, POP
+
+:HAT_find_free_sector_end
+	SET I, POP
+	SET B, POP
+	SET PC, POP
+
+;Allocates a sector given by A
+:HAT_allocate_sector
+SET PUSH, C
+SET PUSH, B
+SET PUSH, A
+SET B, A
+
+
+IFE [HAT_num_sectors], [HAT_sectors_used]
+	SET PC, HAT_error
+
+IFN [HAT_sector_map_start], 0
+	SET PC, HAT_error
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+ADD [HAT_header_in_paging], 1
+
+SET A, [HAT_sector_map_start+1]
+ADD A, [floppy_paging_address]
+DIV B, 16
+ADD A, B
+SET B, PEEK
+MOD B, 16 ; position of bit in word
+SET C, 0x8000
+SHR C, B
+
+BOR [A], C
+ADD [HAT_sectors_used], 1
+
+SUB [HAT_header_in_paging], 1
+IFE [HAT_header_in_paging], 1
+JSR HAT_write_header
+
+SET A, POP
+SET B, POP
+SET C, POP
+SET PC, POP
+
+;Deallocates a sector given by A
+:HAT_deallocate_sector
+SET PUSH, C
+SET PUSH, B
+SET PUSH, A
+SET B, A
+
+
+IFE [HAT_num_sectors], [HAT_sectors_used]
+	SET PC, HAT_error
+
+IFN [HAT_sector_map_start], 0
+	SET PC, HAT_error
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+ADD [HAT_header_in_paging], 1
+
+SET A, [HAT_sector_map_start+1]
+ADD A, [floppy_paging_address]
+DIV B, 16
+ADD A, B
+SET B, PEEK
+MOD B, 16 ; position of bit in word
+SET C, 0x8000
+SHR C, B
+XOR C, 0xffff
+
+AND [A], C
+SUB [HAT_sectors_used], 1
+
+SUB [HAT_header_in_paging], 1
+IFE [HAT_header_in_paging], 1
+JSR HAT_write_header
+
+SET A, POP
+SET B, POP
+SET C, POP
+SET PC, POP
+
+; A -> Current sector
+; A <- next sector
+:HAT_find_next_sector
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+
+IFN [HAT_sector_joins_start], 0
+	SET PC, HAT_error
+
+ADD A, [HAT_sector_joins_start+1]
+ADD A, [floppy_paging_address]
+SET A, [A]
+SET PC, POP
+
+;joins 2 sectors
+; A -> first sector joins to second sector
+; B - > second sector
+:HAT_join_sectors
+SET PUSH, B
+SET PUSH, A
+
+
+
+IFN [HAT_sector_joins_start], 0
+	SET PC, HAT_error
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+ADD [HAT_header_in_paging], 1
+
+SET A, [HAT_sector_joins_start+1]
+ADD A, [floppy_paging_address]
+ADD A, PEEK
+SET [A], B
+
+SUB [HAT_header_in_paging], 1
+IFE [HAT_header_in_paging], 1
+JSR HAT_write_header
+
+SET A, POP
+SET B, POP
+SET PC, POP
+
+
+
+
+:HAT_error
+;todo
+SUB PC,  1
+
+; Removes joins in a strip of sectors
+; A -> starting sector
+:HAT_delete_strip
+SET PUSH, B
+SET B, A
+
+
+IFN [HAT_sector_joins_start], 0
+	SET PC, HAT_error
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+ADD [HAT_header_in_paging], 1
+
+
+:HAT_delete_strip_loop
+SET A, B
+JSR HAT_deallocate_sector
+ADD A, [HAT_sector_joins_start+1]
+ADD A, [floppy_paging_address]
+
+IFE [A], 0x0000
+	SET PC, HAT_delete_strip_end
+
+SET B, [A]
+SET [A], 0x0000
+SET PC, HAT_delete_strip_loop
+
+:HAT_delete_strip_end
+
+SUB [HAT_header_in_paging], 1
+IFE [HAT_header_in_paging], 1
+JSR HAT_write_header
+
+SET B, POP
+SET PC, POP
+
+; finds the end of a strip
+; A -> starting sector or any sector in the strip
+; A <- end sector
+:HAT_find_strip_end
+SET PUSH, B
+SET PUSH, A
+
+
+
+IFN [HAT_sector_joins_start], 0
+	SET PC, HAT_error
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+
+SET B, POP
+:HAT_find_strip_end_loop
+SET A, B
+ADD A, [HAT_sector_joins_start+1]
+ADD A, [floppy_paging_address]
+
+IFE [A], 0x0000
+	SET PC, HAT_find_strip_end_end
+
+SET B, [A]
+SET PC, HAT_find_strip_end_loop
+
+:HAT_find_strip_end_end
+SET A, B
+SET B, POP
+SET PC, POP
+
+;adds a number of sectors to a strip defined by a sector of that strip
+; A -> sector of strip
+; B -> number of sectors to add
+:HAT_strip_add_sectors
+IFE B, 0
+SET PC, POP
+SET PUSH, I
+SET PUSH, A
+SET PUSH, B
+
+JSR HAT_find_strip_end
+SET PUSH, A ; store end sector
+
+SET I, B
+
+IFE [HAT_header_in_paging], 0
+JSR HAT_read_header
+ADD [HAT_header_in_paging], 1
+
+:HAT_strip_add_sectors_loop
+JSR HAT_find_free_sector
+IFE A, 0xFFFF
+SET PC, HAT_error
+JSR HAT_allocate_sector
+SET B, A ; set B to free sector
+SET A, POP ; set A to end sector
+JSR HAT_join_sectors ; join sector A to B
+SET PUSH, B ; store new end sector
+
+SUB I, 1
+IFE I, 0
+	SET PC, HAT_strip_add_sectors_end
+SET PC, HAT_strip_add_sectors_loop
+
+:HAT_strip_add_sectors_end
+SUB [HAT_header_in_paging], 1
+IFE [HAT_header_in_paging], 1
+JSR HAT_write_header
+
+ADD SP, 1
+SET B, POP
+SET A, POP
+SET I, POP
+SET PC, POP
+
+;reads a HAT sector (as opposed to a disk sector)
+; A -> sector to be read
+; B -> start of memory location to read to, if 0 it will be left in the paging space
+; C -> length of data
+; X -> offset in sector to start reading from
+:HAT_read_sector
+SET PUSH, Y
+SET PUSH, X
+SET PUSH, C
+SET PUSH, A
+SET PUSH, B
+
+JSR HAT_sector_position
+
+
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1 ; number of sectors to read, atleast 1
+JSR pfloppy_read_sectors
+
+JSR HAT_sector_offset
+
+ADD A, [floppy_paging_address]
+SET B, POP
+IFE B, 0
+SET PC, HAT_read_sector_skip
+SET Y, C
+ADD Y, X
+IFG Y, [HAT_sector_size]
+SET PC, HAT_read_sector_l1
+:HAT_read_sector_l2
+IFG C, [HAT_sector_size]
+	SET C, [HAT_sector_size]
+SET C, [HAT_sector_size]
+JSR mem_copy
+
+:HAT_read_sector_skip
+SET [HAT_header_in_paging], 0
+SET A, POP
+SET C, POP
+SET X, POP
+SET Y, POP
+SET PC, POP
+
+:HAT_read_sector_l1
+MOD Y, [HAT_sector_size]
+SUB C, Y
+SET PC, HAT_read_sector_l2
+
+;writes a HAT sector direct from memory
+;use for small writes
+; if the data length is less than than the HAT sector size it will first read sector, then copies data into the paging space at the offset determined by X, then writes it back out, leaving the rest of the disk sector untouched.
+; if it is equal it will just write to the sector.
+; In specifying the offset in the sector to write to, this subroutine will limit the length of the data copied to the size of the sector, ie won't go past the end.
+
+
+; A -> sector to be writen
+; B -> start of location in memory to write from, if 0 it will assume data for whole HAT sector is already in the floppy paging space and properly alligned, also ignores C, X
+; C -> length of data
+; X -> offset in sector to start writing
+
+:HAT_write_sector
+IFG C, [HAT_sector_size]
+	SET PC, HAT_write_sectors
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, Y
+SET PUSH, X
+
+JSR HAT_sector_position
+SET X, A
+
+IFG [HAT_sector_size], [floppy_words_per_sector]
+IFE B, 0
+SET PC, HAT_write_sector_read_skip
+IFE B, 0
+SET PC, HAT_write_sector_read_skip
+
+
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1  ; number of sectors to read, atleast 1
+JSR pfloppy_read_sectors
+
+:HAT_write_sector_read_skip
+SET [HAT_header_in_paging], 0
+
+SET A, PICK 4 ; hat sector that has been read
+JSR HAT_sector_offset
+
+ADD A, [floppy_paging_address] ;
+SET B, A ; destination
+ADD B, PEEK
+SET A, PICK 3 ; source
+IFE A, 0
+	SET PC, HAT_write_sector_copy_skip
+SET C, PICK 2 ; C back to original C ie length
+SET Y, C
+ADD Y, PEEK
+IFG Y, [HAT_sector_size]
+SET PC, HAT_write_sector_l1
+:HAT_write_sector_l2
+IFG C, [HAT_sector_size]
+	SET C, [HAT_sector_size]
+JSR mem_copy
+
+:HAT_write_sector_copy_skip
+SET A, X
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1  ; number of sectors to read, atleast 1
+JSR pfloppy_write_sectors
+
+
+SET X, POP
+SET Y, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+:HAT_write_sector_l1
+MOD Y, [HAT_sector_size]
+SUB C, Y
+SET PC, HAT_write_sector_l2
+
+; for writing large blocks or data
+; A -> start sector
+; B -> start of location in memory to write from
+; C -> length of data in words
+; X -> offset in first sector
+; will handle the allocation and joining of needed extra sectors, assuming starting sector is already allocated
+:HAT_write_sectors
+IFE C, [HAT_sector_size]
+	SET PC, HAT_write_sector
+IFL C, [HAT_sector_size]
+	SET PC, HAT_write_sector
+
+SET PUSH, X
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, Y
+
+
+SET B, C
+ADD B, X
+DIV B, [HAT_sector_size]
+MOD C, [HAT_sector_size]
+IFE C, 0
+SUB B, 1
+
+JSR HAT_strip_add_sectors
+
+SET A, PICK 3
+SET B, PICK 2
+SET Y, PICK 1
+
+:HAT_write_sectors_loop
+IFE Y, [HAT_sector_size]
+	SET PC, HAT_write_sectors_last
+IFL Y, [HAT_sector_size]
+	SET PC, HAT_write_sectors_last
+
+SET C, [HAT_sector_size]
+JSR HAT_write_sector
+JSR HAT_find_next_sector
+ADD B, [HAT_sector_size]
+SUB Y, [HAT_sector_size]
+SET X, 0
+
+IFE Y, 0
+	SET PC, HAT_write_sectors_end
+SET PC, HAT_write_sectors_loop
+
+:HAT_write_sectors_last
+SET C, Y
+JSR HAT_write_sector
+:HAT_write_sectors_end
+SET Y, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET X, POP
+SET PC, POP
+
+
+; for reading large blocks of data
+; A -> start sector
+; B -> start location in memory to read to
+; C -> length of data in words
+; X -> offset in first sector
+
+:HAT_read_sectors
+IFE C, [HAT_sector_size]
+	SET PC, HAT_read_sector
+IFL C, [HAT_sector_size]
+	SET PC, HAT_read_sector
+
+SET PUSH, X
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, Y
+
+SET B, C
+DIV B, [HAT_sector_size]
+MOD C, [HAT_sector_size]
+IFN C, 0
+ADD B, 1
+
+SET A, PICK 3 ; start sector
+SET B, PICK 2 ; location in memory
+SET Y, PICK 1 ; num words
+
+:HAT_read_sectors_loop
+IFE Y, [HAT_sector_size]
+	SET PC, HAT_read_sectors_last
+IFL Y, [HAT_sector_size]
+	SET PC, HAT_read_sectors_last
+
+SET C, [HAT_sector_size]
+SUB C, X
+JSR HAT_read_sector
+JSR HAT_find_next_sector
+ADD B, C
+SUB Y, C
+SET X, 0
+
+IFE Y, 0
+	SET PC, HAT_read_sectors_end
+SET PC, HAT_read_sectors_loop
+
+:HAT_read_sectors_last
+JSR HAT_read_sector
+:HAT_read_sectors_end
+SET Y, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET X, POP
+SET PC, POP
+
+:HAT_testwrite
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, X
+
+SET A, 0x002 ; query device flags
+HWI [floppy_address]
+SET Y, B ; store flags
+
+AND A, 0xFFFE ; set device to blocking mode
+SET B, A
+SET A, 0x0003
+HWI [floppy_address]
+
+SET A, 0x0011 ; write sector interrupt
+SET B, 0 ; start at a sector given by a
+SET C, 128 ; write a number of 512 word sectors
+SET X, 0
+HWI [floppy_address]
+
+SET B, 0
+IFG A, 0
+	SET PC, HAT_error
+
+SET B, Y ;retrieve flags
+SET A, 0x3 ; reset flags
+HWI [floppy_address]
+
+SET X, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+; A-> hat sector id
+; A <- the floppy sector that the hat sector lies in
+:HAT_sector_position
+SET PUSH, B
+SET PUSH, C
+
+MUL A, [HAT_sector_size] ; multiply by sector size to get number of words
+SET B, EX
+
+ADD A, [HAT_sectors_start+1] ; add lower and lower
+ADD B, EX ; carry
+ADD B, [HAT_sectors_start]
+
+DIV B, [floppy_words_per_sector] ; divide position of hat sector in words by number of words in a floppy sector to get the floppy sector the hat sector lies in
+SET C, EX
+DIV A, [floppy_words_per_sector]
+ADD A, C
+SET C, POP
+SET B, POP
+SET PC, POP
+
+; A-> HAT sector id
+; A<- the offset in words of the HAT sector given by A within the floppy sector
+:HAT_sector_offset
+SET PUSH, B
+SET PUSH, A
+JSR HAT_sector_position
+SET B, A
+SET A, POP
+MUL A, [HAT_sector_size]
+ADD A, [HAT_sectors_start+1] ; add lower and lower
+
+MUL B, [floppy_words_per_sector]
+SUB A, B
+SET B, POP
+SET PC, POP
+
+;for writing a sector using data in the stack
+;
+; A -> start sector
+; B -> number of words
+; C -> offset in sector
+:HAT_write_sector_stack
+SET [HAT_write_sector_stack_pc], PEEK
+SET [HAT_write_sector_stack_A], A
+SET [HAT_write_sector_stack_B], B
+SET [HAT_write_sector_stack_C], C
+ADD SP, 1
+SET PUSH, B
+IFG [HAT_sector_size], [floppy_words_per_sector]
+SET PC, HAT_write_sector_stack_read_skip
+
+JSR HAT_sector_position
+
+SET PUSH, B
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1  ; number of sectors to read, atleast 1
+JSR pfloppy_read_sectors
+
+SET B, POP
+
+:HAT_write_sector_stack_read_skip
+SET [HAT_header_in_paging], 0
+SET A, [HAT_write_sector_stack_A]
+JSR HAT_sector_offset
+; A is now the offset of the sector in the floppy paging space. data now needs to be written to that space plus the offset
+; then write back same number of sectors
+
+ADD A, [floppy_paging_address]
+IFG C, [HAT_sector_size]
+SET C, [HAT_sector_size]
+ADD A, C
+SET B, POP
+ADD B, C
+IFG B, [HAT_sector_size]
+SET B, [HAT_sector_size]
+SUB B, C
+JSR stackpull
+
+SET A, [HAT_write_sector_stack_A]
+JSR HAT_sector_position
+SET PUSH, B
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1  ; number of sectors to read, atleast 1
+JSR pfloppy_write_sectors
+
+SET B, POP
+SET A, [HAT_write_sector_stack_A]
+SET B, [HAT_write_sector_stack_B]
+SET C, [HAT_write_sector_stack_C]
+SET PC, [HAT_write_sector_stack_pc]
+
+:HAT_write_sector_stack_pc dat 0
+:HAT_write_sector_stack_A  dat 0
+:HAT_write_sector_stack_B  dat 0
+:HAT_write_sector_stack_C  dat 0
+
+
+;for reading values from a sector to the stack
+; A -> start sector
+; B -> number of words
+; C-> word offset in sector ie 0 is start of sector
+:HAT_read_sector_stack
+SET [HAT_read_sector_stack_pc], PEEK
+SET [HAT_read_sector_stack_A], A
+SET [HAT_read_sector_stack_B], B
+SET [HAT_read_sector_stack_C], C
+ADD SP, 1
+
+JSR HAT_sector_position
+
+SET PUSH, B
+SET B, [HAT_sector_size]
+DIV B, [floppy_words_per_sector]
+IFE B, 0
+	ADD B, 1  ; number of sectors to read, atleast 1
+JSR pfloppy_read_sectors
+
+SET [HAT_header_in_paging], 0
+SET A, [HAT_read_sector_stack_A]
+JSR HAT_sector_offset
+; A is now the offset of the sector in the floppy paging space. data now needs to be read from that space plus the offset
+
+ADD A, [floppy_paging_address]
+IFG C, [HAT_sector_size]
+SET C, [HAT_sector_size]
+ADD A, C
+SET B, POP
+ADD B, C
+IFG B, [HAT_sector_size]
+SET B, [HAT_sector_size]
+SUB B, C
+JSR stackpush
+
+SET A, [HAT_read_sector_stack_A]
+SET B, [HAT_read_sector_stack_B]
+SET C, [HAT_read_sector_stack_C]
+SET PC, [HAT_read_sector_stack_pc]
+:HAT_read_sector_stack_pc dat 0
+:HAT_read_sector_stack_A  dat 0
+:HAT_read_sector_stack_B  dat 0
+:HAT_read_sector_stack_C  dat 0
+
+;creates an inode in a free sector
+; A -> type
+; B -> number of links
+; A <- sector
+
+:HAT_inode_create
+SET PUSH, A ; store type
+SET PUSH, B
+SET PUSH, C
+
+JSR HAT_find_free_sector
+SET PUSH, A ;store free sector
+JSR HAT_allocate_sector
+
+SET PUSH, PICK 3
+SET PUSH, PICK 3
+SET PUSH, 0
+SET PUSH, 0
+SET B, 4
+SET C, 0
+JSR HAT_write_sector_stack
+SET A, POP
+SET C, POP
+SET B, POP
+ADD SP, 1
+SET PC, POP
+
+; Deletes an inode
+; A -> inode to delete
+:HAT_inode_delete
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, 0
+SET PUSH, 0
+SET PUSH, 0
+SET PUSH, 0
+SET B, 4
+SET C, 0
+JSR HAT_write_sector_stack
+JSR HAT_delete_strip
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+
+;for creating a directory inode
+; A <- hat sector of new inode
+:HAT_inode_directory_create
+SET PUSH, B
+SET A, 1
+SET B, 1
+JSR HAT_inode_create
+SET B, POP
+SET PC, POP
+
+;for adding a link to a directory inode
+; A-> hat sector of inode
+; B-> hat sector for link
+; C-> address of name string (15 characters)
+; A <- nothing or error codes
+; 0xffff = inode is not a directory
+; todo: handle entries going beyond a single hat sector
+:HAT_inode_directory_add_link
+SET PUSH, Y
+SET PUSH, X
+SET PUSH, Z
+SET PUSH, I
+SET PUSH, J
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+
+;check to see if inode is a directory
+IFN PICK 3, 1
+	SET PC, HAT_inode_directory_add_link_error1
+
+SET A, PICK 1
+SET B, PEEK
+SET X, 0
+SET Y, 4
+JSR math_ABaddXY
+SET C, [HAT_sector_size]
+JSR math_ABdivC
+SET Z, B
+SET A, PICK 1
+SET B, PEEK
+SET X, 0
+SET Y, 20
+JSR math_ABaddXY
+SET C, [HAT_sector_size]
+JSR math_ABdivC
+
+IFG B, Z ; if b is greater than z, entry extends over 2 hat sectors ie need to add sector to strip
+	SET PC, HAT_inode_directory_add_link_bridge
+
+IFG Z, 0 ; if Z is greater than 0 entry is not in first sector in directory strip
+	SET PC, HAT_inode_directory_add_link_getendsector
+
+SET B, PEEK
+ADD B, 4
+SET Z, B
+
+ADD SP, 4
+SET I, PICK 2; A-> hat sector of inode
+SET X, PICK 1 ; B-> hat sector for link
+SET Y, PEEK ; C-> address of name string (15 characters)
+
+SET A, I ; add entry length to content length of inode
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+ADD PEEK, 16
+ADD PICK 1, EX
+JSR HAT_write_sector_stack
+
+SET PUSH, X ;
+SET A, Y
+SET B, 15
+JSR stackpush
+SET A, I
+SET B, 16
+SET C, Z
+JSR HAT_write_sector_stack
+
+:HAT_inode_directory_add_link_end
+SET C, POP
+SET B, POP
+SET A, POP
+SET J, POP
+SET I, POP
+SET Z, POP
+SET X, POP
+SET Y, POP
+SET PC, POP
+
+:HAT_inode_directory_add_link_getendsector
+ADD SP, 4
+SET I, PICK 2; A-> hat sector of inode
+SET X, PICK 1 ; B-> hat sector for link
+SET Y, PEEK ; C-> address of name string (15 characters)
+
+SET A, I ; add entry length to content length of inode
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+ADD PEEK, 16
+ADD PICK 1, EX
+SET X, PICK 1
+SET Y, PEEK
+JSR HAT_write_sector_stack
+SET A, X
+SET B, Y
+SET X, 0
+SET Y, 16
+JSR math_ABsubXY
+SET A, I
+JSR HAT_find_strip_end
+ADD B, 4
+MOD B, [HAT_sector_size]
+SET C, B ; C is now offset in sector
+SET I, A ; last sector in strip
+SET X, PICK 1 ; B-> hat sector for link
+SET Y, PEEK ; C-> address of name string (15 characters)
+
+SET PUSH, X
+SET A, Y
+SET B, 15
+JSR stackpush
+SET A, I
+SET B, 16
+; C is offset in sector
+JSR HAT_write_sector_stack
+
+SET PC, HAT_inode_directory_add_link_end
+
+:HAT_inode_directory_add_link_bridge
+SET X, PICK 1
+SET Y, PEEK
+SET A, 0
+SET B, 4
+JSR math_ABaddXY
+SET X, A
+SET Y, B
+ADD PEEK, 16
+ADD PICK 1, EX
+SET A, PICK 6
+SET B, 4
+SET C, 0
+JSR HAT_write_sector_stack
+SET A, PICK 2
+IFG Z, 0
+JSR HAT_find_strip_end
+SET B, Y
+MOD B, [HAT_sector_size]
+SET C, B
+SET I, A
+
+SET Y, PEEK
+SET PUSH, PICK 1 ; push link inode
+SET A, Y ; address of name string
+SET B, [HAT_sector_size]
+SUB B, C
+SUB B, 1
+ADD Y, B
+JSR stackpush
+ADD B, 1
+SET A, I
+JSR HAT_write_sector_stack
+SET PUSH, B
+JSR HAT_find_free_sector
+JSR HAT_allocate_sector
+SET B, A
+SET A, I
+JSR HAT_join_sectors
+SET I, B
+SET B, POP
+SET C, 16
+SUB C, B
+SET B, C
+SET A, Y
+JSR stackpush
+SET A, I
+SET C, 0
+JSR HAT_write_sector_stack
+SET PC, HAT_inode_directory_add_link_end
+
+:HAT_inode_directory_add_link_error1
+ADD SP, 4
+SET C, POP
+SET B, POP
+ADD SP, 1
+SET A, 0xFFFF
+SET J, POP
+SET I, POP
+SET Z, POP
+SET X, POP
+SET Y, POP
+SET PC, POP
+
+;creates an file inode and copies data into the file
+; A-> start of file data
+; B-> end of file of data
+; A <- start sector of file
+:HAT_inode_file_create
+SET PUSH, X
+SET PUSH, Y
+SET PUSH, C
+SET PUSH, B
+SET PUSH, A
+
+SET Y, B
+SUB Y, A
+
+SET A, 2
+SET B, 1
+JSR HAT_inode_create
+SET PUSH, 0
+SET PUSH, Y
+SET B, 2
+SET C, 2
+JSR HAT_write_sector_stack
+SET B, POP
+SET C, Y
+SET X, 4
+JSR HAT_write_sectors
+SET B, POP
+SET C, POP
+SET Y, POP
+SET X, POP
+SET PC, POP
+
+
+
+; lists directory links on screen
+; A -> inode of directory to be listed in screen ie precurser to ls
+:HAT_directory_list
+SET PUSH, J
+SET PUSH, I
+SET PUSH, Y
+SET PUSH, C
+SET PUSH, B
+SET PUSH, A
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+IFN PICK 3, 1
+	SET PC, HAT_directory_list_error1 ; not a directory
+
+SET A, PICK 1
+SET B, PEEK
+SET C, 16
+JSR math_ABdivC
+SET Y, B
+ADD SP, 4
+SET A, PEEK
+SET PUSH, A
+SET B, 0
+JSR HAT_read_sector
+JSR HAT_sector_offset
+ADD A, [floppy_paging_address]
+ADD A, 5
+SET J, 4
+SET I, 0
+:HAT_directory_list_loop
+SUB Y, 1
+SET B, 15
+JSR text_out_length
+JSR newline
+ADD A, 16
+ADD J, 16
+ADD I, EX
+SET B, J
+MOD B, [HAT_sector_size]
+SET C, [HAT_sector_size]
+SUB C, B
+IFL C, 16
+JSR HAT_directory_list_bridge
+
+IFN Y, 0
+SET PC, HAT_directory_list_loop
+
+;HAT_directory_list_end
+SET A, POP
+SET A, POP
+SET B, POP
+SET C, POP
+SET Y, POP
+SET I, POP
+SET J, POP
+SET PC, POP
+
+:HAT_directory_list_bridge
+SET B, C
+JSR text_out_length
+SET B, 16
+SUB B, C
+SET A, PICK 1
+JSR HAT_find_next_sector
+SET PICK 1, A
+JSR HAT_read_sector
+JSR HAT_sector_offset
+ADD A, [floppy_paging_address]
+JSR text_out_length
+ADD A, B
+ADD A, 1
+JSR newline
+SET PC, POP
+
+
+:HAT_directory_list_error1
+ADD SP, 4
+SET A, POP
+SET B, POP
+SET C, POP
+SET Y, POP
+SET PC, POP
+
+
+; A-> directory inode
+; B-> file start
+; C-> file end
+; X-> file name (15 characters)
+:HAT_inode_directory_add_file
+SET PUSH, B
+SET PUSH, C
+SET PUSH, A
+SET A, B
+SET B, C
+JSR HAT_inode_file_create
+SET B, A
+SET A, PEEK
+SET C, X
+JSR HAT_inode_directory_add_link
+SET A, POP
+SET C, POP
+SET B, POP
+SET PC, POP
+
+;initiates a stream to a file
+; subsequent calls to HAT_file_stream_to will add data to the file as defined by the initialised paramaters.
+; this will allow loops to add data from a buffer to a file by simply calling HAT_file_stream_to
+; calling HAT_file_stream_stop will pretect accidental calls to HAT_file_stream_to from occuring.
+; A -> inode of file to stream to
+; B -> memory location of buffer to read from
+; C -> length of buffer.
+:HAT_file_stream_to_init
+IFN [HAT_file_stream_to_active], 0 ; stream already initialised, must call HAT_file_stream_stop first
+SET PC, POP
+
+SET [HAT_file_stream_to_active], 1
+SET [HAT_file_stream_to_inode], A
+SET [HAT_file_stream_to_buffer], B
+SET [HAT_file_stream_to_buffer_length], C
+
+JSR pusha ; push all registers.
+
+SET A, [HAT_file_stream_to_inode]
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+
+;check to see if inode is a file
+IFN PICK 3, 2
+	SET PC, HAT_file_stream_to_init_error1
+
+SET X, PICK 1
+SET Y, PEEK
+SET A, X
+SET B, Y
+ADD B, 4
+ADD A, EX
+SET [HAT_file_stream_to_position], A
+SET [HAT_file_stream_to_position+1], B
+SUB [HAT_file_stream_to_position+1], 1
+SUB [HAT_file_stream_to_position], EX
+SET A, [HAT_file_stream_to_inode]
+JSR HAT_find_strip_end
+SET [HAT_file_stream_to_strip_end], A
+ADD SP, 4
+jsr popa
+SET PC, POP
+
+:HAT_file_stream_to_init_error1
+JSR popa ; push all registers.
+SET [HAT_file_stream_to_active], 0
+SET A, [HAT_file_stream_to_inode]
+SET B, [HAT_file_stream_to_buffer]
+SET C, [HAT_file_stream_to_buffer_length]
+SET PC, POP
+
+:HAT_file_stream_to_active dat 0
+:HAT_file_stream_to_inode dat 0
+:HAT_file_stream_to_buffer dat 0
+:HAT_file_stream_to_buffer_length dat 0
+:HAT_file_stream_to_strip_end dat 0
+:HAT_file_stream_to_position dat 0, 0
+:HAT_file_stream_to_buffer_pos dat 0
+
+; streams data from the buffer to a file determined by HAT_file_stream_to_init
+; returns silent if it hasn't been intialised.
+:HAT_file_stream_to
+IFN [HAT_file_stream_to_active], 1
+SET PC, POP
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+SET PUSH, X
+
+SET A, [HAT_file_stream_to_inode]
+SET B, 2
+SET C, 2
+JSR HAT_read_sector_stack
+
+ADD PEEK, [HAT_file_stream_to_buffer_length]
+ADD PICK 1, EX
+SET A, [HAT_file_stream_to_inode]
+SET B, 2
+SET C, 2
+JSR HAT_write_sector_stack
+
+SET A, [HAT_file_stream_to_position]
+SET B, [HAT_file_stream_to_position+1]
+MOD B, [HAT_sector_size]
+SET X, B
+SET C, [HAT_file_stream_to_buffer_length]
+SET B, [HAT_file_stream_to_buffer]
+SET A, [HAT_file_stream_to_strip_end]
+JSR HAT_write_sectors
+JSR HAT_find_strip_end
+SET [HAT_file_stream_to_strip_end], A
+
+SET X, POP
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+
+
+;initiates a stream from a file
+; subsequent calls to HAT_file_stream_to will incrementally read data from a file to the buffer location
+; this will allow loops to retreive data from a file to a buffer by simply calling HAT_file_stream_from without any paramaters
+; calling HAT_file_stream_from_stop will pretect accidental calls to HAT_file_stream_from from occuring.
+; A -> inode of file to stream from
+; B -> memory location of buffer to read to
+; C -> length of buffer.
+:HAT_file_stream_from_init
+IFN [HAT_file_stream_from_active], 0 ; stream already initialised, must call HAT_file_stream_from_stop first
+SET PC, POP
+
+SET [HAT_file_stream_from_active], 1
+SET [HAT_file_stream_from_inode], A
+SET [HAT_file_stream_from_current_sector], A
+SET [HAT_file_stream_from_buffer], B
+SET [HAT_file_stream_from_buffer_length], C
+SET [HAT_file_stream_from_position], 0
+SET [HAT_file_stream_from_position+1], 4
+
+SET PUSH, A
+SET PUSH, B
+SET PUSH, C
+
+SET A, [HAT_file_stream_from_inode]
+SET B, 4
+SET C, 0
+JSR HAT_read_sector_stack
+
+;check to see if inode is a file
+IFN PICK 3, 2
+	SET PC, HAT_file_stream_from_init_error1
+
+SET [HAT_file_stream_from_size], PICK 1
+SET [HAT_file_stream_from_size+1], PEEK
+ADD [HAT_file_stream_from_size+1], 4
+ADD [HAT_file_stream_from_size], EX
+ADD SP, 4
+SET C, POP
+SET B, POP
+SET A, POP
+SET PC, POP
+
+:HAT_file_stream_from_init_error1
+ADD SP, 7
+SET [HAT_file_stream_from_active], 0
+SET A, [HAT_file_stream_from_inode]
+SET B, [HAT_file_stream_from_buffer]
+SET C, [HAT_file_stream_from_buffer_length]
+SET PC, POP
+
+
+; streams data from the buffer to a file determined by HAT_file_stream_to_init
+; returns silent if it hasn't been intialised.
+:HAT_file_stream_from
+IFN [HAT_file_stream_from_active], 1
+SET PC, POP
+
+JSR pusha ; push all registers.
+
+SET A, [HAT_file_stream_from_size]
+SET B, [HAT_file_stream_from_size+1]
+SET X, [HAT_file_stream_from_position]
+SET Y, [HAT_file_stream_from_position+1]
+JSR math_ABsubXY
+SET X, A
+SET Y, B ; XY number of words left to read from file
+
+SET C, [HAT_file_stream_from_buffer_length]
+IFG [HAT_file_stream_from_buffer_length], B
+SET C, B
+
+SET A, [HAT_file_stream_from_current_sector]
+SET X, Y
+MOD X, [HAT_sector_size]
+JSR HAT_read_sectors
+
+:HAT_file_stream_from_end
+JSR popa
+SET PC, POP
+
+:HAT_file_stream_from_active dat 0
+:HAT_file_stream_from_inode dat 0
+:HAT_file_stream_from_buffer dat 0
+:HAT_file_stream_from_buffer_length dat 0
+:HAT_file_stream_from_size dat 0, 0
+:HAT_file_stream_from_position dat 0, 0
+:HAT_file_stream_from_current_sector dat 0
+
+
+
+
+:HAT_header_in_paging
+dat 0x0
+
+:HAT_header
+:HAT_system_version
+dat 0x0
+:HAT_num_sectors
+dat 0
+:HAT_sector_map_start
+dat 0, 0
+:HAT_sector_joins_start
+dat 0, 0
+:HAT_sectors_start
+dat 0, 0
+:HAT_sector_size
+dat 0
+:HAT_sectors_used
+dat 0
+
+:HAT_header_256
+dat 0x4001, 0x0B34, 0x0000, 0x000A, 0x0000, 0x00BE, 0x0000, 0x0C00, 0x0100, 0x0000, 0x00BD, 0x0004
+
+:HAT_header_1024
+dat 0x4001, 0x02CF, 0x0000, 0x000A, 0x0000, 0x0037, 0x0000, 0x0C00, 0x0400, 0x0000, 0x0036, 0x000F
+
+:HAT_driver_end
