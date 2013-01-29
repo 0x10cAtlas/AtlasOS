@@ -203,8 +203,8 @@
 	JSR lib_get_function
 	IFN A, 0
 		JSR A
-
-	SET A, [PEEK]
+	SET A, PEEK
+	SET A, [A]
 	JSR page_free
 
 :lib_unload_end

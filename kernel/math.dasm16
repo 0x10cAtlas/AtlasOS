@@ -1,0 +1,50 @@
+:math_ABdivC
+SET PUSH, Y
+DIV A, C
+SET Y, EX
+DIV B, C
+ADD B, Y
+SET Y, POP
+SET PC, POP
+
+:math_ABaddXY
+ADD B, Y
+ADD A, EX
+ADD A, X
+SET PC, POP
+
+:math_ABsubXY
+SUB B, Y
+SUB A, EX
+SUB A, X
+SET PC, POP
+
+:math_ABgXY ; sets c to 1 if (AB) is greater than (XY), otherwise C = 0
+IFL A, X
+SET pc, math_false
+
+IFG A, X
+set PC, math_true
+
+IFE B, Y
+SET PC, math_false
+
+IFL B, Y
+SET PC, math_false
+SET PC, math_true
+
+:math_true
+SET C, 1
+SET PC, POP
+
+:math_false
+SET C, 0
+SET PC, POP
+
+:math_ABeXY
+IFE A, X
+IFE B, Y
+SET PC, math_true
+SET PC, math_false
+
+

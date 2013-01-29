@@ -44,7 +44,7 @@
 :proc_get_flags_of
       JSR proc_get_info_of
 
-      ADD A, 11
+      ADD A, 3
       SET A, [A]
       SET PC, POP
 
@@ -56,8 +56,9 @@
       JSR proc_id
 
 :proc_get_info_of
-      MUL A, 12
-      ADD A, proc_buffer
+      MUL A, 5
+      ADD A, proc_table
+	  SUB A, 5
       SET PC, POP
 
 ; Sets the flags of the current process
@@ -145,107 +146,79 @@
       SET A, [B]
       IFN A, 0
           JSR PEEK
-      ADD B, 12
+      ADD B, 5
       IFN B, proc_table_end
           SET PC, proc_callback_list_loop
 
       SET A, POP
       SET B, POP
       SET PC, POP
-	  
-; Trigger a manual process suspend interrupt
-; THIS IS WEIRDLY BROKEN! WHY!?
-; Tried added dummy ops, still broken
+
 :proc_suspend
-	SET A, 42 ; dummy op
-	INT 0xFEDC
-	SET A, 42 ; dummy op
-	SET PC, POP
-	  
-; proc_suspend_interrupt
-; Takes 164 - 264 cycles to complete which is 1.6ms to 2.6ms
+INT 0x1002
+SET PC, POP
+
+
 :proc_suspend_interrupt
-	IFE [preemptive_enabled], 0
-		SET PC, proc_suspend_interrupt_skipstart
-	IFE [proc_suspend_param], 0
-		SET PC, proc_suspend_interrupt_skipstart
+ADD SP, 3
+ifl [processes], 2
+rfi a
+ife [proc_realtime_id], [proc_current]
+rfi a
+SET PUSH, B
+SET PUSH, C
+SET PUSH, X
+SET PUSH, Y
+SET PUSH, Z
+SET PUSH, I
+SET PUSH, J
+SET PUSH, EX
 
-	SET A, POP ; Pop off the return address
-	SET A, POP ; Pop off another return address
-	SET EX, POP ; Get EX back
-	SET A, POP ; Get A back
-	SET [proc_suspend_param], 0 ; Reset the param
-:proc_suspend_interrupt_skipstart
+SET [int_msg], A
 
-	SET [proc_buffer], [proc_current] ; Buffer the registers of the current process
-	SET [proc_buffer_a], A
-	SET [proc_buffer_b], B
-	SET [proc_buffer_c], C
-	SET [proc_buffer_x], X
-	SET [proc_buffer_y], Y
-	SET [proc_buffer_z], Z
-	SET [proc_buffer_i], I
-	SET [proc_buffer_j], J
-	SET [proc_buffer_sp], SP
 
-	; Restore the Stackpointer so we can call subroutines
-	SET SP, [proc_table10]
+SET A, [proc_current]
+MUL A, 5
+SUB A, 5
+ADD A, proc_table
+ADD A, 1
+SET [A], SP
 
-	; Copy the buffered state to the table
-	JSR proc_get_info
-	SET B, A
-	SET A, proc_buffer
-	SET C, 12
-	JSR mem_copy
 
-	; Process saved, now restore the next proc
-	SET A, B
+add a, 4
 :proc_kill_me_hook
-	ADD A, 12
+
 :proc_suspend_loop
 	IFE A, proc_table_end
 		SET A, proc_table
 	SET X, [A]
 	IFN X, 0x0000
 		SET PC, proc_suspend_invoke
-	ADD A, 12
+	ADD A, 5
 	SET PC, proc_suspend_loop
 
 :proc_suspend_invoke
-	; Copy the process information to the registers
-	SET B, proc_buffer
-	JSR mem_copy
-	
-	; DEBUG OUTPUT
-	SET A, 1
-	SET B, 0
-	SET C, 0x4000
-	JSR kernel_interrupt_debug_clock_ticker
-	; END DEBUG OUTPUT
 
-	SET [proc_current], [proc_buffer]
-	SET A, [proc_buffer_a]
-	SET B, [proc_buffer_b]
-	SET C, [proc_buffer_c]
-	SET X, [proc_buffer_x]
-	SET Y, [proc_buffer_y]
-	SET Z, [proc_buffer_z]
-	SET I, [proc_buffer_i]
-	SET J, [proc_buffer_j]	
-	SET SP, [proc_buffer_sp]
-	
-	IFN [preemptive_enabled], 0
-		IAQ 0
-		
-	SET PC, POP ; Jump into the Program
-	
-:proc_suspend_param dat 0x0000
+	SET [proc_current], [A]
+	ADD A, 1
+	SET SP, [A]
+	set EX, POP
+	set J, POP
+	set I, POP
+	set Z, POP
+	set Y, POP
+	set X, POP
+	set C, POP
+	set B, POP
+
+	RFI A ; Jump into the Program
+
 
 ; Loads a new process into memory
 ; A: Begin of the BLOB
 ; B: Length of the BLOB
 :proc_load
-
+	IAQ 1
 	SET PUSH, B
 	SET PUSH, C
 	SET PUSH, X
@@ -277,7 +250,7 @@
 	IFE [X], 0x0000
 		SET PC, proc_load_to
 
-	ADD X, 12
+	ADD X, 5
 	IFN X, proc_table_end
 		SET PC, proc_load_loop
 
@@ -292,7 +265,7 @@
 	; Calculate the ProcID by finding the proc_table record number (OS is 1).
 	SET [X], X
 	SUB [X], proc_table
-	DIV [X], 12
+	DIV [X], 5
 	ADD [X], 1
 
 	; X = ProcInfo Addr
@@ -303,15 +276,15 @@
 	; Finally load the Process - A is the source mem addr, B is length.
 	SET C, B
 	SET PUSH, A
-	
-	; If we're loading from a built-in app, no need to allocate extra memory
+
+	; If we're loading from a built-in app, we only need to allocate a page for the stack
 	IFN Z, 0x4714
 		SET B, A
 	IFN Z, 0x4714
-		SET PC, proc_load_skip_alloc
+		SET PC, proc_load_stack_alloc
 
 	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
-	SET PUSH, [proc_current]   
+	SET PUSH, [proc_current]
 	SET [proc_current], [X]
 
 	SET B, C
@@ -332,7 +305,7 @@
 	IFE Z, 0x4714
 		SET C, J ; If we are an ABI exe set the size to just the code length
 	JSR mem_copy
-:proc_load_skip_alloc
+
 	SET A, POP
 
 	; Get the flags back.
@@ -347,25 +320,11 @@
 	SUB Y, 1 ; Move back 1
 	ADD Y, B ; Offset by the memory start
 
+:proc_load_stack_alloc_end
+
 	SET A, [X] ; A return the ProcID
 	; Fill the proc_table entry for this process.
-	ADD X, 1 ; A
-	SET [X], 0
-	ADD X, 1 ; B
-	SET [X], 0
-	ADD X, 1 ; C
-	SET [X], 0
-	ADD X, 1 ; X
-	SET [X], 0
-	ADD X, 1 ; Y
-	SET [X], 0
-	ADD X, 1 ; Z
-	SET [X], 0
-	ADD X, 1 ; I
-	SET [X], 0
-	ADD X, 1 ; J
-	SET [X], 0
-	
+
 	; Set the SP to the last byte of the allocated memory page(s)
 	ADD X, 1 ; SP
 	SET [X], Y
@@ -373,15 +332,26 @@
 	; Store the memory address of the process.
 	ADD X, 1
 	SET [X], B
+
+	; Store flags
 	ADD X, 1 ; Flags
 	BOR C, 0x0001 ; OR in the active flag. This will overwrite the ART flag but we don't care
 	SET [X], C
 
 	SET [Y], B ; "Push" the "return" address on the process stack - this is the beginning of the process program.
+	SUB X, 2 ; back to SP
+	SUB [X], 9
+	SET PUSH, A ; clear new proccess stack area so we start with each register being 0
+	SET A, Y
+	SUB A, 10
+	SET B, 9
+	JSR mem_clear
+	SET A, POP
+
 
 :proc_load_end
-	; Enable preemptive threading via interrupts now that we have a new process
-	SET [preemptive_enabled], 1
+	; add to number of processes
+	ADD [processes], 1
 
 	SET J, POP
 	SET I, POP
@@ -390,8 +360,33 @@
 	SET X, POP
 	SET C, POP
 	SET B, POP
+	IAQ 0
+	INT 0x1002
 	SET PC, POP
-	
+
+:proc_load_stack_alloc
+
+	; Pretend the routine has been called by this not-yet-loaded process, so we can allocate memory.
+	SET PUSH, [proc_current]
+	SET [proc_current], [X]
+	JSR page_alloc
+	SET [proc_current], POP
+
+	SET Y, A ; Save the address of the new page
+	SET A, PEEK ; Get back our original source address
+	ADD Y, 512
+	SUB Y, 1
+
+	SET A, POP
+
+	; Get the flags back.
+	SET C, POP
+
+	; Check if we have any flags to deal with
+	IFN C, 0
+		JSR proc_handle_flags
+
+	SET PC, proc_load_stack_alloc_end
 
 :proc_handle_flags
 	SET PUSH, A
@@ -449,9 +444,11 @@
 :proc_kill_me
 	JSR proc_id ; Save process ID
 	SET X, A
+	IFE [proc_realtime_id], A
+	JSR proc_realtime
 	JSR proc_get_info_of ; Save process info address
 	SET Y, A
-	ADD A, 10 ; Save memory page
+	ADD A, 2 ; Save memory page
 	SET Z, [A]
 
 	ADD A, 1 ; Move to the flags word
@@ -461,14 +458,13 @@
 		JSR manage_charset
 
 	SET A, Y ; Delete the process info entry
-	SET B, 12
+	SET B, 4
 	JSR mem_clear
 
 	SET A, X
 	JSR page_free_of
-
+	SUB [processes], 1
 	SET A, Y ; Restore the pointer to the info entry
-	SET C, 12
 	SET PC, proc_kill_me_hook
 
 :proc_kill
@@ -479,15 +475,17 @@
 
       JSR proc_get_info_of ; Save process info address
       SET Y, A
-      ADD A, 10 ; Save memory page
+      ADD A, 2 ; Save memory page
       SET Z, [A]
 
       SET A, Y ; Delete the process info entry
-      SET B, 12
+      SET B, 4
       JSR mem_clear
 
       SET A, POP ; Free the process memory page
       JSR page_free_of ; ! It will not be cleared !
+
+	  SUB [processes], 1
 
       SET Z, POP
       SET Y, POP
@@ -495,4 +493,90 @@
       SET PC, POP
 
 	  
+:proc_realtime
+	SET PUSH, A
+	IFN [proc_realtime_id], 0
+		SET PC, proc_realtime_off 
+	JSR proc_id
+	SET [proc_realtime_id], A
+	SET A, POP
+	SET PC, POP
+	
+:proc_realtime_off
+	SET [proc_realtime_id], 0
+	SET A, POP
+	SET PC, POP
+	
 ; ##############################################################
+
+; Threading
+; using the underlying process architecture, threads are created much in the same way as processes, except that when a process is killed any accociated threads are killed as well.
+; threads are also designed to run through once before returning to the owning process. In theory a thread could own other threads. 
+; Designed to allow effecient code reuse, ie a thread is created to manage a device by copying generic code. The owning process can then copy data into the thread memeory area to initilise it. Threads will have to prefaced with a relocation tabel to facilitate this. 
+; Atlas is limited to 16 threads/proccesses including the kernel.  
+
+; A -> thread code location
+; B -> thread code length
+; C -> boolean if 1 thread code is copied into new memory location. 
+; A <- proc_id of thread
+; B <- memory location of thread.
+:create_thread
+	IAQ 1
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	SET PUSH, I
+	SET PUSH, J
+	
+	
+	SET X, proc_table
+
+:create_thread_loop1
+	IFE [X], 0x0000
+		SET PC, create_thread_start
+
+	ADD X, 5
+	IFN X, proc_table_end
+		SET PC, create_thread_loop1
+
+:create_thread_error
+	SET A, 0
+	SET PC, create_thread_end
+	
+:create_thread_start
+	SET [X], X
+	SUB [X], proc_table
+	DIV [X], 5
+	ADD [X], 1
+
+	; X = ProcInfo Addr
+	
+	IFN C, 1
+		create_thread_stack_alloc
+		
+	SET C, B
+	SET PUSH, A
+	
+	ADD B, 128
+	DIV B, 1024
+	ADD B, 1
+	SET Y, B
+	SET A, B, 
+	
+
+
+; Must be called inside a process
+; A -> proc_id of thread.
+; removes a thread from the process list. 
+:kill_thread
+
+; Must be called inside a process
+; A -> proc_id of thread.
+; sets up the process manager to switch to the thread.
+:call_thread
+
+; Must be called inside a thread
+; Sets up the process manager to switch to the owning process. 
+:return_thread

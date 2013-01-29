@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<solution>
+  <name>atlas</name>
+  <properties>
+    <property name="emuLoad.projectName">atlas</property>
+    <property name="emuLoadMode">project</property>
+  </properties>
+  <projects>
+    <project path="atlas.10cproj" />
+  </projects>
+</solution>

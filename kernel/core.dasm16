@@ -1,134 +1,70 @@
-#include "AtlasOS 0.6.2"
-
-#include "../include/kernel.inc"
-
-SET PC, kernel_boot
-
 ; Kernel
-#include "drivers.dasm16"
-#include "filesystem.dasm16"
-#include "graphics.dasm16"
-#include "interrupts.dasm16"
-#include "library.dasm16"
-#include "memory.dasm16"
-#include "messages.dasm16"
-#include "process.dasm16"
 
 :kernel_boot
 JSR bios_boot
 
-; Set the interrupt handler first
-IAS kernel_interrupt_handler
-
 ; clear screen (for emulator)
 JSR clear
 
-; Display the logo
-SET A, text_logo
-JSR text_out
+
 
 ; Bootmessage
 SET A, text_start
 JSR text_out
 
-; Reserve kernel-memory
-SET X, 0
-:kernel_mem
-IFG X, kernel_end
-    SET PC, kernel_mem_end
-SET A, X
+; Reserve all operating system code including api space
+SET A, 0
 JSR page_reserve
-ADD X, 1024
-SET PC, kernel_mem
-:kernel_mem_end
+SET A, os_content_end
+DIV A, 512
+ADD A, 1
+JSR page_alloc_big
 
-; Reserve misc-memory
-SET X, os_content
-:os_content_mem
-IFG X, os_content_end
-    SET PC, os_content_mem_end
-SET A, X
-JSR page_reserve
-ADD X, 1024
-SET PC, os_content_mem
-:os_content_mem_end
 
 ; Reserve stack-memory
 SET A, 0xFFFF
 JSR page_reserve
 
-; Reserve the API space
-SET A, 0x1000
-JSR page_reserve
-
-SET X, 0
 
 ; Copy the API.
-SET B, 0x1000
-SET A, api_start
-SET C, api_end
-SUB C, A
-JSR mem_copy
+;SET B, 0x1000
+;SET A, api_start
+;SET C, api_end
+;SUB C, A
+;JSR mem_copy
 
 ; Clear out a few things
 SET [keyboard_buffers_exclusive], 0
-SET [keyboard_oldvalue], 0
 JSR keyboard_unregister_all
+
+;Format Disk and Create root directory
+;JSR HAT_format_disk_256
+;JSR HAT_inode_directory_create
 
 ; OS ready message
 SET A, text_start_ok
 JSR text_out
 
+
+; Set the interrupt handler last since booting has finished
+IAS kernel_interrupt_handler
 ; Main kernel loop
 :kernel_loop
 
-	; Call the keyboard driver
-	JSR driver_keyboard
-	
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
-
-	; Release back to other running processes
-	INT 0xFEDC
-	;JSR proc_suspend
-	
+	JSR proc_suspend
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background
 :kernel_watchdog_checkalone
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
+	SET A, proc_table
+	ADD A, 4
+	IFN [A], 2
+	SET PC, kernel_watchdog_loadshell
 
-	SET C, kernel_watchdog_proc_list_buffer
-	SET A, kernel_watchdog_helper
-	JSR proc_callback_list
-	SET C, kernel_watchdog_proc_list_buffer
-	ADD C, 1
-	IFE [C], 0
-		JSR kernel_watchdog_loadshell
-
-	; Clear the proc buffer
-	SET C, kernel_watchdog_proc_list_buffer
-	SET [C], 0
-	ADD C, 1
-	SET [C], 0
-
-	SET A, POP
-	SET B, POP
-	SET C, POP
-	SET PC, POP
-:kernel_watchdog_helper
-	IFE C, kernel_watchdog_proc_list_buffer_end
-		SET PC, POP
-	SET [C], A
-	ADD C, 1
 	SET PC, POP
 :kernel_watchdog_loadshell
-	; This is a workaround so the shell doesn't freak out
-	; when there is no data in the keyboard buffer
-	SET [keyboard_oldvalue], 0xFFFF
-	; Now start the shell
 	SET A, AtlasShell
 	SET B, AtlasShell_end
 	SUB B, AtlasShell
@@ -137,32 +73,3 @@ JSR text_out
 	
 :kernel_end
 	SET PC, kernel_end
-	
-:api_padding
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-:api_padding_end
-	
-; Apps
-:os_content
-#include "../apps/AtlasShell.dasm16"
-#include "../apps/AtlasText.dasm16"
-#include "../apps/apps.dasm16"
-
-; Virtual Filesystem
-#include "../misc/vfs.dasm16"
-:os_content_end
-	

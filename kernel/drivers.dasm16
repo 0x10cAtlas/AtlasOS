@@ -21,9 +21,9 @@
 		IFE B, 0x12D0 ; Generic Clock (upper 16 bits)
 			JSR bios_clock_init
 			
-	;IFE A, 0x4CAE ; HMD2043 floppy disc drive (lower 16 bits)
-	;	IFE B, 0x74FA ; HMD2043 floppy disc drive (upper 16 bits)
-	;		JSR bios_floppy_init
+;	IFE A, 0x24c5 ; M35FD floppy disc drive (lower 16 bits)
+;		IFE B,  0x4fd5 ; M35FD floppy disc drive (upper 16 bits)
+;			JSR bios_floppy_init
 			
 	IFN Z, 0
 		SET PC, bios_discover_hardware_loop
@@ -88,7 +88,7 @@
 
 	; Set clock tick rate (60/B = 5/sec)
 	SET A, 0
-	SET B, 12 ; 5/sec
+	SET B, 60 ; 5/sec
 	HWI [clock_address]
 
 	; Setup interrupts for clock
@@ -96,42 +96,35 @@
 	SET B, [clock_address] ; Our magic word to tell the handler we have a clock tick
 	ADD B, 1 ; Always use HW+1 so we never pass a 0 to B as that would disable interrupts
 	HWI [clock_address]
-
 	SET PC, POP
 
 :bios_floppy_init
 	SET [floppy_address], Z
 
 	;Set interrupts for floppy
-	SET A, 5 
-	SET B, [floppy_address] ; Our magic word to tell the handler we have a floppy event
-	ADD B, 1
+	SET A, 1 
+	SET X, [floppy_address] ; Our magic word to tell the handler we have a floppy event
+	ADD X, 1
 	HWI [floppy_address]
 
 	SET A, 0 ; check if media is present
 	HWI [floppy_address]
 	IFE B, 0
+		SET [floppy_inserted], 1
+	IFE B, 0
 		SET PC, bios_floppy_end
-
-	SET A, 0x0001 ;check media parameters
-	HWI [floppy_address]
-	SET [floppy_words_per_sector], B
-	SET [floppy_sectors], C
-	SET [floppy_write_locked], X
-
-	;check media quality
-	SET A, 0xFFFF
-	HWI [floppy_address]
-	SET [floppy_quality], B
+	
+	IFE B, 2
+	SET [floppy_write_locked], 1
 	
 	; Reserve disk paging space
-	SET X, [floppy_paging_address]
-	SET Y, X
-	ADD Y, [floppy_paging_size]
+	SET A, [floppy_paging_address]
+	SET B, A
+	ADD B, [floppy_paging_size]
 :bios_floppy_page_reserve
 	JSR page_reserve
-	ADD X, 512
-	IFN X, Y
+	ADD A, 1024
+	IFG B, A
 		SET PC, bios_floppy_page_reserve
 :bios_floppy_end
 	SET PC, POP
@@ -163,18 +156,18 @@ dat 0x0000
 
 :floppy_address
 dat 0x0000
+:floppy_inserted
+dat 0
 :floppy_words_per_sector
-dat 0x0000
+dat 512
 :floppy_sectors
-dat 0x0000
+dat 1440
 :floppy_write_locked
-dat 0x0000
-:floppy_quality
 dat 0x0000
 :floppy_paging_address
 dat 0xEB00
 :floppy_paging_size
-dat 0x1000 ; 8 sectors @ 512 words/sector
+dat 0x1000 ; 8 sectors @ 512 words
 :floppy_page_inuseflags
 dat 0x0000 ; Bit map of RAM pages in use along with flags (4 flag bits per sector)
 dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
@@ -192,9 +185,9 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 	SET A, 1
     HWI [keyboard_address]
 
-	; Skip the driver if the key value hasn't changed
-	IFE C, [keyboard_oldvalue]
-		SET PC, driver_keyboard_end
+	; Skip the driver if the key value is 0
+	IFE C, 0
+	SET PC, driver_keyboard_end
 
 	SET A, keyboard_buffers
 
@@ -204,15 +197,14 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 :driver_keyboard_loop
 	; Check to see if we have a buffer registered at this spot
     IFN [A], 0
-        JSR driver_keyboard_save_to_buffer
+	 JSR driver_keyboard_save_to_buffer
 	; Increment to the next buffer as long as we aren't at the end
     ADD A, 1
     IFN A, keyboard_buffers_end
-        SET PC, driver_keyboard_loop
+	 SET PC, driver_keyboard_loop
 :driver_keyboard_end
-	SET [keyboard_oldvalue], C
-	SET A, 0
-    HWI [keyboard_address]
+	;SET A, 0
+    ;HWI [keyboard_address]
 	SET C, POP
 	SET B, POP
     SET A, POP
@@ -253,10 +245,10 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 
 :keyboard_register_loop
     IFE [C], 0
-        SET PC, keyboard_register_set
+	 SET PC, keyboard_register_set
     ADD C, 1
     IFN C, keyboard_buffers_end
-        SET PC, keyboard_register_loop
+	 SET PC, keyboard_register_loop
 
 :keyboard_register_set
     SET [C], A
@@ -281,10 +273,10 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
 
 :keyboard_unregister_loop
     IFE [B], A
-        SET PC, keyboard_unregister_unset
+	 SET PC, keyboard_unregister_unset
     ADD B, 1
     IFN B, keyboard_buffers_end
-        SET PC, keyboard_unregister_loop
+	 SET PC, keyboard_unregister_loop
 	SET PC, keyboard_unregister_end
 :keyboard_unregister_unset
     SET [B], 0x0000
@@ -299,9 +291,7 @@ dat 0x0000 ; Bit 1 - Is active, Bit 2 - ??, Bit 3 - ??, Bit 4 - ??
     SET PC, POP
 
 :keyboard_unregister_exclusive
-	; Trigger a keyboard buffer update on any other register buffers
-	SET [keyboard_oldvalue], 0xFFFF
-	; And clear the exclusive data
+; clear the exclusive data
 	SET [keyboard_buffers_exclusive], 0
 	SET PC, POP
 

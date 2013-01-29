@@ -1,0 +1,28 @@
+; Kernel
+
+.include "kernel/kernel.dasm16"
+.include "kernel/drivers.dasm16"
+.include "kernel/filesystem.dasm16"
+.include "kernel/graphics.dasm16"
+.include "kernel/interrupts.dasm16"
+.include "kernel/library.dasm16"
+.include "kernel/memory.dasm16"
+.include "kernel/floppy.dasm16"
+.include "kernel/messages.dasm16"
+.include "kernel/process.dasm16"
+.include "kernel/core.dasm16"
+.include "kernel/math.dasm16"
+.include "kernel/HAT_driver.dasm16"
+
+
+; Apps
+.include "apps/AtlasShell.dasm16"
+.include "apps/AtlasText.dasm16"
+.include "apps/dcpu-vm.dasm16"
+.include "apps/hello_world.dasm16"
+.include "apps/asm.dasm16"
+.include "apps/apps.dasm16"
+
+; Virtual Filesystem
+
+.include "misc/vfs.dasm16"

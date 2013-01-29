@@ -5,61 +5,29 @@
 
 	IFE A, [keyboard_address]
 		JSR kernel_interrupt_handler_keyboard
+		
 	IFE A, [clock_address]
-		JSR kernel_interrupt_handler_clock
+		JSR  kernel_interrupt_handler_clock
+
 	IFE A, [floppy_address]
 		JSR kernel_interrupt_handler_floppy
-	IFE A, 0xFEDB
-		JSR kernel_interrupt_handler_manual
+		
+	IFE A, 0x1001
+		JSR proc_suspend_interrupt
+	IFG A, 0x1000
+		JSR kernel_interrupt_handler_kernel_call
+	
 		
 	SET EX, POP
 	RFI 0
-	
-:kernel_interrupt_handler_manual
-	IFN [proc_suspend_param], 0
-		SET PC, kernel_interrupt_handler_manual_skip_suspend
-
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
-
-	SET A, 2
-	SET B, 0
-	SET C, 0x6000
-	JSR kernel_interrupt_debug_clock_ticker
-
-	SET A, POP
-	SET B, POP
-	SET C, POP
-
-	SET [proc_suspend_param], 1
-	JSR proc_suspend_interrupt
-:kernel_interrupt_handler_manual_skip_suspend
-	SET PC, POP ; This line should never be called
 
 :kernel_interrupt_handler_keyboard
-	; TODO
+jsr driver_keyboard
 	SET PC, POP
 	
-:kernel_interrupt_handler_clock
-	SET PUSH, C
-	SET PUSH, B
-	SET PUSH, A
-
-	SET A, 0
-	SET B, 0
-	SET C, 0x5000
-	JSR kernel_interrupt_debug_clock_ticker
-
-	SET A, POP
-	SET B, POP
-	SET C, POP
+:kernel_interrupt_handler_clock	
+	JSR proc_suspend_interrupt
 	
-	IFN [proc_suspend_param], 0
-		SET PC, kernel_interrupt_handler_clock_skip_suspend
-		
-	;SET [proc_suspend_param], 1
-	;JSR proc_suspend_interrupt
 :kernel_interrupt_handler_clock_skip_suspend
 	SET PC, POP
 
@@ -67,6 +35,16 @@
 	JSR driver_floppy_handle_interrupt
 	SET PC, POP
 	
+:kernel_interrupt_handler_kernel_call
+SUB A, 0xFFF
+ADD A, api_start
+SET [kernel_call], [A]
+SET A, PICK 2
+JSR [kernel_call]
+SET PICK 2, A
+SET PC, POP
+
+:kernel_call dat 0
 ; ##################################################
 	
 ; A -> X coordinate

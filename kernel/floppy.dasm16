@@ -1,0 +1,187 @@
+;Floppy routines
+;some code is reused between routines to conserve on space. 
+
+; Writes a floppy sector from memory
+; A --> sector
+; B --> memory address
+:floppy_write_sector
+
+	
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	
+	IFG A, 1439
+	SET PC, floppy_wr_error
+
+:floppy_write_sector_poll
+	SET A, 0 
+	HWI [floppy_address]
+	IFE B, 0
+		SET PC, floppy_wr_error
+	IFE B, 2
+		SET PC, floppy_wr_error
+			
+	IFE B, 3
+		SET PC, floppy_write_sector_poll
+	
+	SET X, PEEK
+	SET Y, PICK 1
+	SET A, 3
+	HWI [floppy_address]
+	SET PC, floppy_wr_end
+	
+:floppy_wr_error
+	SET PEEK, 0xffff
+	
+:floppy_wr_end
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET Y, POP
+	SET X, POP
+	SET PC, POP
+	
+; Reads a floppy sector from the disk to memory
+; A --> sector
+; B --> memory address
+:floppy_read_sector
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	
+	IFG A, 1439
+	SET PC, floppy_wr_error
+:floppy_read_sector_poll
+	SET A, 0 
+	HWI [floppy_address]
+	IFE B, 0
+		SET PC, floppy_wr_error
+	IFN B, 2
+	IFN B, 1
+		SET PC, floppy_read_sector_poll
+	
+	SET X, PEEK
+	SET Y, PICK 1
+	SET A, 2
+	HWI [floppy_address]
+	SET PC, floppy_wr_end
+	
+; Writes a number of floppy sectors from memory
+; A --> start sector
+; B --> start memory address
+; C --> number of sectors
+:floppy_write_sectors
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+
+:floppy_write_sectors_loop
+	IFE C, 0
+		SET PC, floppy_wr_sectors_end
+	JSR floppy_write_sector
+	IFE A, 0xffff
+		SET PC, floppy_wr_sectors_error
+	ADD A, 1
+	ADD B, 512
+	SUB C, 1
+	SET PC, floppy_write_sectors_loop
+	
+:floppy_wr_sectors_error
+	SET PEEK, 0xffff
+:floppy_wr_sectors_end
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
+	
+; Reads a number of floppy sectors to memory
+; A --> start sector
+; B --> start memory address
+; C --> number of sectors
+:floppy_read_sectors
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+
+:floppy_read_sectors_loop
+	IFE C, 0
+		SET PC, floppy_wr_sectors_end
+	JSR floppy_read_sector
+	IFE A, 0xffff
+		SET PC, floppy_wr_sectors_error
+	ADD A, 1
+	ADD B, 512
+	SUB C, 1
+	SET PC, floppy_read_sectors_loop
+	
+
+
+;Writes a number of sectors from the floppy paging space.
+; A --> start sector on disk 
+; B --> number of sectors from paging space to write to disk
+; set a to 0xffff in case of disk error
+; Sets a to 0xffe in case of number of sectors being larger than the paging space
+:pfloppy_write_sectors
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	
+	IFG B, [floppy_paging_size]
+		SET PC, pfloppy_wr_sectors_error
+	
+	SET C, B
+	SET B, [floppy_paging_address]
+	JSR floppy_write_sectors
+	IFE A, 0xffff
+		SET PEEK, 0xffff
+		
+:pfloppy_wr_sectors_end
+	SET A, POP
+	SET B, POP
+	SET C, POP
+	SET PC, POP
+	
+:pfloppy_wr_sectors_error
+	SET PEEK, 0xfffe
+	SET PC, pfloppy_wr_sectors_end
+	
+
+;Reads a number of sectors from the floppy paging space.
+; A --> start sector on disk 
+; B --> number of sectors from paging space to read from disk
+; set a to 0xffff in case of disk error
+; Sets a to 0xffe in case of number of sectors being larger than the paging space
+:pfloppy_read_sectors
+	SET PUSH, C
+	SET PUSH, B
+	SET PUSH, A
+	
+	IFG B, [floppy_paging_size]
+		SET PC, pfloppy_wr_sectors_error
+	
+	SET C, B
+	SET B, [floppy_paging_address]
+	JSR floppy_read_sectors
+	IFE A, 0xffff
+		SET PEEK, 0xffff
+	SET PC, pfloppy_wr_sectors_end
+		
+
+:pfloppy_clear_paging
+; clears the floppy paging space
+SET PUSH, A
+SET PUSH, B
+
+SET A, [floppy_paging_address]
+SET B, [floppy_paging_size]
+MUL B, 512
+JSR mem_clear
+
+SET B, POP
+SET A, POP
+SET PC, POP
