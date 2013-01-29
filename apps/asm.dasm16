@@ -867,9 +867,9 @@
 
 :asm_write_val
 	ife X, 0
-		set [asm_rb], Y
+		set [asm_rB], Y
 	ife X, 1
-		set [asm_ra], Y
+		set [asm_rA], Y
 	add B, 1
 	set PC, POP
 :asm_skip_whites
@@ -986,7 +986,7 @@ dat 0xfc00
 ;SHL 5
 :asm_BValueMask
 dat 0x03e0
-:asm_OpCodeMask
+:asm_opCodeMask
 dat 0x001f
 ;Values
 :asm_vA dat  0x0000

@@ -5,14 +5,16 @@
 ; A --> sector
 ; B --> memory address
 :floppy_write_sector
-IFG A, 1439
-	SET PC, filesystem_error
+
 	
 	SET PUSH, X
 	SET PUSH, Y
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
+	
+	IFG A, 1439
+	SET PC, floppy_wr_error
 
 :floppy_write_sector_poll
 	SET A, 0 
@@ -46,15 +48,14 @@ IFG A, 1439
 ; A --> sector
 ; B --> memory address
 :floppy_read_sector
-IFG A, 1439
-	SET PC, filesystem_error
-	
 	SET PUSH, X
 	SET PUSH, Y
 	SET PUSH, C
 	SET PUSH, B
 	SET PUSH, A
-
+	
+	IFG A, 1439
+	SET PC, floppy_wr_error
 :floppy_read_sector_poll
 	SET A, 0 
 	HWI [floppy_address]
@@ -73,7 +74,7 @@ IFG A, 1439
 ; Writes a number of floppy sectors from memory
 ; A --> start sector
 ; B --> start memory address
-: C --> number of sectors
+; C --> number of sectors
 :floppy_write_sectors
 	SET PUSH, C
 	SET PUSH, B
@@ -81,10 +82,10 @@ IFG A, 1439
 
 :floppy_write_sectors_loop
 	IFE C, 0
-		SET PC, floppy_write_sectors_end
+		SET PC, floppy_wr_sectors_end
 	JSR floppy_write_sector
 	IFE A, 0xffff
-		SET PC, floppy_write_sectors_error
+		SET PC, floppy_wr_sectors_error
 	ADD A, 1
 	ADD B, 512
 	SUB C, 1
@@ -101,7 +102,7 @@ IFG A, 1439
 ; Reads a number of floppy sectors to memory
 ; A --> start sector
 ; B --> start memory address
-: C --> number of sectors
+; C --> number of sectors
 :floppy_read_sectors
 	SET PUSH, C
 	SET PUSH, B
@@ -124,7 +125,7 @@ IFG A, 1439
 ; A --> start sector on disk 
 ; B --> number of sectors from paging space to write to disk
 ; set a to 0xffff in case of disk error
-: Sets a to 0xffe in case of number of sectors being larger than the paging space
+; Sets a to 0xffe in case of number of sectors being larger than the paging space
 :pfloppy_write_sectors
 	SET PUSH, C
 	SET PUSH, B
@@ -147,15 +148,14 @@ IFG A, 1439
 	
 :pfloppy_wr_sectors_error
 	SET PEEK, 0xfffe
-	SET PC, pfloppy_write_sectors_end
+	SET PC, pfloppy_wr_sectors_end
 	
-:pfloppy_read_sectors
 
 ;Reads a number of sectors from the floppy paging space.
 ; A --> start sector on disk 
 ; B --> number of sectors from paging space to read from disk
 ; set a to 0xffff in case of disk error
-: Sets a to 0xffe in case of number of sectors being larger than the paging space
+; Sets a to 0xffe in case of number of sectors being larger than the paging space
 :pfloppy_read_sectors
 	SET PUSH, C
 	SET PUSH, B

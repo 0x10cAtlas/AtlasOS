@@ -2,7 +2,7 @@
 
 ; Primary file table
 ; Flags: Bit 1 - read, Bit 2 - write, Bit 3 - hidden, Bit 4 - executable, Bit 5 - directory
-;        Bit 6 - encrypted, Bit 7 - compressed
+;	 Bit 6 - encrypted, Bit 7 - compressed
 ; Each entry must be 20 words long
 ; directory ID, flags, name, null terminator, padding, start, end
 ; For directory entries, the 'start' contains the ID and the 'end' is unused

@@ -44,7 +44,7 @@
 :proc_get_flags_of
       JSR proc_get_info_of
 
-      ADD A, 11
+      ADD A, 3
       SET A, [A]
       SET PC, POP
 
@@ -56,9 +56,9 @@
       JSR proc_id
 
 :proc_get_info_of
-      MUL A, 4
+      MUL A, 5
       ADD A, proc_table
-	  SUB A, 4
+	  SUB A, 5
       SET PC, POP
 
 ; Sets the flags of the current process
@@ -146,7 +146,7 @@
       SET A, [B]
       IFN A, 0
           JSR PEEK
-      ADD B, 4
+      ADD B, 5
       IFN B, proc_table_end
           SET PC, proc_callback_list_loop
 
@@ -155,13 +155,15 @@
       SET PC, POP
 
 :proc_suspend
-INT [proc_suspend_int]
+INT 0x1002
 SET PC, POP
 
 
 :proc_suspend_interrupt
 ADD SP, 3
 ifl [processes], 2
+rfi a
+ife [proc_realtime_id], [proc_current]
 rfi a
 SET PUSH, B
 SET PUSH, C
@@ -176,14 +178,14 @@ SET [int_msg], A
 
 
 SET A, [proc_current]
-MUL A, 4
-SUB A, 4
+MUL A, 5
+SUB A, 5
 ADD A, proc_table
 ADD A, 1
 SET [A], SP
 
 
-add a, 3
+add a, 4
 :proc_kill_me_hook
 
 :proc_suspend_loop
@@ -192,7 +194,7 @@ add a, 3
 	SET X, [A]
 	IFN X, 0x0000
 		SET PC, proc_suspend_invoke
-	ADD A, 4
+	ADD A, 5
 	SET PC, proc_suspend_loop
 
 :proc_suspend_invoke
@@ -248,7 +250,7 @@ add a, 3
 	IFE [X], 0x0000
 		SET PC, proc_load_to
 
-	ADD X, 4
+	ADD X, 5
 	IFN X, proc_table_end
 		SET PC, proc_load_loop
 
@@ -263,7 +265,7 @@ add a, 3
 	; Calculate the ProcID by finding the proc_table record number (OS is 1).
 	SET [X], X
 	SUB [X], proc_table
-	DIV [X], 4
+	DIV [X], 5
 	ADD [X], 1
 
 	; X = ProcInfo Addr
@@ -359,7 +361,7 @@ add a, 3
 	SET C, POP
 	SET B, POP
 	IAQ 0
-	INT [proc_suspend_int]
+	INT 0x1002
 	SET PC, POP
 
 :proc_load_stack_alloc
@@ -372,7 +374,7 @@ add a, 3
 
 	SET Y, A ; Save the address of the new page
 	SET A, PEEK ; Get back our original source address
-	ADD Y, 1024
+	ADD Y, 512
 	SUB Y, 1
 
 	SET A, POP
@@ -442,6 +444,8 @@ add a, 3
 :proc_kill_me
 	JSR proc_id ; Save process ID
 	SET X, A
+	IFE [proc_realtime_id], A
+	JSR proc_realtime
 	JSR proc_get_info_of ; Save process info address
 	SET Y, A
 	ADD A, 2 ; Save memory page
@@ -489,4 +493,90 @@ add a, 3
       SET PC, POP
 
 	  
+:proc_realtime
+	SET PUSH, A
+	IFN [proc_realtime_id], 0
+		SET PC, proc_realtime_off 
+	JSR proc_id
+	SET [proc_realtime_id], A
+	SET A, POP
+	SET PC, POP
+	
+:proc_realtime_off
+	SET [proc_realtime_id], 0
+	SET A, POP
+	SET PC, POP
+	
 ; ##############################################################
+
+; Threading
+; using the underlying process architecture, threads are created much in the same way as processes, except that when a process is killed any accociated threads are killed as well.
+; threads are also designed to run through once before returning to the owning process. In theory a thread could own other threads. 
+; Designed to allow effecient code reuse, ie a thread is created to manage a device by copying generic code. The owning process can then copy data into the thread memeory area to initilise it. Threads will have to prefaced with a relocation tabel to facilitate this. 
+; Atlas is limited to 16 threads/proccesses including the kernel.  
+
+; A -> thread code location
+; B -> thread code length
+; C -> boolean if 1 thread code is copied into new memory location. 
+; A <- proc_id of thread
+; B <- memory location of thread.
+:create_thread
+	IAQ 1
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, X
+	SET PUSH, Y
+	SET PUSH, Z
+	SET PUSH, I
+	SET PUSH, J
+	
+	
+	SET X, proc_table
+
+:create_thread_loop1
+	IFE [X], 0x0000
+		SET PC, create_thread_start
+
+	ADD X, 5
+	IFN X, proc_table_end
+		SET PC, create_thread_loop1
+
+:create_thread_error
+	SET A, 0
+	SET PC, create_thread_end
+	
+:create_thread_start
+	SET [X], X
+	SUB [X], proc_table
+	DIV [X], 5
+	ADD [X], 1
+
+	; X = ProcInfo Addr
+	
+	IFN C, 1
+		create_thread_stack_alloc
+		
+	SET C, B
+	SET PUSH, A
+	
+	ADD B, 128
+	DIV B, 1024
+	ADD B, 1
+	SET Y, B
+	SET A, B, 
+	
+
+
+; Must be called inside a process
+; A -> proc_id of thread.
+; removes a thread from the process list. 
+:kill_thread
+
+; Must be called inside a process
+; A -> proc_id of thread.
+; sets up the process manager to switch to the thread.
+:call_thread
+
+; Must be called inside a thread
+; Sets up the process manager to switch to the owning process. 
+:return_thread

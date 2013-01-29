@@ -13,3 +13,5 @@ JSR text_out ;
 :hello_world
 dat "Hello World", 0xA, 0
 :hello_end
+
+;hello my baby

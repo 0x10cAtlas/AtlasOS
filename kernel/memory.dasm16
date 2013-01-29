@@ -2,23 +2,20 @@
 ; A: From Addr
 ; B: Length
 :mem_clear
-      IFE B, 0
-      SET PC, POP
+	SET PUSH, A
+	SET PUSH, B
 
-      SET PUSH, A
-      SET PUSH, B
-
-      ADD B, A
+	ADD B, A
 
 :mem_clear_loop
-      SET [A], 0
-      ADD A, 1
-      IFN A, B
-          SET PC, mem_clear_loop
+	SET [A], 0
+	ADD A, 1
+	IFN A, B
+	   SET PC, mem_clear_loop
 
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; mem_copy
 ; Copies data from one location to another
@@ -27,8 +24,6 @@
 ; B -> dest
 ; C -> length
 :mem_copy
-	IFE C, 0
-	SET PC, POP
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
@@ -53,195 +48,135 @@
 	SET B, POP
 	SET A, POP
 	SET PC, POP
-	  
-; A: Mem addr of the page
+	 
+; Reserve memory for the current process
+; A: Mem address of the page
 :page_reserve
-      SET PUSH, B
+	SET PUSH, B
+	SET PUSH, A
+	
+	
+	JSR proc_id
+	SET B, A
+	SET A, POP
+	JSR page_reserve_for
+	
+	SET B, POP
+	SET PC, POP
+	
+; Reserve memory for the process given by B
+; A: Mem address of the page
+; B: Process ID number
+:page_reserve_for
+	SET PUSH, B
+	SET PUSH, A
+	DIV A, 512
+	SET [A+page_table], B
+	JSR page_set_map
+	
+	SET A, POP
+	SET B, POP
+	SET PC, POP
 
-      SET B, A
-      MOD B, 1024
-      SUB A, B
-      DIV A, 1024        ; Set the pagenum
-
-      JSR page_remove    ; Remove all occurences of this page
-      SET B, 0x0001      ; By the OS
-      JSR page_combine   ; Combine A (the page num) and B (the proc id) to the page entry
-      BOR A, 0x8000      ; Set the "reserved" flag
-      JSR page_add
-
-      SET B, POP
-      SET PC, POP
-
-; A: Removes all entries with the given page num
+; Free page number given by A
 :page_remove
-      SET PUSH, A
-      SET PUSH, B
+	SET [A+page_table], 0
+	JSR page_unset_map
+	SET PC, POP
 
-      AND A, 0x003F
-      SHL A, 8
-      SET PUSH, A
-
-      SET B, page_table
-
-:page_remove_loop
-      SET A, [B]
-      AND A, 0x3F00
-      IFE A, PEEK
-          SET [B], 0x0000     ; Remove entry
-      ADD B, 1
-      IFN B, page_table_end
-          SET PC, page_remove_loop
-
-      SET A, POP              ; Remove a from stack
-      SET B, POP              ; Restore registers
-      SET A, POP
-      SET PC, POP
-
-; A -> page num
-; B -> proc id
-; A <- combined page entry
-:page_combine
-      SET PUSH, B
-
-      AND A, 0x003F
-      SHL A, 8
-      AND B, 0x00FF
-      BOR A, B
-
-      SET B, POP
-      SET PC, POP
-
-; A -> combined page entry
-; A <- page num
-; B <- proc id
-:page_decombine
-      SET B, A
-
-      SHR A, 8
-      AND A, 0x003F
-      AND B, 0x00FF
-
-      SET PC, POP
-
-; Find an empty entry in the page_table and store the page descriptor.
-; A -> combined page entry
-; A <- 1 of succeeded, 0 if failed
-:page_add
-      SET PUSH, B
-      SET B, page_table
-
-:page_add_loop
-      IFE [B], 0
-          SET PC, page_add_set
-
-      ADD B, 1
-      IFN B, page_table_end
-          SET PC, page_add_loop
-
-      SET A, 0
-
-:page_add_end
-      SET B, POP
-      SET PC, POP
-
-:page_add_set
-      SET [B], A
-
-      JSR page_decombine
-      JSR page_set_map
-
-      SET A, 1
-      SET PC, page_add_end
+; Reserve memory for the current process
+; A: Mem address of the page
+; B: number of pages
+:page_reserve_big
+	SET PUSH, B
+	SET PUSH, A
+	
+:page_reserve_big_loop
+	JSR page_reserve
+	IFE B, 0
+	SET PC, page_reserve_big_end
+	ADD A, 512
+	SUB B, 1
+	SET PC, page_reserve_big_loop
+:page_reserve_big_end
+	SET A, POP
+	SET B, POP
 
 ; Finds the first free page of memory by inspecting the bits of the page_map.
 ; A <- first free page number.
 :page_find_free
+	SET PUSH, I
+	SET PUSH, J
+	SET PUSH, B
 
-      ;SET PC, page_find_free
+	SET I, page_map
+	SET J, 0
+:page_find_free_loop
+	; 0xFFFF means given 16kB is fully occupied.
 
-      SET PUSH, B
+	IFN [I], 0xFFFF
+		SET PC, page_find_free_found
+	STI A, A
+	IFE J, 8
+		SET PC, page_find_free_none
+	IFN J, 8
+		SET PC, page_find_free_loop
 
-      ; 0xFFFF means given 16kB is fully occupied.
-      SET A, page_map
-      SET B, 0
-      IFN [A], 0xFFFF
-          SET PC, page_find_free_found
-      ADD A, 1
-      ADD B, 1
-      IFN [A], 0xFFFF
-          SET PC, page_find_free_found
-      ADD A, 1
-      ADD B, 1
-      IFN [A], 0xFFFF
-          SET PC, page_find_free_found
-      ADD A, 1
-      ADD B, 1
-      IFN [A], 0xFFFF
-          SET PC, page_find_free_found
+:page_find_free_none
+	; Nothing found, exiting! (later: Swap)
+	SET A, 0
 
-      ; Nothing found, exiting! (later: Swap)
-      SET A, 0
-
-:page_find_free_end
-      SET B, POP
-      SET PC, POP
+:page_find_free_end	
+	SET B, POP
+	SET J, POP
+	SET I, POP
+	SET PC, POP
 
 ; Find free page within this 16kB block by looking for a bit set to 0.
 :page_find_free_found
-      SET PUSH, [A]
-	  ; B is the id of the page_map word - each word covers 16 pages.
-      MUL B, 16
-	  ; A will hold the final number.
-      SET A, B
+	SET PUSH, [I]
+	 ; J is the id of the page_map word - each word covers 16 pages.
+	MUL J, 16
+	 ; A will hold the final number.
+	SET A, J
 
 :page_find_free_found_loop
-      SHR PEEK, 1
-      IFN EX, 0x0000
-          SET PC, page_find_free_skip
+	SHR PEEK, 1
+	IFN EX, 0x0000
+	   SET PC, page_find_free_skip
 
-      ADD SP, 1
-      SET PC, page_find_free_end
+	ADD SP, 1
+	SET PC, page_find_free_end
 
 :page_find_free_skip
-      ADD A, 1
-      SET PC, page_find_free_found_loop
+	ADD A, 1
+	SET PC, page_find_free_found_loop
 
 
 ; Allocates a page for the current application
 ; A <- Address of the allocated memory page.
 :page_alloc
-      SET PUSH, B
+	SET PUSH, B
 
-      JSR page_find_free
-      IFE A, 0
-          SET PC, page_alloc_error
+	JSR page_find_free
+	IFE A, 0
+	   SET PC, page_alloc_error
 
-      SET PUSH, A
+	; Calculate the real mem address of the allocated page.
+	MUL A, 512
+	 
+	JSR page_reserve
 
-      JSR proc_id
-      SET B, A ; proc_id
-      SET A, PEEK ; free page number
-
-      JSR page_combine
-      JSR page_add
-      IFE A, 0
-          SET PC, page_alloc_error2
-
-      SET A, POP
-
-	  ; Calculate the real mem address of the allocated page.
-      MUL A, 1024
 
 :page_alloc_end
-      SET B, POP
-      SET PC, POP
-
-:page_alloc_error2
-      SET A, POP
+	SET B, POP
+	SET PC, POP
 
 :page_alloc_error
-      SET A, 0
-      SET PC, page_alloc_end
+	SET A, 0
+	SET PC, page_alloc_end
+	
+
 	
 ; Allocates multiple pages for the application to be used if the application exceeds one page length
 ; A -> number of pages to allocate
@@ -249,7 +184,7 @@
 :page_alloc_big
 	SET PUSH, C
 	SET PUSH, B
-	
+
 	SET B, A ; Store the number of pages
 	SUB B, 1
 
@@ -280,214 +215,121 @@
 ; Frees the given page for the current application
 ; A: memory
 :page_free
-
-      SET PC, page_free
-
-      SET PUSH, A
-      SET PUSH, B
-      SET PUSH, C
-
-      SET B, A
-      MOD B, 1024
-      SUB A, B
-      SET C, A
-
-      JSR proc_id
-      SET B, A
-      SET A, C
-
-      JSR page_combine
-      SET PUSH, A
-      SET A, page_table
-
-:page_free_loop
-      SET B, [A]
-      AND B, 0x3FFF
-      IFE B, PEEK
-          SET PC, page_free_found
-      ADD A, 1
-      IFN A, page_table_end
-          SET PC, page_free_loop
-
-:page_free_end
-      SET A, POP
-      SET C, POP
-      SET B, POP
-      SET A, POP
-      SET PC, POP
-
-:page_free_found
-      SET [A], 0x0000
-
-      ADD SP, 3
-      SET A, PEEK
-      SUB SP, 3
-
-      JSR page_unset_map
-
-      SET PC, page_free_end
+	SET PUSH, A
+	DIV A, 512
+	JSR page_remove
+	SET A, POP
+	SET PC, POP
 
 
 ; Deallocate all pages belonging to the process
 ; A -> proc_id (or proc info structure)
 :page_free_of
-      SET PUSH, A
-      SET PUSH, B
-
-      SET PUSH, C
-      AND A, 0x00FF
-      SET PUSH, A
-      SET C, page_table
-
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET B, A
+	SET A, 0
+	SET C, page_table_end
+	SUB C, page_table
+	
 :page_free_of_loop
-      SET A, [C]
+	IFE [A+page_table], B
+		JSR page_remove
+	IFE A, C
+		SET PC, page_free_of_end
+	ADD A, 1
+	SET PC, page_free_of_loop
+	
 
 
-      JSR page_decombine
-
-      ; check the proc id
-      IFN B, PEEK
-          SET PC, page_free_of_loop_skip
-
-      ; found page associated with the process - free it in page_table
-          SET [C], 0x0000
-      ; unset the page bit in page_map (page number is in A after decombine)
-      JSR page_unset_map
-
-:page_free_of_loop_skip
-      ADD C, 1
-      IFN C, page_table_end
-          SET PC, page_free_of_loop
-
-      ADD SP, 1
-
-      SET C, POP
-      SET B, POP
-      SET A, POP
-
-      SET PC, POP
+:page_free_of_end
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
 ; A: page num
 :page_set_map
-      SET PUSH, A
-      SET PUSH, B
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
+	SET B, 0x0001
 
-      SET B, 0x0001
+	DIV A, 16
+	MOD C, 16
 
-      IFG 16, A
-          SET PC, page_set_map_0
-      IFG 32, A
-          SET PC, page_set_map_1
-      IFG 48, A
-          SET PC, page_set_map_2
-
-      SUB A, 48
-      SHL B, A
-      BOR [page_map3], B
+	SHL B, C
+	BOR [page_map+A], B
 
 :page_set_map_end
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
-:page_set_map_0
-      SHL B, A
-      BOR [page_map0], B
-      SET PC, page_set_map_end
-
-:page_set_map_1
-      SUB A, 16
-      SHL B, A
-      BOR [page_map1], B
-      SET PC, page_set_map_end
-
-:page_set_map_2
-      SUB A, 32
-      SHL B, A
-      BOR [page_map2], B
-      SET PC, page_set_map_end
 
 
 ; A: page num
 :page_unset_map
-      SET PUSH, A
-      SET PUSH, B
+	SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET C, A
 
-      SET B, 0x0001
+	SET B, 0x0001
 
-      IFG 16, A
-          SET PC, page_unset_map_0
-      IFG 32, A
-          SET PC, page_unset_map_1
-      IFG 48, A
-          SET PC, page_unset_map_2
+	DIV A, 16
+	MOD C, 16
 
-      SUB A, 48
-      SHL B, A
-      XOR B, 0xFFFF
-      AND [page_map3], B
+
+	SHL B, C
+	XOR B, 0xFFFF
+	AND [page_map+A], B
 
 :page_unset_map_end
-      SET B, POP
-      SET A, POP
-      SET PC, POP
+	SET C, POP
+	SET B, POP
+	SET A, POP
+	SET PC, POP
 
-:page_unset_map_0
-      SHL B, A
-      XOR B, 0xFFFF
-      AND [page_map0], B
-      SET PC, page_unset_map_end
-
-:page_unset_map_1
-      SUB A, 16
-      SHL B, A
-      XOR B, 0xFFFF
-      AND [page_map1], B
-      SET PC, page_unset_map_end
-
-:page_unset_map_2
-      SUB A, 32
-      SHL B, A
-      XOR B, 0xFFFF
-      AND [page_map2], B
-      SET PC, page_unset_map_end
 
 ; Returns the amount of reserved memory
 :page_check
-      SET PUSH, B
+	SET PUSH, B
 
-      SET B, page_table
-      SET A, 0
+	SET B, page_table
+	SET A, 0
 
 :page_check_loop
-      IFN [B], 0
-          ADD A, 1024
-      ADD B, 1
-      IFN B, page_table_end
-          SET PC, page_check_loop
+	IFN [B], 0
+	   ADD A, 512
+	ADD B, 1
+	IFN B, page_table_end
+	   SET PC, page_check_loop
 
-      SET B, POP
-      SET PC, POP
+	SET B, POP
+	SET PC, POP
 
 
 :page_check_of
-      SET PUSH, B
-      SET PUSH, C
-      SET PUSH, A
+	SET PUSH, B
+	SET PUSH, C
+	SET PUSH, A
 
-      SET B, page_table
-      SET A, 0
+	SET B, page_table
+	SET A, 0
 
 :page_check_of_loop
-      SET C, [B]
-      AND C, 0x00FF
-      IFE C, PEEK
-          ADD A, 1024
-      ADD B, 1
-      IFN B, page_table_end
-          SET PC, page_check_of_loop
+	SET C, [B]
+	IFE C, PEEK
+	   ADD A, 512
+	ADD B, 1
+	IFN B, page_table_end
+	   SET PC, page_check_of_loop
 
-      ADD SP, 1
-      SET C, POP
-      SET B, POP
-      SET PC, POP
+	ADD SP, 1
+	SET C, POP
+	SET B, POP
+	SET PC, POP

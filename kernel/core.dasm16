@@ -6,24 +6,19 @@ JSR bios_boot
 ; clear screen (for emulator)
 JSR clear
 
-; Display the logo
-SET A, text_logo
-JSR text_out
+
 
 ; Bootmessage
 SET A, text_start
 JSR text_out
 
 ; Reserve all operating system code including api space
-SET X, 0
-:code_mem
-IFG X, os_content_end
-    SET PC, code_mem_end
-SET A, X
+SET A, 0
 JSR page_reserve
-ADD X, 1024
-SET PC, code_mem
-:code_mem_end
+SET A, os_content_end
+DIV A, 512
+ADD A, 1
+JSR page_alloc_big
 
 
 ; Reserve stack-memory
@@ -31,23 +26,20 @@ SET A, 0xFFFF
 JSR page_reserve
 
 
-
-SET X, 0
-
 ; Copy the API.
-SET B, 0x1000
-SET A, api_start
-SET C, api_end
-SUB C, A
-JSR mem_copy
+;SET B, 0x1000
+;SET A, api_start
+;SET C, api_end
+;SUB C, A
+;JSR mem_copy
 
 ; Clear out a few things
 SET [keyboard_buffers_exclusive], 0
 JSR keyboard_unregister_all
 
 ;Format Disk and Create root directory
-JSR HAT_format_disk_256
-JSR HAT_inode_directory_create
+;JSR HAT_format_disk_256
+;JSR HAT_inode_directory_create
 
 ; OS ready message
 SET A, text_start_ok
@@ -61,10 +53,7 @@ IAS kernel_interrupt_handler
 
 	; Check if the kernel is the only running process, if so start the shell
 	JSR kernel_watchdog_checkalone
-
-	; Release back to other running processes
-	INT [proc_suspend_int]
-
+	JSR proc_suspend
     SET PC, kernel_loop
 
 ; Watchdog to ensure the shell is always running even if in the background
@@ -84,21 +73,3 @@ IAS kernel_interrupt_handler
 	
 :kernel_end
 	SET PC, kernel_end
-	
-:api_padding
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-dat "                                                                                                                                "
-:api_padding_end	 

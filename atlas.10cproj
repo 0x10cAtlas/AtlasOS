@@ -10,24 +10,26 @@
   </properties>
   <references />
   <files>
-    <file path="include\kernel.inc">
-      <property name="providerFileTypeName">DevKit 10c Assembly File</property>
-    </file>
+    <file path="kernel\kernel.dasm16" />
     <file path="kernel\drivers.dasm16" />
     <file path="kernel\filesystem.dasm16" />
     <file path="kernel\graphics.dasm16" />
     <file path="kernel\interrupts.dasm16" />
     <file path="kernel\library.dasm16" />
+	<file path="kernel\math.dasm16" />
     <file path="kernel\memory.dasm16" />
     <file path="kernel\messages.dasm16" />
     <file path="kernel\process.dasm16" />
+	<file path="kernel\floppy.dasm16" />
     <file path="kernel\core.dasm16" />
-    <file path="kernel\math.dasm16" />
+	<file path="apps\AtlasShell.dasm16" />
+	<file path="apps\AtlasText.dasm16" />
     <file path="kernel\HAT_driver.dasm16" />
-    <file path="apps\AtlasShell.dasm16" />
-    <file path="apps\AtlasText.dasm16" />
-    <file path="misc\dcpu-vm.dasm16" />
-    <file path="misc\hello_world.dasm16" />
+    
+    
+    
+    <file path="apps\dcpu-vm.dasm16" />
+    <file path="apps\hello_world.dasm16" />
     <file path="apps\asm.dasm16" />
     <file path="apps\apps.dasm16" />
     <file path="misc\vfs.dasm16" />

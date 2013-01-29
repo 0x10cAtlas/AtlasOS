@@ -9,27 +9,24 @@
 
 ;memory based registers
 ;no hardware interupts
-set [reg_pc], code
-set pc, virtual_machine_start
-:regs_AJ dat 0, 0, 0, 0, 0, 0, 0, 0 
-:reg_SP dat 0
-:reg_PC dat 0
-:reg_EX dat 0
+:dcpu_vm
+set [reg_PC], [code_start]
+JSR [0x100f] ; page allocate for stack
+add a, 1024
+set [reg_sp], a
 
-:val_nw dat 0
-:val_A dat 0
-:val_B dat 0
-:val_op dat 0
-:val_word dat 0
-:addr_source dat 0
-:addr_dest dat 0
-:mem_start dat 0
-:mem_end dat 0
-:cyclecounter dat 0
-:skipflag dat 0
+; Register our buffer with the driver, to remove kernel screen access
+IAQ 1
+	SET A, dcpu_vm_input
+	; And ask for exclusive keyboard access
+	SET B, 1
+	JSR [0x1026] ; keyboard_register
+IAQ 0
 
 :virtual_machine_start
 add [cyclecounter], 1
+ife [reg_PC], [code_end]
+	set pc, virtual_machine_end
 set a, [reg_PC]
 set [val_word], [a]
 set a , [val_word]
@@ -37,7 +34,7 @@ and a, 0x1f
 set [val_op], a
 set a, [val_word]
 and a, 0x3e0
-set [val_B], a
+set [val_b], a
 set a, [val_word]
 and a, 0xfc00
 set [val_A], a
@@ -71,7 +68,7 @@ set [val_A], a
 	set b, regs_AJ 
 	add b, a
 	set [addr_source], b
-	set pc, decode_val_B
+	set pc, decode_val_b
 
 :decode_val_A_2
 	set b, regs_AJ
@@ -88,37 +85,37 @@ set [val_A], a
 	add b, c
 	set [addr_source], b
 	add [reg_PC], 1
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_SPPCEX
-	set b, reg_SP
+	set b, reg_sp
 	sub a, 0x1b
 	add b, a
 	set [addr_source], b
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_nw
 	set b, [reg_PC]
 	add b, 1
 	set [addr_source], b
 	add [reg_PC], 1
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_nwr
 	set b, [reg_PC]
 	set [addr_source], [b + 1]
 	add [reg_PC], 1
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_pop
 	set b, [reg_sp]
 	set [addr_source], b
 	add [reg_sp], 1
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_peek
 	set [addr_source], [reg_sp]
-	set pc, decode_val_B
+	set pc, decode_val_b
 	
 :decode_val_A_pick
 	set c, [reg_PC]
@@ -126,13 +123,13 @@ set [val_A], a
 	set b, [reg_sp]
 	add b, c
 	set [addr_source], b
-	set pc, decode_val_B
+	set pc, decode_val_b
 		
 :decode_val_A_lit
 	sub a, 0x20
 	add a, lit_table
 	set [addr_source], a
-	set pc, decode_val_B
+	set pc, decode_val_b
 
 
 
@@ -141,46 +138,46 @@ set [val_A], a
 
 
 
-:decode_val_B
-	set a, [val_B]
+:decode_val_b
+	set a, [val_b]
 	shr a, 5
 
 	ifl a, 8
-		set pc, decode_val_B_1
+		set pc, decode_val_b_1
 	ifl a, 0x10
-		set pc, decode_val_B_2
+		set pc, decode_val_b_2
 	ifl a, 0x18
-		set pc, decode_val_B_3
+		set pc, decode_val_b_3
 	ife a, 0x1f
 		set pc, op_end
 	ife a, 0x1e
-		set pc, decode_val_B_nwr
+		set pc, decode_val_b_nwr
 	ifg a, 0x1a
 	ifl a, 0x1e
-		set pc, decode_val_B_SPPCEX
+		set pc, decode_val_b_SPPCEX
 	ife a, 0x1a
-		set pc, decode_val_B_pick
+		set pc, decode_val_b_pick
 	ife a, 0x19
-		set pc, decode_val_B_peek
+		set pc, decode_val_b_peek
 	ife a, 0x18
-		set pc, decode_val_B_push
+		set pc, decode_val_b_push
 	ifg a, 0x1f
 		set pc, op_end
 	
-:decode_val_B_1		
+:decode_val_b_1		
 	set b, regs_AJ 
 	add b, a
 	set [addr_dest], b
 	set pc, decode_val_op
 	
-:decode_val_B_2
+:decode_val_b_2
 	set b, regs_AJ
 	sub a, 0x8
 	add b, a
 	set [addr_dest], [b]
 	set pc, decode_val_op
 	
-:decode_val_B_3
+:decode_val_b_3
 	set b, [reg_PC]
 	set b, [b+1] ; next word value
 	sub a, 0x10
@@ -190,35 +187,35 @@ set [val_A], a
 	add [reg_PC], 1
 	set pc, decode_val_op
 	
-:decode_val_B_nwr
+:decode_val_b_nwr
 	set b, [reg_PC]
 	set [addr_dest], [b+1]
 	add [reg_PC], 1
-	set pc, decode_val_B
+	set pc, decode_val_op
 	
-:decode_val_B_SPPCEX
-	set b, reg_SP
+:decode_val_b_SPPCEX
+	set b, reg_sp
 	sub a, 0x1b
 	add b, a
 	set [addr_dest], b
 	set pc, decode_val_op
 
-:decode_val_B_push
+:decode_val_b_push
 	sub [reg_sp], 1
 	set [addr_dest], [reg_sp]
-	set pc, decode_val_B
+	set pc, decode_val_op
 	
-:decode_val_B_peek
+:decode_val_b_peek
 	set [addr_dest], [reg_sp]
-	set pc, decode_val_B
+	set pc, decode_val_op
 	
-:decode_val_B_pick
+:decode_val_b_pick
 	set c, [reg_PC]
 	set c, [c+1]
 	set b, [reg_sp]
 	add b, c
 	set [addr_dest], b
-	set pc, decode_val_B
+	set pc, decode_val_op
 
 
 :decode_val_op
@@ -245,7 +242,7 @@ set [val_A], a
 		set pc, decode_val_op_std
 		
 sub a, 1
-mul a, 2
+mul a, 3
 add a, decode_val_op_table
 set ex, [reg_EX]
 set pc, a
@@ -283,7 +280,7 @@ set pc, a
 	set b,  [addr_source]
 	set b, [b]
 	sub b, 1
-	set [reg_pc], b
+	set [reg_PC], b
 	set pc, op_end
 	
 
@@ -299,8 +296,6 @@ set pc, a
 	set pc, op_end
 	
 :decode_val_op_if_true
-:op_end_skipped
-set [skipflag], 0
 
 :op_end
 
@@ -310,7 +305,15 @@ ifn [addr_dest], reg_PC
 add [reg_PC], 1
 
 ife [skipflag], 1
-add [reg_pc], 1
+add [reg_PC], 1
+
+set pc, virtual_machine_start
+
+:op_end_skipped
+set [reg_EX], EX
+
+add [reg_PC], 1
+set [skipflag], 0
 set pc, virtual_machine_start
 
 :decode_val_op_table
@@ -375,23 +378,31 @@ set pc, virtual_machine_start
 dat 0xffff, 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E
 
 
-:code
-set a, 1
-jsr code3
-set a, 2
+:regs_AJ dat 0, 0, 0, 0, 0, 0, 0, 0 
+:reg_sp dat 0
+:reg_PC dat 0
+:reg_EX dat 0
 
-:code2
-dat code
-:code3
-set a, 5
-set pc, pop
+:val_nw dat 0
+:val_A dat 0
+:val_b dat 0
+:val_op dat 0
+:val_word dat 0
+:addr_source dat 0
+:addr_dest dat 0
+:code_start dat hello
+:code_end dat hello_world
+:cyclecounter dat 0
+:skipflag dat 0
+:dcpu_vm_input dat 0, 0
+
+:virtual_machine_end
+IAQ 1
+set a, dcpu_vm_input
+JSR [0x1027] ; keyboard_unregister
+IAQ 0
+JSR [0x1005] ; proc_kill_me
 
 
-
-
-
-
-
-
-
+:dcpu_vm_end
 

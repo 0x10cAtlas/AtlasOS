@@ -1,34 +1,34 @@
 ; BASH-like Process
 :AtlasShell
 	SET A, text_versionoutput
-	JSR [0x101E]
+	INT 0x101E
 :AtlasShell_start
 	; Register our buffer with the driver
 	SET A, input_buffer
-	JSR [0x1026]
+	INT 0x1026
 :AtlasShell_loop
 	; First check if anything is taking exclusive keyboard access
-	JSR [0x1028]
+	INT 0x1028
 	IFN A, 0
 		SET PC, AtlasShell_loop_wait
 	
 	; Load the pwd name
 	JSR command_clear_present_working_directory_name
 	SET A, [present_working_directory]
-	JSR [0x102B]
+	INT 0x102B
 	IFE C, 0
 		SET PC, AtlasShell_skip_display_path
 	ADD C, 2
 	SET A, C
 	SET B, present_working_directory_name
-	JSR [0x1017]
+	INT 0x1017
 	; Display the current path
 	SET A, present_working_directory_name
-	JSR [0x101E]
+	INT 0x101E
 :AtlasShell_skip_display_path
 	; Display the prompt
 	SET A, text_prompt
-	JSR [0x101E]
+	INT 0x101E
 
 	; Reset the basics
 	SET [ack_command], 0 ; reset command recognized
@@ -37,11 +37,11 @@
 	SET A, input_text_buffer
 	SET B, 32
 	SET C, input_buffer
-	JSR [0x1023]
+	INT 0x1023
 
 	; Skip everything if we got an empty line
 	SET A, input_text_buffer
-	JSR [0x1019]
+	INT 0x1019
 	IFE B, 0
 		SET PC, AtlasShell_newline
 
@@ -53,70 +53,70 @@
 	; Check for the 'clear' command
 	SET A, command_clear
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_clearf
 
 	; Check for the 'version' command
 	SET a, command_version
 	SET b, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE c, 0
 	JSR command_versionf
 
 	; Check for the 'load' command
 	SET a, command_load
 	SET b, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE c, 0
 	JSR command_loadf
 
 	; Check for the 'kill' command
 	SET a, command_kill
 	SET b, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE c, 0
 	JSR command_killf
 
 	; Check for the 'list' command
 	SET a, command_list
 	SET b, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE c, 0
 	JSR command_listf
 	
 	; Check for the 'ls' command
 	SET A, command_ls
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_lsf
 		
 	; Check for the 'cd' command
 	SET A, command_cd
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_cdf
 		
 	; Check for the 'cat' command
 	SET A, command_cat
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_catf
 
 	; Check for the 'echo' command
 	SET A, command_echo
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_echof
 	
 	; Check for the 'help' command
 	SET A, command_help
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		JSR command_helpf
 		
@@ -128,18 +128,19 @@
 	IFN [ack_command], 1
 		JSR command_unknownf
 :AtlasShell_loop_wait
+	;INT 0x1002
 	SET PC, AtlasShell_loop
 :AtlasShell_loop_end
 
 :AtlasShell_newline
-	JSR [0x101f]
+	INT 0x101f
 	SET PC, AtlasShell_loop_wait
 ; ==BEGIN COMMAND FUNCTIONS==
 ; Command function when we got an unknown command
 :command_unknownf
 	SET a, text_unrecognized
-	JSR [0x101E]
-	JSR [0x101F]
+	INT 0x101E
+	INT 0x101F
 	SET pc, pop
 
 ; Command function to display version info
@@ -152,7 +153,7 @@
 	; Clear the param buffer
 	SET A, command_parameter_buffer
 	SET B, 16
-	JSR [0x1014]
+	INT 0x1014
 	; Capture the param
 	SET A, input_text_buffer
 	SET B, 1
@@ -160,26 +161,26 @@
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [0x1019]
+	INT 0x1019
 	IFE B, 0
 		SET PC, command_versionf_shell
 
 	; Check if our param was 'os' to give OS version
 	SET A, command_version_os
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		SET PC, command_versionf_os
 :command_versionf_shell
-	JSR [0x101F]
+	INT 0x101F
 	SET A, text_versionoutput
-	JSR [0x101E]
+	INT 0x101E
 	SET C, POP
 	SET B, POP
 	SET A, POP
 	SET PC, POP
 :command_versionf_os
-	JSR [0x101F]
+	INT 0x101F
 	JSR command_os_version_display
 	SET C, POP
 	SET B, POP
@@ -189,7 +190,7 @@
 ; Command function to clear the screen
 :command_clearf
 	SET [ack_command], 1 ; acknowledge recognized command
-	JSR [0x1021]
+	INT 0x1021
 	SET pc, pop
 
 ; Command function to load a new process
@@ -208,14 +209,14 @@
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR [0x1019]
+	INT 0x1019
 	IFE B, 0
 		SET PC, command_loadf_help
 
 	;check if list > list applications in table
 	SET A, command_parameter_buffer
 	SET B, command_list
-	JSR [0x101A]
+	INT 0x101A
 	IfE C, 0
 		SET PC, command_loadf_list
 
@@ -227,12 +228,12 @@
 	IFG A, application_table_end ; if index is at the end of the table, we have an unknown app
 		SET PC, command_loadf_unknown
 	SET B, command_parameter_buffer
-	JSR [0x101A] ; compare table string to parameter
+	INT 0x101A ; compare table string to parameter
 	IFE C, 0
 		SET PC, command_loadf_loop_end ; if equal move to end
 
 	; Get the length of the app name and move our pointer forward past that
-	JSR [0x1019]
+	INT 0x1019
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
@@ -240,9 +241,9 @@
 
 :command_loadf_loop_end
 	SET PUSH, A
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_parameter_buffer
-	JSR [0x1019]
+	INT 0x1019
 	SET A, POP
 	ADD A, B
 	ADD A, 1
@@ -254,7 +255,7 @@
 	SET B, [B]
 	SUB B, A
 
-	JSR [0x1007]
+	INT 0x1007
 
         IFE A, 0
             SET PC, command_loadf_unknown
@@ -263,39 +264,39 @@
 	SET PC, command_loadf_end
 
 :command_loadf_help
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_load_help
-	JSR [0x101E]
+	INT 0x101E
 	SET PC, command_loadf_end
 
 :command_loadf_list
 	JSR command_clear_parameter_buffer ;clear parameter buffer so list command doesn't run afterwards
-	JSR [0x101F]
+	INT 0x101F
 	SET A, application_table
 :command_loadf_list_loop
 	IFE A, application_table_end ; if index is at the end of the table, finish listing apps
 		SET PC, command_loadf_end
 	IFG A, application_table_end ; if index is past end of the table, finish listing apps
 		SET PC, command_loadf_end
-	JSR [0x101E] ;print out app name
-	JSR [0x101F]
+	INT 0x101E ;print out app name
+	INT 0x101F
 	; Get the length of the app name and move our pointer forward past that
-	JSR [0x1019]
+	INT 0x1019
 	ADD A, B
 	; Skip past the null terminator, the start address, and the end address
 	ADD A, 3
 	SET PC, command_loadf_list_loop ; loopback
 
 :command_loadf_unknown
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_load_unknown
-	JSR [0x101E]
+	INT 0x101E
 
 :command_loadf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	;JSR [0x1002]
+	;INT 0x1002
 	SET PC, POP
 
 ; Command function to kill a running process
@@ -314,20 +315,20 @@
 
 	; Check if our param was blank
 	SET A, command_parameter_buffer
-	JSR [0x1019]
+	INT 0x1019
 	IFE B, 0
 		SET PC, command_killf_help
 
 	; Check if our param was 'last' to kill the last process
 	SET A, command_kill_last
 	SET B, command_parameter_buffer
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		SET PC, command_killf_last
 
 	; Convert the param to an integer
 	SET A, command_parameter_buffer
-	JSR [0x101D]	; A is source, C is result
+	INT 0x101D	; A is source, C is result
 	
 	; Handle overflow
 	IFG C, 32
@@ -335,7 +336,7 @@
 
 	; Selfkill?
 	SET PUSH, A
-	JSR [0x1001]
+	INT 0x1001
 	IFE A, C      ; Wants to kill me?
 		SET PC, AtlasShell_die
 	SET A, POP
@@ -345,29 +346,29 @@
 		SET PC, command_killf_forbidden
 
 	; Kill the corresponding process
-	JSR [0x101F]
+	INT 0x101F
 	SET A, C
-	JSR [0x1006]
+	INT 0x1006
 	SET PC, command_killf_end
 :command_killf_forbidden
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_kill_forbidden
-	JSR [0x101E]
+	INT 0x101E
 	SET PC, command_killf_end
 :command_killf_last
-	JSR [0x101F]
+	INT 0x101F
 	SET A, [last_proc]
-	JSR [0x1006]
+	INT 0x1006
 	SET PC, command_killf_end
 :command_killf_help
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_kill_help
-	JSR [0x101E]
+	INT 0x101E
 :command_killf_end
 	SET C, POP
 	SET B, POP
 	SET A, POP
-	;JSR [0x1002]
+	;INT 0x1002
 	SET PC, POP
 
 ; Command function to list process IDs
@@ -390,11 +391,11 @@
 	; Get the process ID list
 	SET C, proc_list_buffer
 	SET A, command_listf_helper
-	JSR [0x1009]
+	INT 0x1009
 
-	JSR [0x101F]
+	INT 0x101F
 	SET A, command_list_info
-	JSR [0x101E]
+	INT 0x101E
 	SET A, 0 ; OS process
 	JSR command_listf_display_procID
 	SET A, 1 ; Shell process
@@ -429,10 +430,10 @@
 	; Convert to text and display
 	SET B, command_number_buffer
 	SET C, 10 ; radix
-	JSR [0x101B] ; itoa
+	INT 0x101B ; itoa
 	SET A, command_number_buffer
-	JSR [0x101E]
-	JSR [0x101F]
+	INT 0x101E
+	INT 0x101F
 
 	SET PC, POP
 	
@@ -444,8 +445,8 @@
 	SET PUSH, C
 	SET PUSH, X
 	SET PUSH, Y
-	JSR [0x101F]
-	JSR [0x102A]
+	INT 0x101F
+	INT 0x102A
 	SET X, [A]
 	SET Y, 0
 	ADD A, 1
@@ -514,7 +515,7 @@
 	ADD A, 1
 	
 	; Store the file name
-	JSR [0x1017]
+	INT 0x1017
 	ADD B, 16
 	ADD A, 16
 	
@@ -536,7 +537,7 @@
 	SUB A, C
 	SET B, command_number_buffer
 	SET C, 10 ; radix
-	JSR [0x101B] ; itoa
+	INT 0x101B ; itoa
 	SET A, 5
 :command_lsf_filesize_sanitize
 	IFE [B], 0
@@ -548,7 +549,7 @@
 	SET A, command_number_buffer
 	SET B, PEEK
 	SET C, 5
-	JSR [0x1018] ; strncpy
+	INT 0x1018 ; strncpy
 	
 	SET B, POP
 	SET A, POP
@@ -559,7 +560,7 @@
 	; Output the file info
 	SET PUSH, A
 	SET A, command_ls_row
-	JSR [0x101E] ; text_out
+	INT 0x101E ; text_out
 	SET A, POP
 	SET PC, command_lsf_skip_file_end
 :command_lsf_skip_file
@@ -571,7 +572,7 @@
 	ADD A, 1
 	SET PC, command_lsf_loop
 :command_lsf_end
-	;JSR [0x1002]
+	;INT 0x1002
 	SET Y, POP
 	SET X, POP
 	SET C, POP
@@ -584,10 +585,10 @@
 	SET PUSH, B
 	SET PUSH, C
 
-	JSR [0x101F]
+	INT 0x101F
 
 	SET A, command_parameter_buffer
-	JSR [0x1029]
+	INT 0x1029
 	IFE C, 0
 		SET PC, command_runfile_end
 		
@@ -608,13 +609,13 @@
 	ADD C, 1
 	SET B, [C]
 	SUB B, A
-	JSR [0x1007]
+	INT 0x1007
 	IFN A, 0
 		SET [ack_command], 1
 	SET PC, command_runfile_end
 :command_runfile_notexe
 	SET A, command_runfile_notexe_text
-	JSR [0x101E]
+	INT 0x101E
 	SET [ack_command], 1
 :command_runfile_end	
 	SET C, POP
@@ -633,43 +634,43 @@
 	SET B, 1
 	JSR shell_getparameter
 
-	JSR [0x101F]
+	INT 0x101F
 
 	;check if 'cd'
 	SET A, command_parameter_buffer
 	SET B, command_cd
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		SET PC, command_cdf_help
 
 	; check if blank > load help
 	SET A, command_parameter_buffer
-	JSR [0x1019]
+	INT 0x1019
 	IFE B, 0
 		SET PC, command_cdf_help
 
 	;check if '..'
 	SET A, command_parameter_buffer
 	SET B, command_cd_back
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		SET PC, command_cdf_back
 
 	;check if '/'
 	SET A, command_parameter_buffer
 	SET B, command_cd_root
-	JSR [0x101A]
+	INT 0x101A
 	IFE C, 0
 		SET PC, command_cdf_root
 
-	JSR [0x1029]
+	INT 0x1029
 	IFN C, 0
 		SET PC, command_cdf_cd
 	SET PC, command_cdf_unknown
 
 :command_cdf_help
 	SET A, command_cd_help
-	JSR [0x101E]
+	INT 0x101E
 	SET PC, command_cdf_end
 
 :command_cdf_back
@@ -701,9 +702,9 @@
 
 :command_cdf_unknown
 	SET A, command_parameter_buffer
-	JSR [0x101E]
+	INT 0x101E
 	SET A, command_cd_unknown
-	JSR [0x101E]
+	INT 0x101E
 	SET PC, command_cdf_end
 
 :command_cdf_cd
@@ -748,10 +749,10 @@
 	SET A, input_text_buffer
 	SET B, 1
 	JSR shell_getparameter
-	JSR [0x101F] ; newline
+	INT 0x101F  ; newline
 	; Get the file from the filename
 	SET A, command_parameter_buffer
-	JSR [0x1029] ; filesystem_getfile
+	INT 0x1029 ; filesystem_getfile
 	IFE C, 0
 		SET PC, command_catf_end
 	
@@ -773,13 +774,13 @@
 	
 	SET PUSH, B
 	SET PUSH, A
-	JSR [0x100F] ; page_alloc
+	INT 0x100F ; page_alloc
 	SET C, A
 	SET A, POP
 	SET B, C
 	SET C, POP
 	AND C, 0x03FF ; For now we are limiting cat to just 1024 words of output
-	JSR [0x1013] ; mem_copy
+	INT 0x1013 ; mem_copy
 	SET A, B
 :command_catf_sanitize
 	IFE [B], 0
@@ -790,11 +791,11 @@
 		SET PC, command_catf_sanitize
 	SET [B], 0
 
-	JSR [0x101E] ; text_out
+	INT 0x101E ; text_out
 
 :command_catf_end
 	SET [ack_command], 1
-	JSR [0x101F] ; newline
+	INT 0x101F ; newline
 
 	SET C, POP
 	SET B, POP
@@ -809,12 +810,12 @@
 	SET A, input_text_buffer
 	ADD A, 5
 	SET B, command_parameter_buffer
-	JSR [0x1017]
+	INT 0x1017
 	
 	SET A, command_parameter_buffer
-	JSR [0x101F] ; Newline (hack!)
-	JSR [0x101E]
-	JSR [0x101F] ; Newline
+	INT 0x101F ; Newline (hack!)
+	INT 0x101E
+	INT 0x101F ; Newline
 
 	SET B, POP
 	SET A, POP
@@ -824,7 +825,7 @@
 	SET [ack_command], 1
 	SET PUSH, A
 	SET A, command_help_list
-	JSR [0x101E]
+	INT 0x101E
 	
 	SET A, POP
 	SET PC, POP
@@ -832,9 +833,9 @@
 
 :AtlasShell_die
 	SET A, input_buffer
-	JSR [0x1027] ; unregister_keyboard
-	JSR [0x101F] ; newline
-	JSR [0x1005] ; proc_kill_me
+	INT 0x1027 ; unregister_keyboard
+	INT 0x101F ; newline
+	INT 0x1005 ; proc_kill_me
 
 ; ==BEGIN HELPER FUNCTIONS==
 ; Displays OS version using API call to get version numbers
@@ -845,13 +846,13 @@
 	SET B, 0
 	SET C, 0
 	; A - main version, B - sub version, C - fix version
-	JSR [0x1000]
+	INT 0x1000
 	SET PUSH, C
 	SET PUSH, B
 	MUL A, 10000
 	SET B, command_number_buffer
 	SET C, 10 ; radix
-	JSR [0x101B] ; itoa
+	INT 0x101B ; itoa
 	IFE A, 0
 		SET [B], 0x0030
 	SET A, command_number_buffer
@@ -860,21 +861,21 @@
 	MUL A, 100
 	SET B, command_number_buffer
 	SET C, 10 ; radix
-	JSR [0x101B] ; itoa
+	INT 0x101B ; itoa
 	SET A, command_number_buffer
 	SET C, POP
 	SET A, C
 	SET B, command_number_buffer
 	SET C, 10 ; radix
-	JSR [0x101B] ; itoa
+	INT 0x101B ; itoa
 	SET A, command_number_buffer
 	ADD A, 1
 	SET [A], [command_version_separator]
 	ADD A, 2
 	SET [A], [command_version_separator]
 	SET A, command_number_buffer
-	JSR [0x101E]
-	JSR [0x101F]
+	INT 0x101E
+	INT 0x101F
 	SET PC, POP
 ; Clears the parameter buffer
 :command_clear_parameter_buffer
@@ -882,7 +883,7 @@
 	SET PUSH, B
 	SET A, command_parameter_buffer
 	SET B, 32
-	JSR [0x1014]
+	INT 0x1014
 	SET B, POP
 	SET A, POP
 	SET PC, POP
@@ -907,7 +908,7 @@
 	SET PUSH, B
 	SET A, present_working_directory_name
 	SET B, 16
-	JSR [0x1014]
+	INT 0x1014
 	SET B, POP
 	SET A, POP
 	SET PC, POP

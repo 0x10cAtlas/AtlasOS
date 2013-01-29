@@ -141,7 +141,7 @@ SET I, [HAT_num_sectors]
 
 :HAT_find_free_sector_loop
 IFN [A], 0xFFFF
-          SET PC, HAT_find_free_sector_found
+	   SET PC, HAT_find_free_sector_found
 ADD A, 1
 ADD B, 1
 SUB I, 1
@@ -155,16 +155,16 @@ MUL B, 16
 SET A, B
 
 :HAT_find_free_sector_found_loop
-      SHL PEEK, 1
-      IFN EX, 0x0000
-          SET PC, HAT_find_free_sector_skip
+	SHL PEEK, 1
+	IFN EX, 0x0000
+	   SET PC, HAT_find_free_sector_skip
 
-      ADD SP, 1
-      SET PC, HAT_find_free_sector_end
+	ADD SP, 1
+	SET PC, HAT_find_free_sector_end
 
 :HAT_find_free_sector_skip
-      ADD A, 1
-      SET PC, HAT_find_free_sector_found_loop
+	ADD A, 1
+	SET PC, HAT_find_free_sector_found_loop
 
 :HAT_find_free_sector_none
 	SET A, 0xFFFF
@@ -668,40 +668,7 @@ SET A, POP
 SET X, POP
 SET PC, POP
 
-:HAT_testwrite
-SET PUSH, A
-SET PUSH, B
-SET PUSH, C
-SET PUSH, X
 
-SET A, 0x002 ; query device flags
-HWI [floppy_address]
-SET Y, B ; store flags
-
-AND A, 0xFFFE ; set device to blocking mode
-SET B, A
-SET A, 0x0003
-HWI [floppy_address]
-
-SET A, 0x0011 ; write sector interrupt
-SET B, 0 ; start at a sector given by a
-SET C, 128 ; write a number of 512 word sectors
-SET X, 0
-HWI [floppy_address]
-
-SET B, 0
-IFG A, 0
-	SET PC, HAT_error
-
-SET B, Y ;retrieve flags
-SET A, 0x3 ; reset flags
-HWI [floppy_address]
-
-SET X, POP
-SET C, POP
-SET B, POP
-SET A, POP
-SET PC, POP
 
 ; A-> hat sector id
 ; A <- the floppy sector that the hat sector lies in
@@ -856,22 +823,22 @@ SET PC, [HAT_read_sector_stack_pc]
 ; A <- sector
 
 :HAT_inode_create
-SET PUSH, A ; store type
-SET PUSH, B
-SET PUSH, C
+SET PUSH, A ; store type 	
+SET PUSH, B	;				
+SET PUSH, C	;				
 
 JSR HAT_find_free_sector
-SET PUSH, A ;store free sector
+SET PUSH, A ;store free sector	
 JSR HAT_allocate_sector
 
-SET PUSH, PICK 3
-SET PUSH, PICK 3
-SET PUSH, 0
-SET PUSH, 0
-SET B, 4
-SET C, 0
+SET PUSH, PICK 3 			
+SET PUSH, PICK 3			
+SET PUSH, 0					
+SET PUSH, 0					
+SET B, 4					
+SET C, 0					
 JSR HAT_write_sector_stack
-SET A, POP
+SET A, POP					
 SET C, POP
 SET B, POP
 ADD SP, 1
@@ -900,12 +867,14 @@ SET PC, POP
 ;for creating a directory inode
 ; A <- hat sector of new inode
 :HAT_inode_directory_create
-SET PUSH, B
-SET A, 1
-SET B, 1
-JSR HAT_inode_create
-SET B, POP
-SET PC, POP
+	SET PUSH, B
+	
+	SET A, 1
+	SET B, 1
+	JSR HAT_inode_create
+	
+	SET B, POP
+	SET PC, POP
 
 ;for adding a link to a directory inode
 ; A-> hat sector of inode

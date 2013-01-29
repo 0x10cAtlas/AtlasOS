@@ -1,17 +1,16 @@
 ; AtlasText - A simple, dummy text editor
 :AtlasText
-	IAQ 1
 
-	SET I, AtlasText_loop_end ; Calculate the length of the back-jump
-	SUB I, AtlasText_loop
+
 
 	; Register our buffer with the driver
 	SET A, AtlasText_input_buffer
 	; And ask for exclusive keyboard access
 	SET B, 1
-	JSR [0x1026] ; keyboard_register
+	INT 0x1026
+	INT 0x102D	
 
-	JSR [0x100f] ; page allocate for large string bufer
+	INT 0x100f ; page allocate for large string bufer
 	SET [AtlasText_page], A
 
 	SET [AtlasText_input_buffer], 0
@@ -26,13 +25,13 @@
 	JSR mem_clear ; Clear the buffer
 
 	ADD B, A
-	IAQ 0
+
 	SET PUSH, A
 	SET PUSH, B
 	SET PUSH, C
 
 :AtlasText_getfilename
-	JSR [0x1021] ; clear
+	JSR clear ; clear
 
 	SET A, AtlasText_intro
 	JSR text_out
@@ -47,16 +46,17 @@
 	SET A, AtlasText_filename_buffer
 	SET B, 15
 	SET C, AtlasText_input_buffer
-	JSR [0x1023] ; readline
+	INT 0x1023 ; readline
 
 	SET A, AtlasText_filename_buffer
-	JSR [0x1019] ; strlen
+	INT 0x1019 ; strlen
 	IFE B, 0
 		SET PC, AtlasText_getfilename ; loopback on blank filename
-	JSR [0x1021] ; clear
+	INT 0x1021 ; clear
 	SET C, POP
 	SET B, POP
 	SET A, POP
+	SET PC, AtlasText_blink
 
 :AtlasText_loop
 	IFE [AtlasText_input_buffer], 0
@@ -101,63 +101,44 @@
 	SET [C], 0
 	ADD A, 1
 
-:AtlasText_skip
+:AtlasText_blink
 	; Display the blinking cursor
 	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
 	SET A, [video_cur]
-	SUB A, [video_mem]
-	SET B, 0
-	SET C, 0x709F
-	JSR char_put
-	SET C, POP
-	SET B, POP
+	SET [A], 0x709F
 	SET A, POP
 
-
+:AtlasText_skip
 	SET PC, AtlasText_loop
 
 :AtlasText_backspace
 	; Remove the blinking cursor
 	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
 	SET A, [video_cur]
-	SUB A, [video_mem]
-	SET B, 0
-	SET C, [video_clear]
-	JSR char_put
-	SET C, POP
-	SET B, POP
+	SET [A], [video_clear]
 	SET A, POP
 
 	; Ensure we don't backspace past the beginning
 	IFE A, PEEK
-		SET PC, AtlasText_skip
+		SET PC, AtlasText_blink
 	SET PUSH, A
 
-	SET A, [video_mem]
-	IFE [video_cur], A
-	JSR AtlasText_scrollback
+	IFE [video_cur], [video_mem]
+	SET PC, AtlasText_scrollback
 
 	SET A, POP
 	SUB A, 1
 	IFE [A], 0xA ; if last character was a new line move cursor back to last printed character
 	JSR AtlasText_backspace_newline
-	ADD A, 1
 
-	SET PUSH, A
 	SET PUSH, B
 	SUB [video_cur], 1
 	SET B, [video_cur]
 	SET [B], 0
 	SET B, POP
-	SET A, POP
-	SUB A, 1
 	SET [A], 0
 	SET [C], 0
-	SET PC, AtlasText_skip
+	SET PC, AtlasText_blink
 
 :AtlasText_backspace_newline
 	SET PUSH, A
@@ -165,80 +146,81 @@
 	SET B, 32
 :AtlasText_backspace_newline_loop
 	IFE B, 0
-	SET PC, AtlasText_backspace_newline_loop_end
+	SET PC, AtlasText_backspace_newline_loop1_end
 	SET A, [video_cur]
 	SUB A, 1
 	SET A, [A]
 	AND A, 0x7f
 	IFN A, 0x20
-	SET PC, AtlasText_backspace_newline_loop_end
+	SET PC, AtlasText_backspace_newline_loop1_end
 	SUB [video_cur], 1
 	SUB B, 1
 	SET PC, AtlasText_backspace_newline_loop
 
-:AtlasText_backspace_newline_loop_end
+:AtlasText_backspace_newline_loop1_end
 ADD [video_cur], 1
 SET B, POP
+SET A, PEEK
+:AtlasText_backspace_newline_loop2
+SUB A, 1
+IFN [A], 0x20
+	SET PC, AtlasText_backspace_newline_loop2_end
+IFE A, PICK 1
+	SET PC, AtlasText_backspace_newline_loop2_end
+SET PC, AtlasText_backspace_newline_loop2
+
+:AtlasText_backspace_newline_loop2_end
+ADD A, 1
+JSR text_out_line
 SET A, POP
 
 SET PC, POP
 
 :AtlasText_scrollback
-SET PUSH, PICK 1 ;get in text string and find either position of last newline or 32 characters back, what evers comes first
-SET A, PEEK
+; find either position of last newline or 32 characters back, what evers comes first
 SET PUSH, B
 SET B, 32
 :AtlasText_scrollback_loop
+IFE A, [AtlasText_page]
+SET PC, AtlasText_scrollback_loop_end
 IFE B, 0
 	SET PC, AtlasText_scrollback_loop_end
 IFE [A], 0xA
-IFE [AtlasText_newlinefound], 1
 SET PC, AtlasText_scrollback_loop_end
-IFE [A], 0xA
-SET [AtlasText_newlinefound], 1
+
 SUB B, 1
 SUB A, 1
-IFE A, [AtlasText_page]
-SET PC, AtlasText_scrollback_loop_end
 SET PC, AtlasText_scrollback_loop
 
 
 :AtlasText_scrollback_loop_end
 SET [video_cur], [video_mem]
-IFN [A+1], 0
-ADD A, 1
+;IFN [A+1], 0
 JSR text_out
-SET [AtlasText_newlinefound], 0
+;SET [AtlasText_newlinefound], 0
 SET B, POP
 SET A, POP
 SET [C], 0
-SET PC, POP
+SET PC, AtlasText_blink
 
 
 :AtlasText_return
 	; Remove the blinking cursor
 	SET PUSH, A
-	SET PUSH, B
-	SET PUSH, C
 	SET A, [video_cur]
-	SUB A, [video_mem]
-	SET B, 0
-	SET C, [video_clear]
-	JSR char_put
-	SET C, POP
-	SET B, POP
+	SET [A], [video_clear]
 	SET A, POP
 	SET [C], 0
 	; Add the newline symbol
 	SET [A], 0xA
 	ADD A, 1
-	JSR [0x101f] ; newline
-	SET PC, AtlasText_skip
+	INT 0x101f ; newline
+	SET PC, AtlasText_blink
 
 
 :AtlasText_loop_skip
-	JSR [0x1002] ; proc_suspend
-	SUB PC, I
+	INT 0x1002
+	SET PC, AtlasText_loop
 :AtlasText_loop_end
 
 :AtlasText_save
@@ -247,7 +229,7 @@ SET PC, POP
 	SET B, [AtlasText_page]
 	SET X, AtlasText_filename_buffer
 	JSR HAT_inode_directory_add_file
-	JSR [0x1021] ; clear
+	JSR clear ; clear
 	SET A, AtlasText_saved
 	jsr text_out
 	SET A, AtlasText_filename_buffer
@@ -261,10 +243,10 @@ SET PC, POP
 :AtlasText_die
 	SET A, AtlasText_input_buffer
 	IAQ 1
-	JSR [0x1027] ; keyboard_unregister
-	JSR [0x1021] ; clear
+	JSR keyboard_unregister ; 
+	JSR clear ; clear
 	IAQ 0
-	JSR [0x1005] ; proc_kill_me
+	JSR proc_kill_me ; proc_kill_me
 :AtlasText_data
 	:AtlasText_input_buffer dat 0x0000, 0x0000
 	:AtlasText_page dat 0x0000
